@@ -624,12 +624,33 @@ def main(page: ft.Page):
         state["ephemeral"] = new_val
         state["store"].set_ephemeral(state["recipient"], new_val, state["username"])
         _update_ephemeral_ui()
-        _ws_send_raw(json.dumps({
-            "type": "ephemeral_toggle",
-            "sender": state["username"],
-            "recipient": state["recipient"],
-            "ephemeral": new_val,
-        }))
+        if is_ws_connected():
+            _ws_send_raw(json.dumps({
+                "type": "ephemeral_toggle",
+                "sender": state["username"],
+                "recipient": state["recipient"],
+                "ephemeral": new_val,
+            }))
+        else:
+            print("[REST] WebSocket kapali. Ephemeral toggle REST API ile gonderiliyor...")
+            try:
+                def do_rest_toggle():
+                    try:
+                        r = signed_post("/api/ephemeral_toggle", {
+                            "sender": state["username"],
+                            "recipient": state["recipient"],
+                            "ephemeral": new_val,
+                        }, timeout=5)
+                        if r.status_code == 200:
+                            print(f"[REST] Ephemeral toggle basariyla gonderildi: {r.json()}")
+                        else:
+                            print(f"[REST] HATA: Ephemeral toggle sunucu hata: {r.status_code} {r.text}")
+                    except Exception as ex:
+                        print(f"[REST] HATA: Ephemeral toggle baglanti hatasi: {ex}")
+                threading.Thread(target=do_rest_toggle, daemon=True).start()
+            except Exception as ex:
+                print(f"[REST] Thread baslatma hatasi: {ex}")
+
         label = ("Gecici sohbet modu ACILDI — mesajlar kaydedilmiyor"
                  if new_val else "Mesaj kayit modu ACILDI — mesajlar kaydediliyor")
         add_system_event(label, partner=state["recipient"])
@@ -971,6 +992,7 @@ def main(page: ft.Page):
                     "sender": state["username"],
                     "recipient": recipient,
                     "encrypted_payload": encrypted_payload,
+                    "view_once": view_once,
                 }, timeout=5)
                 if r.status_code == 200:
                     log_status("Mesaj REST ile gonderildi (offline).")

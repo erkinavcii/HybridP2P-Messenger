@@ -181,6 +181,7 @@ class SendMessageRequest(BaseModel):
     sender: str
     recipient: str
     encrypted_payload: str  # Base64 kodlu şifreli paket
+    view_once: bool = False
 
 
 class EphemeralToggleRequest(BaseModel):
@@ -576,8 +577,11 @@ async def send_offline_message(
 
         # Şifreli mesajı veritabanına kaydet
         await db.execute(
-            "INSERT INTO offline_msgs (sender, recipient, encrypted_payload, timestamp) VALUES (?, ?, ?, ?)",
-            (req.sender, req.recipient, req.encrypted_payload, datetime.now(timezone.utc).isoformat())
+            """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
+               VALUES (?, ?, ?, 'message', ?, ?)""",
+            (req.sender, req.recipient, req.encrypted_payload,
+             json.dumps({"view_once": req.view_once}),
+             datetime.now(timezone.utc).isoformat())
         )
         await db.commit()
         print(f"[Server] Stored offline message (REST) from '{req.sender}' to '{req.recipient}'")
@@ -600,26 +604,28 @@ async def fetch_offline_messages(
     if x_username != username:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
     async with db_session() as db:
+        # Sadece 'message' tipindeki mesajları getir
         cursor = await db.execute(
-            "SELECT id, sender, encrypted_payload, timestamp FROM offline_msgs WHERE recipient = ? ORDER BY timestamp ASC",
+            "SELECT id, sender, encrypted_payload, extra_data, timestamp FROM offline_msgs WHERE recipient = ? AND msg_type = 'message' ORDER BY timestamp ASC",
             (username,)
         )
         rows = await cursor.fetchall()
 
-        messages = [
-            {
+        messages = []
+        for r in rows:
+            extra = json.loads(r["extra_data"] or "{}")
+            messages.append({
                 "id": r["id"],
                 "sender": r["sender"],
                 "encrypted_payload": r["encrypted_payload"],
+                "view_once": extra.get("view_once", False),
                 "timestamp": r["timestamp"],
-            }
-            for r in rows
-        ]
+            })
 
-        # ✅ Mesajlar teslim edildi → veritabanından kalıcı olarak sil
+        # ✅ Sadece teslim edilen 'message' tipindeki satırları sil
         if messages:
             await db.execute(
-                "DELETE FROM offline_msgs WHERE recipient = ?",
+                "DELETE FROM offline_msgs WHERE recipient = ? AND msg_type = 'message'",
                 (username,)
             )
             await db.commit()

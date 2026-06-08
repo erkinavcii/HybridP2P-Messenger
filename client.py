@@ -1238,9 +1238,9 @@ def main(page: ft.Page):
 
         def close_warning_dialog(dialog, accept, rec=None, new_pem=None):
             dialog.open = False
+            page.update()
             try: page.overlay.remove(dialog)
             except: pass
-            page.update()
             if accept and rec and new_pem:
                 try:
                     new_pub_key = pem_string_to_public_key(new_pem)
@@ -1255,9 +1255,9 @@ def main(page: ft.Page):
 
         def close_tofu_dialog(dialog, accept, rec=None, pem=None, pub=None):
             dialog.open = False
+            page.update()
             try: page.overlay.remove(dialog)
             except: pass
-            page.update()
             if accept and rec and pem and pub:
                 try:
                     fingerprint = get_public_key_fingerprint(pub)

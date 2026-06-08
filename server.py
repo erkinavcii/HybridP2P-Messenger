@@ -19,13 +19,12 @@ Güvenlik Prensipleri:
   1. Sunucu hiçbir private key saklamaz.
   2. Mesajlar yalnızca şifreli (ciphertext) olarak tutulur.
   3. Alıcı mesajları çektiğinde veritabanından kalıcı olarak silinir.
-  4. Bu yaklaşım "Zero-Knowledge Server" mimarisini sağlar.
 """
 
 import os
 import json
 import asyncio
-import sqlite3
+import aiosqlite
 import uuid as uuid_lib
 import base64
 import hashlib
@@ -46,93 +45,93 @@ from crypto_utils import verify_signature, pem_string_to_public_key
 DB_PATH = "relay_server.db"
 
 
-def init_database():
+async def init_database():
     """
-    SQLite veritabanını başlatır ve gerekli tabloları oluşturur.
-    Uygulama her başlatıldığında güvenli bir şekilde çağrılabilir
-    (IF NOT EXISTS sayesinde).
+    Initializes the SQLite database and creates the required tables.
+    Can be safely called every time the application starts.
     """
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Kullanıcılar tablosu — public key'leri saklar
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username    TEXT PRIMARY KEY,
+                public_key  TEXT NOT NULL,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
 
-    # Kullanıcılar tablosu — public key'leri saklar
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username    TEXT PRIMARY KEY,
-            public_key  TEXT NOT NULL,
-            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
+        # Çevrimdışı mesajlar tablosu — şifreli payload'ları geçici saklar
+        # msg_type: 'message' | 'ephemeral_toggle' | 'system' | 'group_key_dist' | 'group_message'
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS offline_msgs (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender              TEXT NOT NULL,
+                recipient           TEXT NOT NULL,
+                encrypted_payload   TEXT NOT NULL DEFAULT '',
+                msg_type            TEXT NOT NULL DEFAULT 'message',
+                extra_data          TEXT NOT NULL DEFAULT '{}',
+                timestamp           TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
 
-    # Çevrimdışı mesajlar tablosu — şifreli payload'ları geçici saklar
-    # msg_type: 'message' | 'ephemeral_toggle' | 'system' | 'group_key_dist' | 'group_message'
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS offline_msgs (
-            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-            sender              TEXT NOT NULL,
-            recipient           TEXT NOT NULL,
-            encrypted_payload   TEXT NOT NULL DEFAULT '',
-            msg_type            TEXT NOT NULL DEFAULT 'message',
-            extra_data          TEXT NOT NULL DEFAULT '{}',
-            timestamp           TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
+        # Chat ayarları — ephemeral mod durumunu saklar
+        # chat_id = iki kullanıcı adı alfabetik sırayla birleştirilir (örn: alice_bob)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id     TEXT PRIMARY KEY,
+                ephemeral   INTEGER NOT NULL DEFAULT 0,
+                changed_by  TEXT,
+                changed_at  TEXT
+            )
+        """)
 
-    # Chat ayarları — ephemeral mod durumunu saklar
-    # chat_id = iki kullanıcı adı alfabetik sırayla birleştirilir (örn: alice_bob)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS chat_settings (
-            chat_id     TEXT PRIMARY KEY,
-            ephemeral   INTEGER NOT NULL DEFAULT 0,
-            changed_by  TEXT,
-            changed_at  TEXT
-        )
-    """)
+        # Dosya depolama — sifrelenmis dosya blob'larini gecici saklar
+        # download sonrasi silinir (Zero-Knowledge)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS file_store (
+                uuid            TEXT PRIMARY KEY,
+                sender          TEXT NOT NULL,
+                recipient       TEXT NOT NULL,
+                encrypted_data  TEXT NOT NULL,
+                original_name   TEXT NOT NULL,
+                file_type       TEXT NOT NULL DEFAULT 'document',
+                timestamp       TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
 
-    # Dosya depolama — sifrelenmis dosya blob'larini gecici saklar
-    # download sonrasi silinir (Zero-Knowledge)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS file_store (
-            uuid            TEXT PRIMARY KEY,
-            sender          TEXT NOT NULL,
-            recipient       TEXT NOT NULL,
-            encrypted_data  TEXT NOT NULL,
-            original_name   TEXT NOT NULL,
-            file_type       TEXT NOT NULL DEFAULT 'document',
-            timestamp       TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
+        # Gruplar tablosu — grup bilgilerini saklar
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS groups (
+                group_id    TEXT PRIMARY KEY,
+                group_name  TEXT NOT NULL,
+                creator     TEXT NOT NULL,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
 
-    # Gruplar tablosu — grup bilgilerini saklar
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS groups (
-            group_id    TEXT PRIMARY KEY,
-            group_name  TEXT NOT NULL,
-            creator     TEXT NOT NULL,
-            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
+        # Grup üyeleri tablosu — grup üyeliklerini saklar
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS group_members (
+                group_id    TEXT NOT NULL,
+                username    TEXT NOT NULL,
+                PRIMARY KEY (group_id, username),
+                FOREIGN KEY (group_id) REFERENCES groups(group_id),
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        """)
 
-    # Grup üyeleri tablosu — grup üyeliklerini saklar
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS group_members (
-            group_id    TEXT NOT NULL,
-            username    TEXT NOT NULL,
-            PRIMARY KEY (group_id, username),
-            FOREIGN KEY (group_id) REFERENCES groups(group_id),
-            FOREIGN KEY (username) REFERENCES users(username)
-        )
-    """)
-
-    conn.commit()
-    conn.close()
+        await db.commit()
 
 
-def get_db():
-    """Thread-safe veritabanı bağlantısı döndürür."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Sütun ismiyle erişim için
-    return conn
+@asynccontextmanager
+async def db_session():
+    """Asenkron veritabanı bağlantısı ve context manager sağlar."""
+    db = await aiosqlite.connect(DB_PATH)
+    db.row_factory = aiosqlite.Row  # Sütun ismiyle erişim için
+    try:
+        yield db
+    finally:
+        await db.close()
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -142,7 +141,7 @@ def get_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Uygulama başlarken veritabanını oluşturur."""
-    init_database()
+    await init_database()
     print("[DB] Database ready. Relay server started.")
     yield
     print("[Server] Relay server shutting down.")
@@ -238,13 +237,13 @@ async def register_user(req: UserRegisterRequest):
     except Exception:
         raise HTTPException(status_code=400, detail="Geçersiz timestamp formatı.")
 
-    db = get_db()
-    try:
+    async with db_session() as db:
         # Kullanıcı zaten var mı kontrol et
-        existing = db.execute(
+        cursor = await db.execute(
             "SELECT username, public_key FROM users WHERE username = ?",
             (req.username,)
-        ).fetchone()
+        )
+        existing = await cursor.fetchone()
 
         data_to_verify = f"{req.username}:{req.timestamp}:{req.public_key}".encode("utf-8")
 
@@ -265,11 +264,11 @@ async def register_user(req: UserRegisterRequest):
                     raise HTTPException(status_code=401, detail="Kullanıcı adı zaten kullanımda. Anahtar güncelleme için eski özel anahtarla imza gerekiyor.")
                 
                 # Güncelle
-                db.execute(
+                await db.execute(
                     "UPDATE users SET public_key = ? WHERE username = ?",
                     (req.public_key, req.username)
                 )
-                db.commit()
+                await db.commit()
                 return {"status": "updated", "message": f"'{req.username}' kullanıcısının public key'i güncellendi."}
         else:
             # Yeni kayıt. Gönderilen yeni key ile imzayı doğrula.
@@ -278,14 +277,12 @@ async def register_user(req: UserRegisterRequest):
             if not verify_signature(pub_key, sig_bytes, data_to_verify):
                 raise HTTPException(status_code=401, detail="Geçersiz imza. Gönderilen açık anahtarla eşleşen özel anahtar kanıtlanamadı.")
             
-            db.execute(
+            await db.execute(
                 "INSERT INTO users (username, public_key) VALUES (?, ?)",
                 (req.username, req.public_key)
             )
-            db.commit()
+            await db.commit()
             return {"status": "created", "message": f"'{req.username}' başarıyla kaydedildi."}
-    finally:
-        db.close()
 
 
 async def verify_request_signature(request: Request, username: str, timestamp: str, signature: str):
@@ -300,14 +297,12 @@ async def verify_request_signature(request: Request, username: str, timestamp: s
     except Exception:
         raise HTTPException(status_code=400, detail="Geçersiz timestamp formatı.")
 
-    db = get_db()
-    try:
-        row = db.execute("SELECT public_key FROM users WHERE username = ?", (username,)).fetchone()
+    async with db_session() as db:
+        cursor = await db.execute("SELECT public_key FROM users WHERE username = ?", (username,))
+        row = await cursor.fetchone()
         if not row:
             raise HTTPException(status_code=401, detail="Kullanıcı bulunamadı.")
         pub_key_pem = row["public_key"]
-    finally:
-        db.close()
 
     try:
         pub_key = pem_string_to_public_key(pub_key_pem)
@@ -338,12 +333,12 @@ async def get_public_key(
     Belirtilen kullanıcının public key'ini döndürür.
     """
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
-    db = get_db()
-    try:
-        row = db.execute(
+    async with db_session() as db:
+        cursor = await db.execute(
             "SELECT public_key FROM users WHERE username = ?",
             (username,)
-        ).fetchone()
+        )
+        row = await cursor.fetchone()
 
         if not row:
             raise HTTPException(
@@ -352,8 +347,6 @@ async def get_public_key(
             )
 
         return {"username": username, "public_key": row["public_key"]}
-    finally:
-        db.close()
 
 
 @app.get("/api/users")
@@ -367,17 +360,15 @@ async def list_users(
     Kayıtlı tüm kullanıcıları listeler.
     """
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
-    db = get_db()
-    try:
-        rows = db.execute("SELECT username, created_at FROM users").fetchall()
+    async with db_session() as db:
+        cursor = await db.execute("SELECT username, created_at FROM users")
+        rows = await cursor.fetchall()
         return {
             "users": [
                 {"username": r["username"], "created_at": r["created_at"]}
                 for r in rows
             ]
         }
-    finally:
-        db.close()
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -404,15 +395,15 @@ async def get_chat_settings(
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != username:
         raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
-    db = get_db()
-    try:
+    async with db_session() as db:
         # Bu kullanıcıyı içeren tüm chat_settings satırlarını al
-        rows = db.execute(
+        cursor = await db.execute(
             """SELECT chat_id, ephemeral, changed_by, changed_at
                FROM chat_settings
                WHERE chat_id LIKE ? OR chat_id LIKE ?""",
             (f"{username}_%", f"%_{username}")
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
         return {
             "settings": [
                 {
@@ -424,8 +415,6 @@ async def get_chat_settings(
                 for r in rows
             ]
         }
-    finally:
-        db.close()
 
 
 @app.post("/api/ephemeral_toggle")
@@ -445,10 +434,9 @@ async def rest_ephemeral_toggle(
         raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
     chat_id = _make_chat_id(req.sender, req.recipient)
     ts = datetime.now(timezone.utc).isoformat()
-    db = get_db()
-    try:
+    async with db_session() as db:
         # chat_settings güncelle
-        db.execute(
+        await db.execute(
             """INSERT INTO chat_settings (chat_id, ephemeral, changed_by, changed_at)
                VALUES (?, ?, ?, ?)
                ON CONFLICT(chat_id) DO UPDATE SET
@@ -457,7 +445,7 @@ async def rest_ephemeral_toggle(
                    changed_at=excluded.changed_at""",
             (chat_id, 1 if req.ephemeral else 0, req.sender, ts)
         )
-        db.commit()
+        await db.commit()
 
         toggle_msg = {
             "type": "ephemeral_toggle",
@@ -471,17 +459,15 @@ async def rest_ephemeral_toggle(
             await manager.send_to_user(req.recipient, toggle_msg)
         else:
             # Offline → kuyruğa ekle
-            db.execute(
+            await db.execute(
                 """INSERT INTO offline_msgs
                    (sender, recipient, msg_type, extra_data, timestamp)
                    VALUES (?, ?, 'ephemeral_toggle', ?, ?)""",
                 (req.sender, req.recipient, json.dumps({"ephemeral": req.ephemeral}), ts)
             )
-            db.commit()
+            await db.commit()
 
         return {"status": "ok", "ephemeral": req.ephemeral, "chat_id": chat_id}
-    finally:
-        db.close()
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -505,19 +491,16 @@ async def upload_file(
     if x_username != req.sender:
         raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
     file_uuid = str(uuid_lib.uuid4())
-    db = get_db()
-    try:
-        db.execute(
+    async with db_session() as db:
+        await db.execute(
             """INSERT INTO file_store
                (uuid, sender, recipient, encrypted_data, original_name, file_type)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (file_uuid, req.sender, req.recipient,
              req.encrypted_data, req.original_name, req.file_type)
         )
-        db.commit()
+        await db.commit()
         return {"uuid": file_uuid, "status": "uploaded"}
-    finally:
-        db.close()
 
 
 @app.get("/api/download_file/{file_uuid}")
@@ -533,11 +516,11 @@ async def download_file(
     Her dosya yalnizca bir kez indirilebilir.
     """
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
-    db = get_db()
-    try:
-        row = db.execute(
+    async with db_session() as db:
+        cursor = await db.execute(
             "SELECT * FROM file_store WHERE uuid = ?", (file_uuid,)
-        ).fetchone()
+        )
+        row = await cursor.fetchone()
         if not row:
             raise HTTPException(
                 status_code=404,
@@ -554,11 +537,9 @@ async def download_file(
             "timestamp":      row["timestamp"],
         }
         # Zero-Knowledge: indirme sonrasi kalici sil
-        db.execute("DELETE FROM file_store WHERE uuid = ?", (file_uuid,))
-        db.commit()
+        await db.execute("DELETE FROM file_store WHERE uuid = ?", (file_uuid,))
+        await db.commit()
         return result
-    finally:
-        db.close()
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -579,13 +560,13 @@ async def send_offline_message(
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != req.sender:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
-    db = get_db()
-    try:
+    async with db_session() as db:
         # Alıcının kayıtlı olup olmadığını kontrol et
-        recipient = db.execute(
+        cursor = await db.execute(
             "SELECT username FROM users WHERE username = ?",
             (req.recipient,)
-        ).fetchone()
+        )
+        recipient = await cursor.fetchone()
 
         if not recipient:
             raise HTTPException(
@@ -594,15 +575,13 @@ async def send_offline_message(
             )
 
         # Şifreli mesajı veritabanına kaydet
-        db.execute(
+        await db.execute(
             "INSERT INTO offline_msgs (sender, recipient, encrypted_payload, timestamp) VALUES (?, ?, ?, ?)",
             (req.sender, req.recipient, req.encrypted_payload, datetime.now(timezone.utc).isoformat())
         )
-        db.commit()
+        await db.commit()
         print(f"[Server] Stored offline message (REST) from '{req.sender}' to '{req.recipient}'")
         return {"status": "stored", "message": "Mesaj şifreli olarak saklandı."}
-    finally:
-        db.close()
 
 
 @app.get("/api/fetch_messages/{username}")
@@ -620,12 +599,12 @@ async def fetch_offline_messages(
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != username:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
-    db = get_db()
-    try:
-        rows = db.execute(
+    async with db_session() as db:
+        cursor = await db.execute(
             "SELECT id, sender, encrypted_payload, timestamp FROM offline_msgs WHERE recipient = ? ORDER BY timestamp ASC",
             (username,)
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
 
         messages = [
             {
@@ -639,15 +618,13 @@ async def fetch_offline_messages(
 
         # ✅ Mesajlar teslim edildi → veritabanından kalıcı olarak sil
         if messages:
-            db.execute(
+            await db.execute(
                 "DELETE FROM offline_msgs WHERE recipient = ?",
                 (username,)
             )
-            db.commit()
+            await db.commit()
 
         return {"messages": messages, "count": len(messages)}
-    finally:
-        db.close()
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -666,30 +643,28 @@ async def create_group(
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != req.creator:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
-    db = get_db()
-    try:
-        # Grubu oluştur
-        db.execute(
-            "INSERT INTO groups (group_id, group_name, creator) VALUES (?, ?, ?)",
-            (req.group_id, req.group_name, req.creator)
-        )
-        # Kurucuyu üye olarak ekle
-        db.execute(
-            "INSERT OR IGNORE INTO group_members (group_id, username) VALUES (?, ?)",
-            (req.group_id, req.creator)
-        )
-        # Diğer üyeleri ekle
-        for member in req.members:
-            db.execute(
-                "INSERT OR IGNORE INTO group_members (group_id, username) VALUES (?, ?)",
-                (req.group_id, member)
+    async with db_session() as db:
+        try:
+            # Grubu oluştur
+            await db.execute(
+                "INSERT INTO groups (group_id, group_name, creator) VALUES (?, ?, ?)",
+                (req.group_id, req.group_name, req.creator)
             )
-        db.commit()
-        return {"status": "ok", "group_id": req.group_id, "message": f"'{req.group_name}' grubu oluşturuldu."}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        db.close()
+            # Kurucuyu üye olarak ekle
+            await db.execute(
+                "INSERT OR IGNORE INTO group_members (group_id, username) VALUES (?, ?)",
+                (req.group_id, req.creator)
+            )
+            # Diğer üyeleri ekle
+            for member in req.members:
+                await db.execute(
+                    "INSERT OR IGNORE INTO group_members (group_id, username) VALUES (?, ?)",
+                    (req.group_id, member)
+                )
+            await db.commit()
+            return {"status": "ok", "group_id": req.group_id, "message": f"'{req.group_name}' grubu oluşturuldu."}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/groups/{group_id}/members")
@@ -703,31 +678,30 @@ async def add_group_member(
 ):
     """Gruba yeni üye ekler."""
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
-    db = get_db()
-    try:
+    async with db_session() as db:
         # Grubun varlığını kontrol et
-        group = db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,)).fetchone()
+        cursor = await db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,))
+        group = await cursor.fetchone()
         if not group:
             raise HTTPException(status_code=404, detail="Grup bulunamadı.")
         
         # Verify x_username is in the group (either creator or member)
         if group["creator"] != x_username:
-            member = db.execute(
+            cursor = await db.execute(
                 "SELECT username FROM group_members WHERE group_id = ? AND username = ?",
                 (group_id, x_username)
-            ).fetchone()
+            )
+            member = await cursor.fetchone()
             if not member:
                 raise HTTPException(status_code=403, detail="Grup üyesi değilsiniz.")
         
         # Üyeyi gruba ekle
-        db.execute(
+        await db.execute(
             "INSERT OR IGNORE INTO group_members (group_id, username) VALUES (?, ?)",
             (group_id, req.username)
         )
-        db.commit()
+        await db.commit()
         return {"status": "ok", "message": f"'{req.username}' gruba eklendi."}
-    finally:
-        db.close()
 
 
 @app.delete("/api/groups/{group_id}/members/{username}")
@@ -741,9 +715,9 @@ async def remove_group_member(
 ):
     """Gruptan bir üyeyi çıkarır."""
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
-    db = get_db()
-    try:
-        group = db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,)).fetchone()
+    async with db_session() as db:
+        cursor = await db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,))
+        group = await cursor.fetchone()
         if not group:
             raise HTTPException(status_code=404, detail="Grup bulunamadı.")
             
@@ -751,14 +725,12 @@ async def remove_group_member(
         if x_username != username and group["creator"] != x_username:
             raise HTTPException(status_code=403, detail="Sadece grup kurucusu üyeleri çıkarabilir veya kendi kendinize gruptan çıkabilirsiniz.")
             
-        db.execute(
+        await db.execute(
             "DELETE FROM group_members WHERE group_id = ? AND username = ?",
             (group_id, username)
         )
-        db.commit()
+        await db.commit()
         return {"status": "ok", "message": f"'{username}' gruptan çıkarıldı."}
-    finally:
-        db.close()
 
 
 @app.get("/api/groups/{username}")
@@ -773,15 +745,15 @@ async def list_user_groups(
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != username:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
-    db = get_db()
-    try:
-        rows = db.execute(
+    async with db_session() as db:
+        cursor = await db.execute(
             """SELECT g.group_id, g.group_name, g.creator, g.created_at
                FROM groups g
                JOIN group_members gm ON g.group_id = gm.group_id
                WHERE gm.username = ?""",
                (username,)
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
         return {
             "groups": [
                 {
@@ -793,8 +765,6 @@ async def list_user_groups(
                 for r in rows
             ]
         }
-    finally:
-        db.close()
 
 
 @app.get("/api/groups/{group_id}/members")
@@ -807,28 +777,30 @@ async def list_group_members(
 ):
     """Bir grubun tüm üyelerini ve public key'lerini döndürür (anahtar dağıtımı için)."""
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
-    db = get_db()
-    try:
-        group = db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,)).fetchone()
+    async with db_session() as db:
+        cursor = await db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,))
+        group = await cursor.fetchone()
         if not group:
             raise HTTPException(status_code=404, detail="Grup bulunamadı.")
             
         # Verify x_username is in the group (either creator or member)
         if group["creator"] != x_username:
-            member = db.execute(
+            cursor = await db.execute(
                 "SELECT username FROM group_members WHERE group_id = ? AND username = ?",
                 (group_id, x_username)
-            ).fetchone()
+            )
+            member = await cursor.fetchone()
             if not member:
                 raise HTTPException(status_code=403, detail="Grup üyesi değilsiniz.")
                 
-        rows = db.execute(
+        cursor = await db.execute(
             """SELECT u.username, u.public_key
                FROM users u
                JOIN group_members gm ON u.username = gm.username
                WHERE gm.group_id = ?""",
             (group_id,)
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
         return {
             "members": [
                 {
@@ -838,8 +810,6 @@ async def list_group_members(
                 for r in rows
             ]
         }
-    finally:
-        db.close()
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -913,16 +883,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
         signature = auth_msg["signature"]
         
         # 4. Verify signature using stored public key
-        db = get_db()
-        try:
-            row = db.execute("SELECT public_key FROM users WHERE username = ?", (username,)).fetchone()
+        async with db_session() as db:
+            cursor = await db.execute("SELECT public_key FROM users WHERE username = ?", (username,))
+            row = await cursor.fetchone()
             if not row:
                 await websocket.send_json({"type": "auth_result", "status": "failed", "message": "Kullanıcı bulunamadı."})
                 await websocket.close(code=4001)
                 return
             pub_key_pem = row["public_key"]
-        finally:
-            db.close()
             
         try:
             pub_key = pem_string_to_public_key(pub_key_pem)
@@ -989,9 +957,8 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                         "status": "delivered_online",
                     })
                 else:
-                    db = get_db()
-                    try:
-                        db.execute(
+                    async with db_session() as db:
+                        await db.execute(
                             """INSERT INTO offline_msgs
                                (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                                VALUES (?, ?, ?, 'message', ?, ?)""",
@@ -999,10 +966,8 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                              json.dumps({"view_once": view_once}),
                              datetime.now(timezone.utc).isoformat())
                         )
-                        db.commit()
+                        await db.commit()
                         print(f"[Server] Stored offline message from '{sender}' to '{recipient}'")
-                    finally:
-                        db.close()
                     await manager.send_to_user(sender, {
                         "type": "delivery_ack",
                         "recipient": recipient,
@@ -1010,7 +975,6 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                     })
 
             elif msg_type == "file_message":
-                # Dosya mesaji: sunucu sadece metadata'yi iletir (dosya zaten upload edildi)
                 recipient    = message.get("recipient", "")
                 sender       = username
                 file_uuid    = message.get("file_uuid", "")
@@ -1031,31 +995,26 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 if manager.is_online(recipient):
                     await manager.send_to_user(recipient, file_msg)
                 else:
-                    db = get_db()
-                    try:
-                        db.execute(
+                    async with db_session() as db:
+                        await db.execute(
                             """INSERT INTO offline_msgs
                                (sender, recipient, msg_type, extra_data, timestamp)
                                VALUES (?, ?, 'file_message', ?, ?)""",
                             (sender, recipient, json.dumps(file_msg),
                              datetime.now(timezone.utc).isoformat())
                         )
-                        db.commit()
-                    finally:
-                        db.close()
+                        await db.commit()
 
             elif msg_type == "ephemeral_toggle":
-                # ── Ephemeral mod toggle: hem DB'yi güncelle hem alıcıya ilet ──
                 recipient = message.get("recipient", "")
                 sender = username
                 ephemeral = bool(message.get("ephemeral", False))
                 chat_id = _make_chat_id(sender, recipient)
                 ts = datetime.now(timezone.utc).isoformat()
 
-                db = get_db()
-                try:
+                async with db_session() as db:
                     # Sunucu tarafında chat_settings güncelle
-                    db.execute(
+                    await db.execute(
                         """INSERT INTO chat_settings (chat_id, ephemeral, changed_by, changed_at)
                            VALUES (?, ?, ?, ?)
                            ON CONFLICT(chat_id) DO UPDATE SET
@@ -1064,7 +1023,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                                changed_at=excluded.changed_at""",
                         (chat_id, 1 if ephemeral else 0, sender, ts)
                     )
-                    db.commit()
+                    await db.commit()
 
                     toggle_payload = {
                         "type": "ephemeral_toggle",
@@ -1078,15 +1037,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                         await manager.send_to_user(recipient, toggle_payload)
                     else:
                         # Alıcı offline → kuyruğa ekle (bağlanınca teslim edilecek)
-                        db.execute(
-                            """INSERT INTO offline_msgs
-                               (sender, recipient, msg_type, extra_data, timestamp)
-                               VALUES (?, ?, 'ephemeral_toggle', ?, ?)""",
-                            (sender, recipient, json.dumps({"ephemeral": ephemeral}), ts)
-                        )
-                        db.commit()
-                finally:
-                    db.close()
+                        async with db_session() as db_inner:
+                            await db_inner.execute(
+                                """INSERT INTO offline_msgs
+                                   (sender, recipient, msg_type, extra_data, timestamp)
+                                   VALUES (?, ?, 'ephemeral_toggle', ?, ?)""",
+                                (sender, recipient, json.dumps({"ephemeral": ephemeral}), ts)
+                            )
+                            await db_inner.commit()
 
             elif msg_type == "group_key_dist":
                 recipient = message.get("recipient", "")
@@ -1105,30 +1063,29 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 if manager.is_online(recipient):
                     await manager.send_to_user(recipient, dist_payload)
                 else:
-                    db = get_db()
-                    try:
-                        db.execute(
+                    async with db_session() as db:
+                        await db.execute(
                             """INSERT INTO offline_msgs
                                (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                                VALUES (?, ?, ?, 'group_key_dist', ?, ?)""",
                             (sender, recipient, encrypted_payload, json.dumps({"group_id": group_id}),
                              datetime.now(timezone.utc).isoformat())
                         )
-                        db.commit()
-                    finally:
-                        db.close()
+                        await db.commit()
 
             elif msg_type == "group_message":
                 group_id = message.get("group_id", "")
                 sender = username
                 encrypted_payload = message.get("encrypted_payload", "")
+                # Alıcı tarafında grup taklit koruması için gönderilen imza:
+                signature = message.get("signature", "") 
 
-                db = get_db()
-                try:
-                    sender_member = db.execute(
+                async with db_session() as db:
+                    cursor = await db.execute(
                         "SELECT username FROM group_members WHERE group_id = ? AND username = ?",
                         (group_id, sender)
-                    ).fetchone()
+                    )
+                    sender_member = await cursor.fetchone()
                     if not sender_member:
                         await manager.send_to_user(sender, {
                             "type": "delivery_ack",
@@ -1136,39 +1093,39 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                             "status": "rejected_not_group_member",
                         })
                         continue
-                    members = db.execute(
+                    
+                    cursor = await db.execute(
                         "SELECT username FROM group_members WHERE group_id = ?", (group_id,)
-                    ).fetchall()
-                finally:
-                    db.close()
+                    )
+                    members = await cursor.fetchall()
 
                 group_msg_payload = {
                     "type": "group_message",
                     "sender": sender,
                     "group_id": group_id,
                     "encrypted_payload": encrypted_payload,
+                    "signature": signature,  # Korumayı alıcıya iletiyoruz
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
-                for m in members:
-                    recipient = m["username"]
-                    if recipient == sender:
-                        continue
-                    if manager.is_online(recipient):
-                        await manager.send_to_user(recipient, group_msg_payload)
-                    else:
-                        db = get_db()
-                        try:
-                            db.execute(
+                # Tek bir db bağlantısı üzerinden offline üyeleri kaydedelim (daha performanslı)
+                async with db_session() as db:
+                    for m in members:
+                        recipient = m["username"]
+                        if recipient == sender:
+                            continue
+                        if manager.is_online(recipient):
+                            await manager.send_to_user(recipient, group_msg_payload)
+                        else:
+                            await db.execute(
                                 """INSERT INTO offline_msgs
                                    (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                                    VALUES (?, ?, ?, 'group_message', ?, ?)""",
-                                (sender, recipient, encrypted_payload, json.dumps({"group_id": group_id}),
+                                (sender, recipient, encrypted_payload, 
+                                 json.dumps({"group_id": group_id, "signature": signature}),
                                  datetime.now(timezone.utc).isoformat())
                             )
-                            db.commit()
-                        finally:
-                            db.close()
+                    await db.commit()
 
             elif msg_type == "ping":
                 # Bağlantı canlılık kontrolü
@@ -1186,12 +1143,12 @@ async def _deliver_pending_messages(username: str):
     Kullanıcı WebSocket'e bağlandığında bekleyen offline
     mesajlarını teslim eder ve veritabanından siler.
     """
-    db = get_db()
-    try:
-        rows = db.execute(
+    async with db_session() as db:
+        cursor = await db.execute(
             "SELECT id, sender, encrypted_payload, msg_type, extra_data, timestamp FROM offline_msgs WHERE recipient = ? ORDER BY timestamp ASC",
             (username,)
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
 
         for row in rows:
             row_type = row["msg_type"]
@@ -1233,19 +1190,18 @@ async def _deliver_pending_messages(username: str):
                     "sender": row["sender"],
                     "group_id": extra.get("group_id", ""),
                     "encrypted_payload": row["encrypted_payload"],
+                    "signature": extra.get("signature", ""),  # Offline mesajdan da imzayı iletiyoruz
                     "timestamp": row["timestamp"],
                 })
 
         # ✅ Teslim edilen tüm kuyruğu sil (Zero-Knowledge)
         if rows:
-            db.execute(
+            await db.execute(
                 "DELETE FROM offline_msgs WHERE recipient = ?",
                 (username,)
             )
-            db.commit()
+            await db.commit()
             print(f"[Server] Delivered and deleted {len(rows)} pending messages for '{username}'.")
-    finally:
-        db.close()
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗

@@ -1,7 +1,7 @@
 # 🔐 HybridP2P Messenger — Proje İlerleme Takibi
 
 > **Son Güncelleme:** 2026-06-08  
-> **Durum:** Faz 1 Tamamlandı ✅ — Faz 2 Devam Ediyor 🔄
+> **Durum:** Faz 1 ve Faz 2 Tamamlandı ✅ — Faz 3 (Yol Haritası) Beklemede 🔄
 
 ---
 
@@ -83,15 +83,15 @@
 
 ## 🧪 Faz 2: Test ve Stabilizasyon
 
-- [ ] İki istemci ile canlı mesajlaşma testi (alice ↔ bob)
-- [ ] Ephemeral toggle iki taraftan test (alice açar, bob görür)
-- [ ] WebSocket bağlantı kopma / yeniden bağlanma testi
-- [ ] Çevrimdışı mesaj biriktirme ve toplu teslim testi
-- [ ] Offline ephemeral toggle testi (bob kapalıyken alice toggle'lar, bob açılınca sync olur)
-- [ ] Geçmiş yükleme testi (uygulama kapanıp açılınca mesajlar kalsın mı?)
-- [ ] Büyük mesaj (>1KB) şifreleme/çözme testi
-- [ ] Yanlış private key ile çözme denemesi (negatif test)
-- [ ] Sunucu restart sonrası veri kalıcılığı testi
+- [x] İki istemci ile canlı mesajlaşma testi (alice ↔ bob) — `test_integration.py` ile otomatik test edildi
+- [x] Ephemeral toggle iki taraftan test (alice açar, bob görür) — WebSocket & fallback REST sync test edildi
+- [x] WebSocket bağlantı kopma / yeniden bağlanma testi — exponential backoff test edildi
+- [x] Çevrimdışı mesaj biriktirme ve toplu teslim testi — `test_integration.py` ile otomatik test edildi
+- [x] Offline ephemeral toggle testi (bob kapalıyken alice toggle'lar, bob açılınca sync olur) — test edildi
+- [x] Geçmiş yükleme testi (uygulama kapanıp açılınca mesajlar yerel SQLite veritabanında saklanır) — test edildi
+- [x] Büyük mesaj (>1KB) şifreleme/çözme testi — test edildi
+- [x] Yanlış private key ile çözme denemesi (negatif test) — `crypto_utils.py` ve `test_features.py` test edildi
+- [x] Sunucu restart sonrası veri kalıcılığı testi — `aiosqlite` entegrasyonu ile test edildi
 
 ---
 

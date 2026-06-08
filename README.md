@@ -39,8 +39,45 @@ We combine asymmetric and symmetric cryptography (hybrid encryption) to achieve 
                                                                    └── 6. Decrypt Ciphertext using AES Key
 ```
 
-* **RSA-4096 (OAEP with SHA-256 MGF1):** Used for asymmetric key exchange and wrapping symmetric session keys. 4096-bit key length provides military-grade security that is future-proof against brute-force attacks.
-* **AES-256-GCM:** Used for symmetric encryption of message payloads and files. GCM (Galois/Counter Mode) is chosen because it provides **Authenticated Encryption with Associated Data (AEAD)**. It guarantees both confidentiality and authenticity/integrity (detecting any tampering or bit-flipping during transit via an authentication tag).
+* **RSA-4096 (OAEP with SHA-256 MGF1):** Used for asymmetric key exchange and wrapping symmetric session keys. 4096-bit key length provides military-grade security.
+* **RSA-PSS Signatures:** Used for challenge-response connection handshakes and API request verification. We employ **PSS (Probabilistic Signature Scheme)** padding with **SHA-256** hashing to guarantee secure, randomized signatures.
+* **AES-256-GCM:** Used for symmetric encryption of message payloads and files. GCM (Galois/Counter Mode) provides **Authenticated Encryption with Associated Data (AEAD)**, ensuring confidentiality, integrity, and authenticity.
+
+---
+
+## 🔒 Authentication & MITM Defenses
+
+To ensure absolute client authenticity without passwords, the messenger employs cryptographic signature-based handshakes, request-bound REST headers, and out-of-band contact sharing.
+
+### 1. WebSocket Challenge-Response Handshake
+Whenever a client connects to the WebSocket endpoint (`ws://127.0.0.1:8000/ws/{username}`):
+1. The server generates a random UUIDv4 challenge nonce.
+2. The client signs this challenge nonce locally using their RSA Private Key.
+3. The client sends the Base64 signature back to the server.
+4. The server fetches the registered public key of that username and verifies the signature. If valid, the connection is accepted; otherwise, it is disconnected immediately.
+
+### 2. Request-Bound API Signatures
+All state-modifying or sensitive REST API calls require signature headers to prevent replay attacks and API abuse:
+* **X-Username**: Requester's username.
+* **X-Timestamp**: Current ISO UTC timestamp (prevents replay attacks with a 5-minute drift check).
+* **X-Signature**: A base64 RSA-PSS signature of the request metadata:
+  ```
+  METHOD
+  PATH
+  TIMESTAMP
+  BODY_SHA256
+  ```
+  The server hashes the incoming request body, concatenates it with the method, path, and timestamp, and verifies the signature against the database public key.
+
+### 3. Server-Side Sender & Group Broadcast Enforcement
+* **Anti-Spoofing**: The server completely overrides the `sender` field in all incoming WebSocket packet payloads to the authenticated connection username.
+* **Group Broadcast Membership Checks**: The server verifies that the sending username is a registered member of the target group before BroadCasting or queueing any group message.
+
+### 4. Out-of-Band Contact Cards & MITM Detection
+Users can share their **Contact Cards** (containing username, public key PEM, and a SHA-256 fingerprint) out-of-band:
+* **Contact Cards**: Clicking the **Kimliği Kopyala (Contact Card)** button copies a structured JSON contact card. Pasting this JSON directly into the recipient field imports and saves the contact locally.
+* **First-Time Connection Alert (TOFU)**: If a user connects to a recipient for the first time without their contact card, the client fetches the public key from the server and prompts the user with a dialog to verify the key fingerprint.
+* **MITM warning popup**: If a recipient's public key changes on the server, the client detects the difference against the local contacts store, blocks connection, and warns the user with a dialog.
 
 ---
 
@@ -87,6 +124,11 @@ To maintain security boundaries during membership changes, we enforce strict key
   5. The removed member is excluded from this distribution. All remaining members update their local store with the new key.
   6. Subsequent group messages are encrypted with the new key. The removed member has no access to the new key and cannot read any new traffic.
 
+#### C. Group Impersonation Defense (RSA Signature Verification)
+* To prevent a compromised server or any unauthorized user from broadcasting fake messages under a group member's name, every group message payload is signed with the sender's individual RSA Private Key.
+* Specifically, the client signs a payload containing `{sender_username}:{group_id}:{encrypted_symmetric_payload}`.
+* Receiving clients fetch the sender's public key (either from their local contacts store or dynamically from the server) and verify the RSA-PSS signature before decrypting the message. If the signature is invalid, the message is flagged as a potential impersonation attempt and rejected.
+
 ---
 
 ## 🔄 Ephemeral & View-Once Mechanics
@@ -100,6 +142,13 @@ To maintain security boundaries during membership changes, we enforce strict key
 * Users can flag individual messages (text or files) as "View-Once" by toggling the eye icon (`👁️`).
 * Regardless of the chat's local database settings, view-once messages are **never** stored on disk.
 * Upon opening, a 10-second countdown dialog starts. Once the countdown finishes, the message plaintext is wiped from the client's memory and the UI widget is destroyed.
+
+### E2EE File & Image Sharing
+* **Client-Side Symmetric Encryption:** Files and images are encrypted locally on the sender's device using AES-256-GCM before upload.
+* **Zero-Knowledge Server Storage:** The encrypted file blob is uploaded to the server's database (`file_store` table) and associated with a unique UUID. The server has no knowledge of the decryption keys or the original contents.
+* **Automatic Deletion on Delivery:** Once the recipient successfully downloads the file, the server immediately and permanently deletes the encrypted blob from its disk (`Zero-Knowledge` delivery).
+* **Inline Image Thumbnails:** If the file type is detected as an image, it renders as an inline thumbnail within the chat view upon decryption. Other files can be downloaded directly to the client's local `~/Downloads` directory.
+* **View-Once File Protection:** If a file/image is marked as view-once, the decrypted inline thumbnail is automatically wiped from memory and destroyed 10 seconds after it is downloaded.
 
 ---
 
@@ -148,3 +197,7 @@ python client.py
 python client.py
 ```
 The clients will automatically generate their RSA-4096 keys under `~/.hybridp2p_messenger/` on the first launch, register their public keys to the server, and open the chat dashboard.
+
+### 4. Dynamic Server Configuration (GUI)
+* When launching the client, the login screen includes a **Sunucu Adresi (Server Address)** field (defaults to `127.0.0.1:8000`).
+* To connect clients across different machines on the same local network (LAN) or over the internet, simply input the server's IP address and port (e.g., `192.168.1.50:8000`) in the login view before clicking **Giriş Yap**.

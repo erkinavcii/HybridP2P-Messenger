@@ -46,6 +46,25 @@ SERVER_PORT  = 8000
 BASE_URL     = f"http://{SERVER_HOST}:{SERVER_PORT}"
 WS_URL       = f"ws://{SERVER_HOST}:{SERVER_PORT}"
 
+def update_server_urls(host_port_str: str):
+    global BASE_URL, WS_URL, SERVER_HOST, SERVER_PORT
+    host_port_str = host_port_str.strip()
+    if not host_port_str:
+        host_port_str = "127.0.0.1:8000"
+    
+    if ":" in host_port_str:
+        parts = host_port_str.split(":", 1)
+        host = parts[0]
+        port = parts[1]
+    else:
+        host = host_port_str
+        port = "8000"
+        
+    SERVER_HOST = host
+    SERVER_PORT = int(port) if port.isdigit() else 8000
+    BASE_URL = f"http://{SERVER_HOST}:{SERVER_PORT}"
+    WS_URL = f"ws://{SERVER_HOST}:{SERVER_PORT}"
+
 # Dosya tipi → ikon eşlemesi
 FILE_ICONS = {
     "image":    ft.Icons.IMAGE,
@@ -848,7 +867,37 @@ def main(page: ft.Page):
                                 group_id = data.get("group_id", "")
                                 enc = data.get("encrypted_payload", "")
                                 ts = data.get("timestamp", "")
+                                sig_b64 = data.get("signature", "")
+
+                                # Grup Taklit Koruması (İmza Doğrulama)
+                                from crypto_utils import verify_signature
+                                verified = False
+                                if sig_b64:
+                                    pub_key = None
+                                    local_contact = state["store"].get_contact(sender)
+                                    if local_contact:
+                                        pub_key = pem_string_to_public_key(local_contact["public_key"])
+                                    else:
+                                        pub_key = fetch_recipient_pub_key(sender)
+                                        if pub_key:
+                                            pub_key_pem = public_key_to_pem_string(pub_key)
+                                            fingerprint = get_public_key_fingerprint(pub_key)
+                                            state["store"].save_contact(sender, pub_key_pem, fingerprint)
+                                    
+                                    if pub_key:
+                                        try:
+                                            sig_bytes = base64.b64decode(sig_b64)
+                                            data_to_verify = f"{sender}:{group_id}:{enc}".encode("utf-8")
+                                            verified = verify_signature(pub_key, sig_bytes, data_to_verify)
+                                        except Exception as sig_ex:
+                                            print(f"Grup imza dogrulama hatasi: {sig_ex}")
                                 
+                                if not verified:
+                                    print(f"HATA: '{sender}' kullanicisinin grup imza dogrulamasi basarisiz!")
+                                    if state["recipient"] == group_id:
+                                        add_system_event(f"UYARI: '{sender}' adli kullanicinin kimligi dogrulanamadi (Taklit Tesebbusu)!")
+                                    continue
+
                                 group_key = state["store"].get_group_key(group_id)
                                 if group_key:
                                     try:
@@ -867,7 +916,7 @@ def main(page: ft.Page):
                                                 is_mine=False,
                                                 time_str=ts,
                                                 save=False
-                                            )
+                                             )
                                         else:
                                             chat_info = state["store"].get_chat_info(group_id)
                                             gname = chat_info.get("partner", group_id)
@@ -934,11 +983,17 @@ def main(page: ft.Page):
                 print(f"[REST] HATA: REST API baglanti hatasi: {e}")
 
     def send_group_message_via_ws(group_id: str, encrypted_payload: str):
+        from crypto_utils import sign_data
+        data_to_sign = f"{state['username']}:{group_id}:{encrypted_payload}".encode("utf-8")
+        sig = sign_data(state["private_key"], data_to_sign)
+        sig_b64 = base64.b64encode(sig).decode("ascii")
+
         msg = json.dumps({
             "type":              "group_message",
             "sender":            state["username"],
             "group_id":          group_id,
             "encrypted_payload": encrypted_payload,
+            "signature":         sig_b64,
         })
         if is_ws_connected():
             print(f"[WS] Grup mesaji '{group_id}' grubuna gonderiliyor...")
@@ -999,6 +1054,14 @@ def main(page: ft.Page):
     # ║                     GİRİŞ EKRANI                               ║
     # ╚═══════════════════════════════════════════════════════════════╝
 
+    server_address_field = ft.TextField(
+        label="Sunucu Adresi", value="127.0.0.1:8000",
+        hint_text="Ornek: 127.0.0.1:8000 veya sunucu.com:8000",
+        prefix_icon=ft.Icons.COMPUTER,
+        border_color="#6c63ff", focused_border_color="#a29bfe",
+        cursor_color="#6c63ff", text_size=15, height=55,
+    )
+
     username_field = ft.TextField(
         label="Kullanici Adi", hint_text="Ornek: alice",
         prefix_icon=ft.Icons.PERSON,
@@ -1031,6 +1094,10 @@ def main(page: ft.Page):
             page.update()
             return
         username_field.error_text = None
+        
+        # update server URLs
+        server_addr = server_address_field.value.strip()
+        update_server_urls(server_addr)
         
         # Disable button and update text
         login_btn.disabled = True
@@ -1094,8 +1161,10 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Column(
                         controls=[
+                            server_address_field,
+                            ft.Container(height=12),
                             username_field,
-                            ft.Container(height=8),
+                            ft.Container(height=16),
                             login_btn,
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0,
@@ -1183,6 +1252,22 @@ def main(page: ft.Page):
                     log_status(f"Hata: {ex}")
             else:
                 log_status("Baglanti guvenlik nedeniyle reddedildi.")
+
+        def close_tofu_dialog(dialog, accept, rec=None, pem=None, pub=None):
+            dialog.open = False
+            try: page.overlay.remove(dialog)
+            except: pass
+            page.update()
+            if accept and rec and pem and pub:
+                try:
+                    fingerprint = get_public_key_fingerprint(pub)
+                    state["store"].save_contact(rec, pem, fingerprint)
+                    print(f"[Contact] Saved public key for '{rec}' to local DB")
+                    connect_to_recipient_final(rec, pub)
+                except Exception as ex:
+                    log_status(f"Hata: {ex}")
+            else:
+                log_status("Baglanti onaylanmadi.")
 
         # Check if the input is a JSON contact card
         imported_card = None
@@ -1277,8 +1362,44 @@ def main(page: ft.Page):
             if pub_key:
                 pub_key_pem = public_key_to_pem_string(pub_key)
                 fingerprint = get_public_key_fingerprint(pub_key)
-                state["store"].save_contact(recipient, pub_key_pem, fingerprint)
-                print(f"[Contact] Saved public key for '{recipient}' to local DB")
+                
+                # Show TOFU verification warning dialog
+                dialog = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.SHIELD_OUTLINED, color="#4caf50"),
+                            ft.Text("Ilk Baglanti & Kimlik Dogrulama", color="#ffffff", weight=ft.FontWeight.BOLD)
+                        ],
+                        spacing=8
+                    ),
+                    content=ft.Column(
+                        controls=[
+                            ft.Text(f"'{recipient}' kullanicisi ile ilk defa baglanti kuruluyor.", color="#ffffff"),
+                            ft.Text("Sunucudan alinan kimlik parmak izi (Fingerprint):", color="#aaaaaa", size=12),
+                            ft.Container(
+                                content=ft.Text(fingerprint, weight=ft.FontWeight.BOLD, color="#4caf50", size=13, selectable=True),
+                                bgcolor="#1e2337",
+                                padding=10,
+                                border_radius=8,
+                                border=ft.Border(left=ft.BorderSide(1, "#2a2f4e"), top=ft.BorderSide(1, "#2a2f4e"), right=ft.BorderSide(1, "#2a2f4e"), bottom=ft.BorderSide(1, "#2a2f4e")),
+                            ),
+                            ft.Text("Guvenliginiz icin bu parmak izini arkadasinizla baska bir kanaldan dogrulamaniz onerilir.", color="#ff6b6b", size=11),
+                        ],
+                        tight=True,
+                        spacing=8
+                    ),
+                    actions=[
+                        ft.TextButton("Iptal Et (Guvenli)", on_click=lambda e: close_tofu_dialog(dialog, accept=False)),
+                        ft.TextButton("Anahtari Onayla ve Baglan", on_click=lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub))
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                    bgcolor="#141832"
+                )
+                page.overlay.append(dialog)
+                dialog.open = True
+                page.update()
+                return
 
         if pub_key:
             connect_to_recipient_final(recipient, pub_key)

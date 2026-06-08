@@ -1391,7 +1391,7 @@ def main(page: ft.Page):
                     ),
                     actions=[
                         ft.TextButton("Iptal Et (Guvenli)", on_click=lambda e: close_tofu_dialog(dialog, accept=False)),
-                        ft.TextButton("Anahtari Onayla ve Baglan", on_click=lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub))
+                        ft.TextButton("Anahtari Onayla ve Baglan", on_click=lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key))
                     ],
                     actions_alignment=ft.MainAxisAlignment.END,
                     bgcolor="#141832"

@@ -252,12 +252,7 @@ def main(page: ft.Page):
 
             def do_download():
                 try:
-                    headers = make_auth_headers(state["username"], state["private_key"])
-                    resp = requests.get(
-                        f"{BASE_URL}/api/download_file/{file_uuid}",
-                        headers=headers,
-                        timeout=30
-                    )
+                    resp = signed_get(f"/api/download_file/{file_uuid}", timeout=30)
                     if resp.status_code == 200:
                         data = resp.json()
                         raw = decrypt_bytes(data["encrypted_data"], state["private_key"])
@@ -394,15 +389,26 @@ def main(page: ft.Page):
         log_status("Anahtarlar olusturuldu.")
         return priv, pub
 
-    def make_auth_headers(username: str, private_key) -> dict:
+    def _canonical_json(payload: dict) -> str:
+        return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+    def make_auth_headers(username: str, private_key, method: str, path: str, body_text: str = "") -> dict:
         if not username or not private_key:
             return {}
         from datetime import datetime, timezone
         import base64
+        import hashlib
         from crypto_utils import sign_data
         
         timestamp = datetime.now(timezone.utc).isoformat()
-        data_to_sign = f"{username}:{timestamp}".encode("utf-8")
+        body_hash = hashlib.sha256(body_text.encode("utf-8")).hexdigest()
+        data_to_sign = "\n".join([
+            username,
+            timestamp,
+            method.upper(),
+            path,
+            body_hash,
+        ]).encode("utf-8")
         sig = sign_data(private_key, data_to_sign)
         sig_b64 = base64.b64encode(sig).decode("ascii")
         
@@ -411,6 +417,20 @@ def main(page: ft.Page):
             "X-Timestamp": timestamp,
             "X-Signature": sig_b64
         }
+
+    def signed_get(path: str, timeout: int = 5):
+        headers = make_auth_headers(state["username"], state["private_key"], "GET", path)
+        return requests.get(f"{BASE_URL}{path}", headers=headers, timeout=timeout)
+
+    def signed_delete(path: str, timeout: int = 5):
+        headers = make_auth_headers(state["username"], state["private_key"], "DELETE", path)
+        return requests.delete(f"{BASE_URL}{path}", headers=headers, timeout=timeout)
+
+    def signed_post(path: str, payload: dict, timeout: int = 5):
+        body_text = _canonical_json(payload)
+        headers = make_auth_headers(state["username"], state["private_key"], "POST", path, body_text)
+        headers["Content-Type"] = "application/json"
+        return requests.post(f"{BASE_URL}{path}", data=body_text.encode("utf-8"), headers=headers, timeout=timeout)
 
     def register_with_server(username: str, public_key, private_key) -> bool:
         try:
@@ -438,8 +458,7 @@ def main(page: ft.Page):
 
     def fetch_recipient_pub_key(recipient: str):
         try:
-            headers = make_auth_headers(state["username"], state["private_key"])
-            resp = requests.get(f"{BASE_URL}/api/public_key/{recipient}", headers=headers, timeout=5)
+            resp = signed_get(f"/api/public_key/{recipient}", timeout=5)
             if resp.status_code == 200:
                 return pem_string_to_public_key(resp.json()["public_key"])
         except: pass
@@ -448,10 +467,7 @@ def main(page: ft.Page):
     def sync_chat_settings():
         if not state["username"]: return
         try:
-            headers = make_auth_headers(state["username"], state["private_key"])
-            resp = requests.get(
-                f"{BASE_URL}/api/chat_settings/{state['username']}", headers=headers, timeout=5
-            )
+            resp = signed_get(f"/api/chat_settings/{state['username']}", timeout=5)
             if resp.status_code == 200:
                 for s in resp.json().get("settings", []):
                     parts   = s["chat_id"].split("_", 1)
@@ -466,10 +482,7 @@ def main(page: ft.Page):
     def fetch_offline_messages():
         print(f"[REST] Sunucudan cevrimdisi mesajlar talep ediliyor ({state['username']})...")
         try:
-            headers = make_auth_headers(state["username"], state["private_key"])
-            resp = requests.get(
-                f"{BASE_URL}/api/fetch_messages/{state['username']}", headers=headers, timeout=5
-            )
+            resp = signed_get(f"/api/fetch_messages/{state['username']}", timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
                 if data["count"]:
@@ -679,17 +692,15 @@ def main(page: ft.Page):
                 file_type = _guess_file_type(f.name)
                 encrypted = encrypt_bytes(raw, state["recipient_pub_key"])
 
-                headers = make_auth_headers(state["username"], state["private_key"])
-                resp = requests.post(
-                    f"{BASE_URL}/api/upload_file",
-                    json={
+                resp = signed_post(
+                    "/api/upload_file",
+                    {
                         "sender":         state["username"],
                         "recipient":      state["recipient"],
                         "encrypted_data": encrypted,
                         "original_name":  f.name,
                         "file_type":      file_type,
                     },
-                    headers=headers,
                     timeout=60,
                 )
                 if resp.status_code != 200:
@@ -907,12 +918,11 @@ def main(page: ft.Page):
         else:
             print(f"[REST] WebSocket kapali. Mesaj '{recipient}' icin REST API ile gonderiliyor...")
             try:
-                headers = make_auth_headers(state["username"], state["private_key"])
-                r = requests.post(f"{BASE_URL}/api/send_offline", json={
+                r = signed_post("/api/send_offline", {
                     "sender": state["username"],
                     "recipient": recipient,
                     "encrypted_payload": encrypted_payload,
-                }, headers=headers, timeout=5)
+                }, timeout=5)
                 if r.status_code == 200:
                     log_status("Mesaj REST ile gonderildi (offline).")
                     print(f"[REST] Mesaj REST uzerinden sunucuda basariyla saklandi (Response: {r.json()})")
@@ -940,8 +950,7 @@ def main(page: ft.Page):
     def sync_user_groups_from_server():
         if not state["username"] or not state["store"]: return
         try:
-            headers = make_auth_headers(state["username"], state["private_key"])
-            resp = requests.get(f"{BASE_URL}/api/groups/{state['username']}", headers=headers, timeout=5)
+            resp = signed_get(f"/api/groups/{state['username']}", timeout=5)
             if resp.status_code == 200:
                 groups = resp.json().get("groups", [])
                 for g in groups:
@@ -1447,8 +1456,7 @@ def main(page: ft.Page):
         groups_list_column = ft.Column(spacing=6, height=200, scroll=ft.ScrollMode.AUTO)
         
         try:
-            headers = make_auth_headers(state["username"], state["private_key"])
-            resp = requests.get(f"{BASE_URL}/api/groups/{state['username']}", headers=headers, timeout=5)
+            resp = signed_get(f"/api/groups/{state['username']}", timeout=5)
             groups = resp.json().get("groups", []) if resp.status_code == 200 else []
         except:
             groups = []
@@ -1480,8 +1488,7 @@ def main(page: ft.Page):
             state["store"].save_group_key(group_id, new_key.hex())
             
             try:
-                headers = make_auth_headers(state["username"], state["private_key"])
-                m_resp = requests.get(f"{BASE_URL}/api/groups/{group_id}/members", headers=headers, timeout=5)
+                m_resp = signed_get(f"/api/groups/{group_id}/members", timeout=5)
                 members = m_resp.json().get("members", []) if m_resp.status_code == 200 else []
             except:
                 members = []
@@ -1508,8 +1515,7 @@ def main(page: ft.Page):
 
         def on_group_leave(group_id, name):
             try:
-                headers = make_auth_headers(state["username"], state["private_key"])
-                resp = requests.delete(f"{BASE_URL}/api/groups/{group_id}/members/{state['username']}", headers=headers, timeout=5)
+                resp = signed_delete(f"/api/groups/{group_id}/members/{state['username']}", timeout=5)
                 if resp.status_code == 200:
                     log_status(f"'{name}' grubundan ciktiniz.")
                     if state["recipient"] == group_id:
@@ -1590,13 +1596,12 @@ def main(page: ft.Page):
             group_key = os.urandom(32)
             
             try:
-                headers = make_auth_headers(state["username"], state["private_key"])
-                resp = requests.post(f"{BASE_URL}/api/groups", json={
+                resp = signed_post("/api/groups", {
                     "group_id": group_id,
                     "group_name": name,
                     "creator": state["username"],
                     "members": members
-                }, headers=headers, timeout=5)
+                }, timeout=5)
                 
                 if resp.status_code == 200:
                     state["store"].save_group_key(group_id, group_key.hex())

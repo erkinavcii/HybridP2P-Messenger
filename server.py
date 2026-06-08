@@ -28,10 +28,11 @@ import asyncio
 import sqlite3
 import uuid as uuid_lib
 import base64
+import hashlib
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -287,7 +288,7 @@ async def register_user(req: UserRegisterRequest):
         db.close()
 
 
-def verify_request_signature(username: str, timestamp: str, signature: str):
+async def verify_request_signature(request: Request, username: str, timestamp: str, signature: str):
     """İstek başlıklarındaki imzayı doğrular."""
     try:
         req_dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -311,7 +312,14 @@ def verify_request_signature(username: str, timestamp: str, signature: str):
     try:
         pub_key = pem_string_to_public_key(pub_key_pem)
         sig_bytes = base64.b64decode(signature)
-        data_to_verify = f"{username}:{timestamp}".encode("utf-8")
+        body_hash = hashlib.sha256(await request.body()).hexdigest()
+        data_to_verify = "\n".join([
+            username,
+            timestamp,
+            request.method.upper(),
+            request.url.path,
+            body_hash,
+        ]).encode("utf-8")
         if not verify_signature(pub_key, sig_bytes, data_to_verify):
             raise HTTPException(status_code=401, detail="Geçersiz imza.")
     except Exception as e:
@@ -320,6 +328,7 @@ def verify_request_signature(username: str, timestamp: str, signature: str):
 
 @app.get("/api/public_key/{username}")
 async def get_public_key(
+    request: Request,
     username: str,
     x_username: str = Header(...),
     x_timestamp: str = Header(...),
@@ -328,7 +337,7 @@ async def get_public_key(
     """
     Belirtilen kullanıcının public key'ini döndürür.
     """
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     db = get_db()
     try:
         row = db.execute(
@@ -349,6 +358,7 @@ async def get_public_key(
 
 @app.get("/api/users")
 async def list_users(
+    request: Request,
     x_username: str = Header(...),
     x_timestamp: str = Header(...),
     x_signature: str = Header(...)
@@ -356,7 +366,7 @@ async def list_users(
     """
     Kayıtlı tüm kullanıcıları listeler.
     """
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     db = get_db()
     try:
         rows = db.execute("SELECT username, created_at FROM users").fetchall()
@@ -380,11 +390,20 @@ def _make_chat_id(user1: str, user2: str) -> str:
 
 
 @app.get("/api/chat_settings/{username}")
-async def get_chat_settings(username: str):
+async def get_chat_settings(
+    request: Request,
+    username: str,
+    x_username: str = Header(...),
+    x_timestamp: str = Header(...),
+    x_signature: str = Header(...)
+):
     """
     Kullanıcının tüm chat ephemeral ayarlarını döndürür.
     İstemci bağlandığında bu endpoint'i çağırarak yerel durumunu senkronize eder.
     """
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
+    if x_username != username:
+        raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
     db = get_db()
     try:
         # Bu kullanıcıyı içeren tüm chat_settings satırlarını al
@@ -410,11 +429,20 @@ async def get_chat_settings(username: str):
 
 
 @app.post("/api/ephemeral_toggle")
-async def rest_ephemeral_toggle(req: EphemeralToggleRequest):
+async def rest_ephemeral_toggle(
+    request: Request,
+    req: EphemeralToggleRequest,
+    x_username: str = Header(...),
+    x_timestamp: str = Header(...),
+    x_signature: str = Header(...)
+):
     """
     REST üzerinden ephemeral toggle (WebSocket bağlantısı yokken fallback).
     Online kullanıcıya WebSocket üzerinden de iletir.
     """
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
+    if x_username != req.sender:
+        raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
     chat_id = _make_chat_id(req.sender, req.recipient)
     ts = datetime.now(timezone.utc).isoformat()
     db = get_db()
@@ -461,12 +489,21 @@ async def rest_ephemeral_toggle(req: EphemeralToggleRequest):
 # ╚═══════════════════════════════════════════════════════════════════╝
 
 @app.post("/api/upload_file")
-async def upload_file(req: FileUploadRequest):
+async def upload_file(
+    request: Request,
+    req: FileUploadRequest,
+    x_username: str = Header(...),
+    x_timestamp: str = Header(...),
+    x_signature: str = Header(...)
+):
     """
     Sifrelenmis dosyayi alir, UUID ile veritabanina kaydeder.
     Sunucu dosya icerigini gormez — sadece sifrelenmis blob saklar (Zero-Knowledge).
     Dosya max ~10MB olmali (base64 encode ~%33 buyutur).
     """
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
+    if x_username != req.sender:
+        raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
     file_uuid = str(uuid_lib.uuid4())
     db = get_db()
     try:
@@ -484,11 +521,18 @@ async def upload_file(req: FileUploadRequest):
 
 
 @app.get("/api/download_file/{file_uuid}")
-async def download_file(file_uuid: str):
+async def download_file(
+    request: Request,
+    file_uuid: str,
+    x_username: str = Header(...),
+    x_timestamp: str = Header(...),
+    x_signature: str = Header(...)
+):
     """
     Sifrelenmis dosyayi verir ve veritabanindan siler (Zero-Knowledge).
     Her dosya yalnizca bir kez indirilebilir.
     """
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     db = get_db()
     try:
         row = db.execute(
@@ -499,6 +543,8 @@ async def download_file(file_uuid: str):
                 status_code=404,
                 detail="Dosya bulunamadi veya zaten indirildi."
             )
+        if row["recipient"] != x_username:
+            raise HTTPException(status_code=403, detail="Bu dosyayi indirme yetkiniz yok.")
         result = {
             "uuid":           row["uuid"],
             "sender":         row["sender"],
@@ -521,6 +567,7 @@ async def download_file(file_uuid: str):
 
 @app.post("/api/send_offline")
 async def send_offline_message(
+    request: Request,
     req: SendMessageRequest,
     x_username: str = Header(...),
     x_timestamp: str = Header(...),
@@ -529,7 +576,7 @@ async def send_offline_message(
     """
     Alıcı çevrimdışıyken mesajı veritabanına kaydeder.
     """
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != req.sender:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
     db = get_db()
@@ -560,6 +607,7 @@ async def send_offline_message(
 
 @app.get("/api/fetch_messages/{username}")
 async def fetch_offline_messages(
+    request: Request,
     username: str,
     x_username: str = Header(...),
     x_timestamp: str = Header(...),
@@ -569,7 +617,7 @@ async def fetch_offline_messages(
     Kullanıcının bekleyen çevrimdışı mesajlarını döndürür ve
     veritabanından kalıcı olarak siler (Zero-Knowledge prensibi).
     """
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != username:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
     db = get_db()
@@ -608,13 +656,14 @@ async def fetch_offline_messages(
 
 @app.post("/api/groups")
 async def create_group(
+    request: Request,
     req: GroupCreateRequest,
     x_username: str = Header(...),
     x_timestamp: str = Header(...),
     x_signature: str = Header(...)
 ):
     """Grup oluşturur ve kurucu dahil belirtilen tüm üyeleri gruba ekler."""
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != req.creator:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
     db = get_db()
@@ -645,6 +694,7 @@ async def create_group(
 
 @app.post("/api/groups/{group_id}/members")
 async def add_group_member(
+    request: Request,
     group_id: str,
     req: GroupAddMemberRequest,
     x_username: str = Header(...),
@@ -652,7 +702,7 @@ async def add_group_member(
     x_signature: str = Header(...)
 ):
     """Gruba yeni üye ekler."""
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     db = get_db()
     try:
         # Grubun varlığını kontrol et
@@ -682,6 +732,7 @@ async def add_group_member(
 
 @app.delete("/api/groups/{group_id}/members/{username}")
 async def remove_group_member(
+    request: Request,
     group_id: str,
     username: str,
     x_username: str = Header(...),
@@ -689,7 +740,7 @@ async def remove_group_member(
     x_signature: str = Header(...)
 ):
     """Gruptan bir üyeyi çıkarır."""
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     db = get_db()
     try:
         group = db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,)).fetchone()
@@ -712,13 +763,14 @@ async def remove_group_member(
 
 @app.get("/api/groups/{username}")
 async def list_user_groups(
+    request: Request,
     username: str,
     x_username: str = Header(...),
     x_timestamp: str = Header(...),
     x_signature: str = Header(...)
 ):
     """Belirtilen kullanıcının dahil olduğu grupları listeler."""
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != username:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
     db = get_db()
@@ -747,13 +799,14 @@ async def list_user_groups(
 
 @app.get("/api/groups/{group_id}/members")
 async def list_group_members(
+    request: Request,
     group_id: str,
     x_username: str = Header(...),
     x_timestamp: str = Header(...),
     x_signature: str = Header(...)
 ):
     """Bir grubun tüm üyelerini ve public key'lerini döndürür (anahtar dağıtımı için)."""
-    verify_request_signature(x_username, x_timestamp, x_signature)
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
     db = get_db()
     try:
         group = db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,)).fetchone()
@@ -918,7 +971,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
             if msg_type == "message":
                 recipient = message.get("recipient", "")
-                sender = message.get("sender", username)
+                sender = username
                 encrypted_payload = message.get("encrypted_payload", "")
                 view_once = bool(message.get("view_once", False))
 
@@ -959,7 +1012,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             elif msg_type == "file_message":
                 # Dosya mesaji: sunucu sadece metadata'yi iletir (dosya zaten upload edildi)
                 recipient    = message.get("recipient", "")
-                sender       = message.get("sender", username)
+                sender       = username
                 file_uuid    = message.get("file_uuid", "")
                 original_name = message.get("original_name", "dosya")
                 file_type    = message.get("file_type", "document")
@@ -994,7 +1047,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             elif msg_type == "ephemeral_toggle":
                 # ── Ephemeral mod toggle: hem DB'yi güncelle hem alıcıya ilet ──
                 recipient = message.get("recipient", "")
-                sender = message.get("sender", username)
+                sender = username
                 ephemeral = bool(message.get("ephemeral", False))
                 chat_id = _make_chat_id(sender, recipient)
                 ts = datetime.now(timezone.utc).isoformat()
@@ -1037,7 +1090,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
             elif msg_type == "group_key_dist":
                 recipient = message.get("recipient", "")
-                sender = message.get("sender", username)
+                sender = username
                 encrypted_payload = message.get("encrypted_payload", "")
                 group_id = message.get("group_id", "")
 
@@ -1067,11 +1120,22 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
             elif msg_type == "group_message":
                 group_id = message.get("group_id", "")
-                sender = message.get("sender", username)
+                sender = username
                 encrypted_payload = message.get("encrypted_payload", "")
 
                 db = get_db()
                 try:
+                    sender_member = db.execute(
+                        "SELECT username FROM group_members WHERE group_id = ? AND username = ?",
+                        (group_id, sender)
+                    ).fetchone()
+                    if not sender_member:
+                        await manager.send_to_user(sender, {
+                            "type": "delivery_ack",
+                            "recipient": group_id,
+                            "status": "rejected_not_group_member",
+                        })
+                        continue
                     members = db.execute(
                         "SELECT username FROM group_members WHERE group_id = ?", (group_id,)
                     ).fetchall()

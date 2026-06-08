@@ -355,10 +355,13 @@ def get_public_key_fingerprint(public_key) -> str:
 
 
 def sign_data(private_key, data: bytes) -> bytes:
-    """Veriyi private key ile imzalar (PKCS1v15 + SHA256)."""
+    """Veriyi private key ile imzalar (RSA-PSS + SHA256)."""
     return private_key.sign(
         data,
-        padding.PKCS1v15(),
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH,
+        ),
         hashes.SHA256()
     )
 
@@ -369,7 +372,10 @@ def verify_signature(public_key, signature: bytes, data: bytes) -> bool:
         public_key.verify(
             signature,
             data,
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256()
         )
         return True

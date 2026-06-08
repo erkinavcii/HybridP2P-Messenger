@@ -1,0 +1,16 @@
+# HybridP2P Messenger — Bağımlılıklar
+# =====================================
+
+# Backend (Röle Sunucusu)
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Kriptografi (E2EE)
+cryptography>=43.0.0
+
+# Frontend (İstemci Arayüzü)
+flet>=0.25.0
+
+# Ağ İletişimi
+websockets>=13.0
+requests>=2.32.0

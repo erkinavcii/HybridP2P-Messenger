@@ -191,7 +191,6 @@ def main(page: ft.Page):
             def close_dialog(e):
                 dialog.open = False
                 page.update()
-                clean_up()
 
             dialog = ft.AlertDialog(
                 modal=False,  # Herhangi bir yere tıklayınca da kapansın
@@ -312,7 +311,6 @@ def main(page: ft.Page):
             def close_dialog(e):
                 dialog.open = False
                 page.update()
-                clean_up()
 
             dialog = ft.AlertDialog(
                 modal=False,  # Herhangi bir yere tıklayınca da kapansın
@@ -819,7 +817,10 @@ def main(page: ft.Page):
     # ╚═══════════════════════════════════════════════════════════════╝
 
     def on_attach_click(e):
-        log_status("Dosya gonderimi bu arayuz surumunde devre disidir.")
+        if not state["recipient"]:
+            log_status("Once bir aliciya veya gruba baglanin!")
+            return
+        file_picker.pick_files(allow_multiple=False)
 
     def on_file_picked(e):
         if not e.files: return
@@ -1187,8 +1188,9 @@ def main(page: ft.Page):
         tooltip="Dosya / Resim gonder", on_click=on_attach_click,
     )
 
-    # Dosya seçici (Flet-desktop sürüm uyuşmazlığı nedeniyle devre dışı bırakıldı)
-    file_picker = None
+    # Dosya seçici
+    file_picker = ft.FilePicker(on_result=on_file_picked)
+    page.overlay.append(file_picker)
 
     # ╔═══════════════════════════════════════════════════════════════╗
     # ║                     GİRİŞ EKRANI                               ║
@@ -1622,6 +1624,53 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    recipient_status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ff6b6b")
+    recipient_status_label = ft.Text("Offline", size=10, color="#ff6b6b", weight=ft.FontWeight.BOLD)
+    
+    recipient_status_row = ft.Row(
+        controls=[
+            recipient_status_dot,
+            recipient_status_label
+        ],
+        spacing=6,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        visible=False
+    )
+    
+    def update_recipient_status_ui(online):
+        if online is None:
+            recipient_status_row.visible = False
+        else:
+            recipient_status_row.visible = True
+            if online:
+                recipient_status_dot.bgcolor = "#4caf50"
+                recipient_status_label.value = "Online"
+                recipient_status_label.color = "#4caf50"
+            else:
+                recipient_status_dot.bgcolor = "#ff6b6b"
+                recipient_status_label.value = "Offline"
+                recipient_status_label.color = "#ff6b6b"
+        try: page.update()
+        except: pass
+
+    def check_recipient_status_loop():
+        while True:
+            if state["recipient"] and not state.get("is_group", False):
+                try:
+                    r = signed_get(f"/api/status/{state['recipient']}", timeout=3)
+                    if r.status_code == 200:
+                        online = r.json().get("online", False)
+                        update_recipient_status_ui(online)
+                    else:
+                        update_recipient_status_ui(None)
+                except:
+                    update_recipient_status_ui(None)
+            else:
+                update_recipient_status_ui(None)
+            import time; time.sleep(5)
+
+    threading.Thread(target=check_recipient_status_loop, daemon=True, name="status-checker").start()
+
     def update_connection_status(is_connected: bool):
         if is_connected:
             status_dot.bgcolor = "#4caf50"  # Green
@@ -1680,6 +1729,7 @@ def main(page: ft.Page):
                     content=ft.Row(
                         controls=[
                             recipient_field,
+                            recipient_status_row,
                             ft.IconButton(
                                 icon=ft.Icons.LINK, icon_color="#6c63ff",
                                 icon_size=22, tooltip="Aliciya baglan",

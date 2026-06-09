@@ -171,22 +171,27 @@ def main(page: ft.Page):
             content_text = ft.Text(plaintext, size=15, color="#ffffff",
                                    selectable=True, text_align=ft.TextAlign.CENTER)
 
-            def close_dialog(e):
-                dialog.open = False
-                page.update()
-
-            def on_dismiss(e):
-                # Bu popup kapatıldığında hem page.overlay'den hem de chat'ten mesaj silinir
-                try:
-                    page.overlay.remove(dialog)
-                except:
-                    pass
+            has_cleaned = False
+            def clean_up():
+                nonlocal has_cleaned
+                if has_cleaned:
+                    return
+                has_cleaned = True
                 try:
                     if bubble_row in chat_list.controls:
                         chat_list.controls.remove(bubble_row)
                 except:
                     pass
+                try:
+                    page.overlay.remove(dialog)
+                except:
+                    pass
                 page.update()
+
+            def close_dialog(e):
+                dialog.open = False
+                page.update()
+                clean_up()
 
             dialog = ft.AlertDialog(
                 modal=False,  # Herhangi bir yere tıklayınca da kapansın
@@ -194,8 +199,17 @@ def main(page: ft.Page):
                     controls=[
                         ft.Icon(ft.Icons.VISIBILITY, color="#ff6b6b", size=20),
                         ft.Text("Tek Gorunumlu Mesaj", size=14, color="#ff6b6b"),
+                        ft.Container(expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.CLOSE,
+                            icon_color="#ff6b6b",
+                            icon_size=18,
+                            on_click=close_dialog,
+                            tooltip="Kapat",
+                        ),
                     ],
                     spacing=8,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 content=ft.Column(
                     controls=[
@@ -211,7 +225,7 @@ def main(page: ft.Page):
                     ft.TextButton("Kapat (Sil)", on_click=close_dialog)
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
-                on_dismiss=on_dismiss,
+                on_dismiss=lambda e: clean_up(),
                 bgcolor="#141832",
             )
             page.overlay.append(dialog)
@@ -269,12 +283,84 @@ def main(page: ft.Page):
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
         color = "#6c63ff" if is_mine else "#1e2337"
         icon  = FILE_ICONS.get(file_type, ft.Icons.DESCRIPTION)
+        bubble_row = None
 
         # İndirme durumu için durum göstergesi
         status_text = ft.Text("Indir", size=11, color="#a0a0ff")
         image_display = ft.Column(controls=[], visible=False)
 
+        def show_view_once_dialog(content_control, message_text):
+            nonlocal bubble_row
+            
+            has_cleaned = False
+            def clean_up():
+                nonlocal has_cleaned
+                if has_cleaned:
+                    return
+                has_cleaned = True
+                try:
+                    if bubble_row in chat_list.controls:
+                        chat_list.controls.remove(bubble_row)
+                except:
+                    pass
+                try:
+                    page.overlay.remove(dialog)
+                except:
+                    pass
+                page.update()
+
+            def close_dialog(e):
+                dialog.open = False
+                page.update()
+                clean_up()
+
+            dialog = ft.AlertDialog(
+                modal=False,  # Herhangi bir yere tıklayınca da kapansın
+                title=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.VISIBILITY, color="#ff6b6b", size=20),
+                        ft.Text("Tek Gorunumlu Dosya", size=14, color="#ff6b6b"),
+                        ft.Container(expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.CLOSE,
+                            icon_color="#ff6b6b",
+                            icon_size=18,
+                            on_click=close_dialog,
+                            tooltip="Kapat",
+                        ),
+                    ],
+                    spacing=8,
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                content=ft.Column(
+                    controls=[
+                        content_control,
+                        ft.Container(height=12),
+                        ft.Text(message_text,
+                                size=11, color="#ff6b6b", text_align=ft.TextAlign.CENTER),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    tight=True,
+                ),
+                actions=[
+                    ft.TextButton("Kapat (Sil)", on_click=close_dialog)
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+                on_dismiss=lambda e: clean_up(),
+                bgcolor="#141832",
+            )
+            page.overlay.append(dialog)
+            dialog.open = True
+            page.update()
+
         def on_download(e):
+            if view_once and is_mine:
+                show_view_once_dialog(
+                    ft.Text(f"Gonderdiginiz dosya: {original_name}", size=14, color="#ffffff"),
+                    "Bu pencere kapatildiginda mesaj sohbetten kalici olarak silinecektir."
+                )
+                return
+
             status_text.value = "Indiriliyor..."
             page.update()
 
@@ -285,37 +371,52 @@ def main(page: ft.Page):
                         data = resp.json()
                         raw = decrypt_bytes(data["encrypted_data"], state["private_key"])
 
-                        if file_type == "image":
-                            # Resmi base64 olarak Flet Image'e ver
-                            b64 = base64.b64encode(raw).decode("ascii")
-                            ext = Path(original_name).suffix.lstrip(".")
-                            data_url = f"data:image/{ext or 'png'};base64,{b64}"
-                            img = ft.Image(
-                                src=data_url,
-                                width=250, height=200,
-                                fit=ft.ImageFit.CONTAIN,
-                                border_radius=8,
-                            )
-                            image_display.controls.append(img)
-                            image_display.visible = True
-                            status_text.value = original_name
-                        else:
-                            # Dosyayı indirilenler klasörüne kaydet
-                            downloads = Path.home() / "Downloads"
-                            downloads.mkdir(exist_ok=True)
-                            dest = downloads / original_name
-                            dest.write_bytes(raw)
-                            status_text.value = f"Kaydedildi: {dest}"
-
                         if view_once:
-                            # Tek gorunumluse dosyayı göster sonra kaldır
+                            if file_type == "image":
+                                b64 = base64.b64encode(raw).decode("ascii")
+                                ext = Path(original_name).suffix.lstrip(".")
+                                data_url = f"data:image/{ext or 'png'};base64,{b64}"
+                                img = ft.Image(
+                                    src=data_url,
+                                    width=300, height=250,
+                                    fit=ft.ImageFit.CONTAIN,
+                                    border_radius=8,
+                                )
+                                show_view_once_dialog(
+                                    img,
+                                    "Bu dosya pencere kapatildiginda sohbetten kalici olarak silinecektir."
+                                )
+                            else:
+                                downloads = Path.home() / "Downloads"
+                                downloads.mkdir(exist_ok=True)
+                                dest = downloads / original_name
+                                dest.write_bytes(raw)
+                                show_view_once_dialog(
+                                    ft.Text(f"Dosya indirildi ve kaydedildi:\n{dest.name}", size=13, color="#ffffff", text_align=ft.TextAlign.CENTER),
+                                    "Bu dosya yerel Downloads klasorune kaydedildi. Pencere kapatildiginda mesaj sohbetten kalici olarak silinecektir."
+                                )
+                        else:
+                            if file_type == "image":
+                                b64 = base64.b64encode(raw).decode("ascii")
+                                ext = Path(original_name).suffix.lstrip(".")
+                                data_url = f"data:image/{ext or 'png'};base64,{b64}"
+                                img = ft.Image(
+                                    src=data_url,
+                                    width=250, height=200,
+                                    fit=ft.ImageFit.CONTAIN,
+                                    border_radius=8,
+                                )
+                                image_display.controls.clear()
+                                image_display.controls.append(img)
+                                image_display.visible = True
+                                status_text.value = original_name
+                            else:
+                                downloads = Path.home() / "Downloads"
+                                downloads.mkdir(exist_ok=True)
+                                dest = downloads / original_name
+                                dest.write_bytes(raw)
+                                status_text.value = f"Kaydedildi: {dest.name}"
                             page.update()
-                            import time; time.sleep(10)
-                            image_display.visible = False
-                            image_display.controls.clear()
-                            status_text.value = "Silindi (tek gorunumlu)"
-
-                        page.update()
                     else:
                         status_text.value = "Indirme basarisiz veya zaten indirildi."
                         page.update()
@@ -336,55 +437,70 @@ def main(page: ft.Page):
             visible=view_once,
         )
 
-        return ft.Row(
-            alignment=align,
-            controls=[
-                ft.Container(
-                    content=ft.Column(
+        bubble_content = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(sender, size=11, color="#9e9e9e",
+                            weight=ft.FontWeight.BOLD, visible=not is_mine),
+                    vo_badge,
+                    ft.Row(
                         controls=[
-                            ft.Text(sender, size=11, color="#9e9e9e",
-                                    weight=ft.FontWeight.BOLD, visible=not is_mine),
-                            vo_badge,
-                            ft.Row(
+                            ft.Icon(icon, size=24, color="#a0a0ff"),
+                            ft.Column(
                                 controls=[
-                                    ft.Icon(icon, size=24, color="#a0a0ff"),
-                                    ft.Column(
-                                        controls=[
-                                            ft.Text(original_name, size=12,
-                                                    color="#ffffff", max_lines=1,
-                                                    overflow=ft.TextOverflow.ELLIPSIS),
-                                            status_text,
-                                        ],
-                                        spacing=1, tight=True, expand=True,
-                                    ),
-                                    ft.IconButton(
-                                        icon=ft.Icons.DOWNLOAD,
-                                        icon_color="#a0a0ff",
-                                        icon_size=18,
-                                        on_click=on_download,
-                                        tooltip="Indir ve Coz",
-                                    ),
+                                    ft.Text(original_name, size=12,
+                                            color="#ffffff", max_lines=1,
+                                            overflow=ft.TextOverflow.ELLIPSIS),
+                                    status_text,
                                 ],
-                                spacing=6,
+                                spacing=1, tight=True, expand=True,
                             ),
-                            image_display,
-                            ft.Text(time_str, size=10, color="#888888"),
+                            ft.IconButton(
+                                icon=ft.Icons.DOWNLOAD if not view_once else ft.Icons.VISIBILITY,
+                                icon_color="#ff6b6b" if view_once else "#a0a0ff",
+                                icon_size=18,
+                                on_click=on_download,
+                                tooltip="Goruntule" if view_once else "Indir ve Coz",
+                            ),
                         ],
-                        spacing=4, tight=True,
+                        spacing=6,
                     ),
-                    bgcolor=color,
-                    padding=ft.Padding(14, 10, 14, 10),
-                    border_radius=ft.BorderRadius(
-                        top_left=18, top_right=18,
-                        bottom_left=4 if is_mine else 18,
-                        bottom_right=18 if is_mine else 4,
-                    ),
-                    width=300,
-                    shadow=ft.BoxShadow(blur_radius=8, color="#00000033",
-                                        offset=ft.Offset(0, 2)),
-                ),
-            ],
+                    image_display,
+                    ft.Text(time_str, size=10, color="#888888"),
+                ],
+                spacing=4, tight=True,
+            ),
+            bgcolor=color,
+            padding=ft.Padding(14, 10, 14, 10),
+            border_radius=ft.BorderRadius(
+                top_left=18, top_right=18,
+                bottom_left=4 if is_mine else 18,
+                bottom_right=18 if is_mine else 4,
+            ),
+            border=ft.Border(left=ft.BorderSide(1, "#ff6b6b44"), top=ft.BorderSide(1, "#ff6b6b44"), right=ft.BorderSide(1, "#ff6b6b44"), bottom=ft.BorderSide(1, "#ff6b6b44")) if view_once else None,
+            width=300,
+            shadow=ft.BoxShadow(blur_radius=8, color="#00000033",
+                                offset=ft.Offset(0, 2)),
         )
+
+        if view_once:
+            bubble_row = ft.Row(
+                alignment=align,
+                controls=[
+                    ft.GestureDetector(
+                        on_tap=on_download,
+                        content=bubble_content,
+                    )
+                ]
+            )
+        else:
+            bubble_row = ft.Row(
+                alignment=align,
+                controls=[
+                    bubble_content
+                ]
+            )
+        return bubble_row
 
     def create_system_bubble(text: str):
         return ft.Row(
@@ -633,32 +749,13 @@ def main(page: ft.Page):
         state["ephemeral"] = new_val
         state["store"].set_ephemeral(state["recipient"], new_val, state["username"])
         _update_ephemeral_ui()
-        if is_ws_connected():
-            _ws_send_raw(json.dumps({
-                "type": "ephemeral_toggle",
-                "sender": state["username"],
-                "recipient": state["recipient"],
-                "ephemeral": new_val,
-            }))
-        else:
-            print("[REST] WebSocket kapali. Ephemeral toggle REST API ile gonderiliyor...")
-            try:
-                def do_rest_toggle():
-                    try:
-                        r = signed_post("/api/ephemeral_toggle", {
-                            "sender": state["username"],
-                            "recipient": state["recipient"],
-                            "ephemeral": new_val,
-                        }, timeout=5)
-                        if r.status_code == 200:
-                            print(f"[REST] Ephemeral toggle basariyla gonderildi: {r.json()}")
-                        else:
-                            print(f"[REST] HATA: Ephemeral toggle sunucu hata: {r.status_code} {r.text}")
-                    except Exception as ex:
-                        print(f"[REST] HATA: Ephemeral toggle baglanti hatasi: {ex}")
-                threading.Thread(target=do_rest_toggle, daemon=True).start()
-            except Exception as ex:
-                print(f"[REST] Thread baslatma hatasi: {ex}")
+        
+        send_ws_message_with_fallback({
+            "type": "ephemeral_toggle",
+            "sender": state["username"],
+            "recipient": state["recipient"],
+            "ephemeral": new_val,
+        })
 
         label = ("Gecici sohbet modu ACILDI — mesajlar kaydedilmiyor"
                  if new_val else "Mesaj kayit modu ACILDI — mesajlar kaydediliyor")
@@ -761,7 +858,8 @@ def main(page: ft.Page):
                 view_once = state["view_once_mode"]
 
                 # WS üzerinden alıcıya bildir
-                _ws_send_raw(json.dumps({
+                # REST veya WS ile alıcıya bildir
+                send_ws_message_with_fallback({
                     "type":          "file_message",
                     "sender":        state["username"],
                     "recipient":     state["recipient"],
@@ -769,7 +867,7 @@ def main(page: ft.Page):
                     "original_name": f.name,
                     "file_type":     file_type,
                     "view_once":     view_once,
-                }))
+                })
 
                 # Kendi ekranında göster
                 add_file_to_chat(
@@ -965,9 +1063,13 @@ def main(page: ft.Page):
 
                         except json.JSONDecodeError: pass
             except Exception as ex:
-                print(f"[WS Connection Error] Exception in WebSocket listener loop: {ex}")
-                import traceback
-                traceback.print_exc()
+                import websockets
+                if isinstance(ex, (websockets.exceptions.ConnectionClosed, ConnectionRefusedError, OSError)):
+                    print(f"[WS Connection Status] Baglanti kapandi/koptu: {ex}")
+                else:
+                    print(f"[WS Unexpected Error] Beklenmedik hata: {ex}")
+                    import traceback
+                    traceback.print_exc()
                 state["ws"] = None
                 log_status(f"WS koptu. {reconnect_delay}s sonra tekrar...")
                 update_connection_status(False)
@@ -988,35 +1090,42 @@ def main(page: ft.Page):
         else:
             print("[WS] HATA: WebSocket baglantisi aktif degil!")
 
+    def send_ws_message_with_fallback(msg_dict: dict):
+        raw_json = json.dumps(msg_dict)
+        if is_ws_connected():
+            _ws_send_raw(raw_json)
+        else:
+            t = msg_dict.get("type", "")
+            print(f"[REST] WebSocket kapali. Mesaj '{t}' REST API ile gonderiliyor...")
+            try:
+                def do_rest():
+                    try:
+                        r = signed_post("/api/send_ws_fallback", {"payload": raw_json}, timeout=5)
+                        if r.status_code == 200:
+                            print(f"[REST] Fallback ile '{t}' basariyla gonderildi.")
+                            if t == "message":
+                                log_status("Mesaj REST ile iletildi.")
+                        else:
+                            print(f"[REST] HATA: Fallback basarisiz ({r.status_code}): {r.text}")
+                            if t == "message":
+                                log_status("Mesaj iletilemedi!")
+                    except Exception as ex:
+                        print(f"[REST] HATA: Fallback baglanti hatasi: {ex}")
+                        if t == "message":
+                            log_status("Mesaj iletilemedi!")
+                threading.Thread(target=do_rest, daemon=True).start()
+            except Exception as ex:
+                print(f"[REST] Thread baslatma hatasi: {ex}")
+
     def send_message_via_ws(recipient: str, encrypted_payload: str, view_once: bool):
-        msg = json.dumps({
+        msg = {
             "type":              "message",
             "sender":            state["username"],
             "recipient":         recipient,
             "encrypted_payload": encrypted_payload,
             "view_once":         view_once,
-        })
-        if is_ws_connected():
-            print(f"[WS] Mesaj '{recipient}' kullanicisina WebSocket ile iletiliyor...")
-            _ws_send_raw(msg)
-        else:
-            print(f"[REST] WebSocket kapali. Mesaj '{recipient}' icin REST API ile gonderiliyor...")
-            try:
-                r = signed_post("/api/send_offline", {
-                    "sender": state["username"],
-                    "recipient": recipient,
-                    "encrypted_payload": encrypted_payload,
-                    "view_once": view_once,
-                }, timeout=5)
-                if r.status_code == 200:
-                    log_status("Mesaj REST ile gonderildi (offline).")
-                    print(f"[REST] Mesaj REST uzerinden sunucuda basariyla saklandi (Response: {r.json()})")
-                else:
-                    log_status("Mesaj gonderilemedi!")
-                    print(f"[REST] HATA: Sunucu hata dondu ({r.status_code}): {r.text}")
-            except Exception as e:
-                log_status("Mesaj gonderilemedi!")
-                print(f"[REST] HATA: REST API baglanti hatasi: {e}")
+        }
+        send_ws_message_with_fallback(msg)
 
     def send_group_message_via_ws(group_id: str, encrypted_payload: str):
         from crypto_utils import sign_data
@@ -1024,19 +1133,14 @@ def main(page: ft.Page):
         sig = sign_data(state["private_key"], data_to_sign)
         sig_b64 = base64.b64encode(sig).decode("ascii")
 
-        msg = json.dumps({
+        msg = {
             "type":              "group_message",
             "sender":            state["username"],
             "group_id":          group_id,
             "encrypted_payload": encrypted_payload,
             "signature":         sig_b64,
-        })
-        if is_ws_connected():
-            print(f"[WS] Grup mesaji '{group_id}' grubuna gonderiliyor...")
-            _ws_send_raw(msg)
-        else:
-            print(f"[WS] HATA: WebSocket baglantisi yok. Grup mesaji gonderilemedi!")
-            log_status("WS baglantisi yok. Mesaj gonderilemedi!")
+        }
+        send_ws_message_with_fallback(msg)
 
     def sync_user_groups_from_server():
         if not state["username"] or not state["store"]: return
@@ -1684,13 +1788,13 @@ def main(page: ft.Page):
                 
                 enc_payload = encrypt_message(new_key.hex(), m_pub_key)
                 
-                _ws_send_raw(json.dumps({
+                send_ws_message_with_fallback({
                     "type": "group_key_dist",
                     "sender": state["username"],
                     "recipient": m_username,
                     "group_id": group_id,
                     "encrypted_payload": enc_payload
-                }))
+                })
                 
             log_status(f"'{name}' grubunun anahtari yenilendi ve dagitildi.")
             dialog.open = False
@@ -1795,13 +1899,13 @@ def main(page: ft.Page):
                         if m_pub:
                             enc_key = encrypt_message(group_key.hex(), m_pub)
                             
-                            _ws_send_raw(json.dumps({
+                            send_ws_message_with_fallback({
                                 "type": "group_key_dist",
                                 "sender": state["username"],
                                 "recipient": m,
                                 "group_id": group_id,
                                 "encrypted_payload": enc_key
-                            }))
+                            })
                             
                     state["recipient"] = group_id
                     state["is_group"] = True

@@ -141,14 +141,14 @@ To maintain security boundaries during membership changes, we enforce strict key
 ### View-Once Messages
 * Users can flag individual messages (text or files) as "View-Once" by toggling the eye icon (`👁️`).
 * Regardless of the chat's local database settings, view-once messages are **never** stored on disk.
-* Upon opening, a 10-second countdown dialog starts. Once the countdown finishes, the message plaintext is wiped from the client's memory and the UI widget is destroyed.
+* Upon clicking the view-once chat bubble, a pop-up dialog opens. Once the dialog is closed (by clicking the close icon, clicking the close button, or clicking outside), the message plaintext is immediately wiped from memory and the chat bubble is permanently removed from the UI.
 
 ### E2EE File & Image Sharing
 * **Client-Side Symmetric Encryption:** Files and images are encrypted locally on the sender's device using AES-256-GCM before upload.
 * **Zero-Knowledge Server Storage:** The encrypted file blob is uploaded to the server's database (`file_store` table) and associated with a unique UUID. The server has no knowledge of the decryption keys or the original contents.
 * **Automatic Deletion on Delivery:** Once the recipient successfully downloads the file, the server immediately and permanently deletes the encrypted blob from its disk (`Zero-Knowledge` delivery).
 * **Inline Image Thumbnails:** If the file type is detected as an image, it renders as an inline thumbnail within the chat view upon decryption. Other files can be downloaded directly to the client's local `~/Downloads` directory.
-* **View-Once File Protection:** If a file/image is marked as view-once, the decrypted inline thumbnail is automatically wiped from memory and destroyed 10 seconds after it is downloaded.
+* **View-Once File Protection:** If a file/image is marked as view-once, the decrypted content is displayed inside a pop-up dialog (or saved to disk for non-images). Once closed, the dialog is dismissed and the bubble is permanently removed from the chat history.
 
 ---
 

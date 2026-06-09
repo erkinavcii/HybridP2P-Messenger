@@ -213,6 +213,11 @@ class GroupAddMemberRequest(BaseModel):
     username: str
 
 
+class WsFallbackRequest(BaseModel):
+    """WebSocket kopukken tum paket tipleri icin REST fallback model."""
+    payload: str
+
+
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║              REST API — KULLANICI ve ANAHTAR YÖNETİMİ            ║
 # ╚═══════════════════════════════════════════════════════════════════╝
@@ -556,36 +561,228 @@ async def send_offline_message(
     x_signature: str = Header(...)
 ):
     """
-    Alıcı çevrimdışıyken mesajı veritabanına kaydeder.
+    Alıcı çevrimdışıyken mesajı veritabanına kaydeder. Alıcı çevrimiçiyse anında iletir.
     """
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != req.sender:
         raise HTTPException(status_code=403, detail="Yetkisiz erişim.")
+        
     async with db_session() as db:
-        # Alıcının kayıtlı olup olmadığını kontrol et
         cursor = await db.execute(
             "SELECT username FROM users WHERE username = ?",
             (req.recipient,)
         )
         recipient = await cursor.fetchone()
-
         if not recipient:
             raise HTTPException(
                 status_code=404,
                 detail=f"Alıcı '{req.recipient}' kayıtlı değil."
             )
 
-        # Şifreli mesajı veritabanına kaydet
-        await db.execute(
-            """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
-               VALUES (?, ?, ?, 'message', ?, ?)""",
-            (req.sender, req.recipient, req.encrypted_payload,
-             json.dumps({"view_once": req.view_once}),
-             datetime.now(timezone.utc).isoformat())
-        )
-        await db.commit()
+    ts = datetime.now(timezone.utc).isoformat()
+    if manager.is_online(req.recipient):
+        await manager.send_to_user(req.recipient, {
+            "type": "message",
+            "sender": req.sender,
+            "encrypted_payload": req.encrypted_payload,
+            "view_once": req.view_once,
+            "timestamp": ts,
+        })
+        print(f"[Server] Relayed offline message (REST -> WS) from '{req.sender}' to '{req.recipient}'")
+        return {"status": "delivered", "message": "Mesaj alıcıya WebSocket üzerinden iletildi."}
+    else:
+        async with db_session() as db:
+            await db.execute(
+                """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
+                   VALUES (?, ?, ?, 'message', ?, ?)""",
+                (req.sender, req.recipient, req.encrypted_payload,
+                 json.dumps({"view_once": req.view_once}), ts)
+            )
+            await db.commit()
         print(f"[Server] Stored offline message (REST) from '{req.sender}' to '{req.recipient}'")
         return {"status": "stored", "message": "Mesaj şifreli olarak saklandı."}
+
+
+@app.post("/api/send_ws_fallback")
+async def send_ws_fallback(
+    request: Request,
+    req: WsFallbackRequest,
+    x_username: str = Header(...),
+    x_timestamp: str = Header(...),
+    x_signature: str = Header(...)
+):
+    """
+    WebSocket bağlantısı yokken istemcinin tüm paket tiplerini iletebileceği REST fallback.
+    """
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
+    
+    try:
+        message = json.loads(req.payload)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Geçersiz JSON payload.")
+        
+    msg_type = message.get("type", "")
+    message["sender"] = x_username
+    ts = datetime.now(timezone.utc).isoformat()
+    
+    if msg_type == "message":
+        recipient = message.get("recipient", "")
+        encrypted_payload = message.get("encrypted_payload", "")
+        view_once = bool(message.get("view_once", False))
+        
+        if manager.is_online(recipient):
+            await manager.send_to_user(recipient, {
+                "type": "message",
+                "sender": x_username,
+                "encrypted_payload": encrypted_payload,
+                "view_once": view_once,
+                "timestamp": ts,
+            })
+        else:
+            async with db_session() as db:
+                await db.execute(
+                    """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
+                       VALUES (?, ?, ?, 'message', ?, ?)""",
+                    (x_username, recipient, encrypted_payload,
+                     json.dumps({"view_once": view_once}), ts)
+                )
+                await db.commit()
+                
+    elif msg_type == "file_message":
+        recipient = message.get("recipient", "")
+        file_uuid = message.get("file_uuid", "")
+        original_name = message.get("original_name", "dosya")
+        file_type = message.get("file_type", "document")
+        view_once = bool(message.get("view_once", False))
+        
+        file_msg = {
+            "type":          "file_message",
+            "sender":        x_username,
+            "file_uuid":     file_uuid,
+            "original_name": original_name,
+            "file_type":     file_type,
+            "view_once":     view_once,
+            "timestamp":     ts,
+        }
+        
+        if manager.is_online(recipient):
+            await manager.send_to_user(recipient, file_msg)
+        else:
+            async with db_session() as db:
+                await db.execute(
+                    """INSERT INTO offline_msgs
+                       (sender, recipient, msg_type, extra_data, timestamp)
+                       VALUES (?, ?, 'file_message', ?, ?)""",
+                    (x_username, recipient, json.dumps(file_msg), ts)
+                )
+                await db.commit()
+                
+    elif msg_type == "ephemeral_toggle":
+        recipient = message.get("recipient", "")
+        ephemeral = bool(message.get("ephemeral", False))
+        chat_id = _make_chat_id(x_username, recipient)
+        
+        async with db_session() as db:
+            await db.execute(
+                """INSERT INTO chat_settings (chat_id, ephemeral, changed_by, changed_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(chat_id) DO UPDATE SET
+                       ephemeral=excluded.ephemeral,
+                       changed_by=excluded.changed_by,
+                       changed_at=excluded.changed_at""",
+                (chat_id, 1 if ephemeral else 0, x_username, ts)
+            )
+            await db.commit()
+            
+            toggle_payload = {
+                "type": "ephemeral_toggle",
+                "sender": x_username,
+                "ephemeral": ephemeral,
+                "timestamp": ts,
+            }
+            
+            if manager.is_online(recipient):
+                await manager.send_to_user(recipient, toggle_payload)
+            else:
+                await db.execute(
+                    """INSERT INTO offline_msgs
+                       (sender, recipient, msg_type, extra_data, timestamp)
+                       VALUES (?, ?, 'ephemeral_toggle', ?, ?)""",
+                    (x_username, recipient, json.dumps({"ephemeral": ephemeral}), ts)
+                )
+                await db.commit()
+                
+    elif msg_type == "group_key_dist":
+        recipient = message.get("recipient", "")
+        encrypted_payload = message.get("encrypted_payload", "")
+        group_id = message.get("group_id", "")
+        
+        dist_payload = {
+            "type": "group_key_dist",
+            "sender": x_username,
+            "group_id": group_id,
+            "encrypted_payload": encrypted_payload,
+            "timestamp": ts,
+        }
+        
+        if manager.is_online(recipient):
+            await manager.send_to_user(recipient, dist_payload)
+        else:
+            async with db_session() as db:
+                await db.execute(
+                    """INSERT INTO offline_msgs
+                       (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
+                       VALUES (?, ?, ?, 'group_key_dist', ?, ?)""",
+                    (x_username, recipient, encrypted_payload, json.dumps({"group_id": group_id}), ts)
+                )
+                await db.commit()
+                
+    elif msg_type == "group_message":
+        group_id = message.get("group_id", "")
+        encrypted_payload = message.get("encrypted_payload", "")
+        signature = message.get("signature", "")
+        
+        async with db_session() as db:
+            cursor = await db.execute(
+                "SELECT username FROM group_members WHERE group_id = ? AND username = ?",
+                (group_id, x_username)
+            )
+            sender_member = await cursor.fetchone()
+            if not sender_member:
+                raise HTTPException(status_code=403, detail="Grup üyesi değilsiniz.")
+                
+            cursor = await db.execute(
+                "SELECT username FROM group_members WHERE group_id = ?", (group_id,)
+            )
+            members = await cursor.fetchall()
+            
+        group_msg_payload = {
+            "type": "group_message",
+            "sender": x_username,
+            "group_id": group_id,
+            "encrypted_payload": encrypted_payload,
+            "signature": signature,
+            "timestamp": ts,
+        }
+        
+        async with db_session() as db:
+            for m in members:
+                recipient = m["username"]
+                if recipient == x_username:
+                    continue
+                if manager.is_online(recipient):
+                    await manager.send_to_user(recipient, group_msg_payload)
+                else:
+                    await db.execute(
+                        """INSERT INTO offline_msgs
+                           (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
+                           VALUES (?, ?, ?, 'group_message', ?, ?)""",
+                        (x_username, recipient, encrypted_payload,
+                         json.dumps({"group_id": group_id, "signature": signature}), ts)
+                    )
+            await db.commit()
+            
+    return {"status": "ok", "delivered_or_stored": True}
 
 
 @app.get("/api/fetch_messages/{username}")

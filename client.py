@@ -846,6 +846,7 @@ def main(page: ft.Page):
                         
                     state["ws"] = ws
                     log_status("Baglanti kuruldu.")
+                    update_connection_status(True)
                     page.update()
                     async for raw in ws:
                         try:
@@ -969,6 +970,7 @@ def main(page: ft.Page):
                 traceback.print_exc()
                 state["ws"] = None
                 log_status(f"WS koptu. {reconnect_delay}s sonra tekrar...")
+                update_connection_status(False)
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 2, 30)
 
@@ -1501,7 +1503,32 @@ def main(page: ft.Page):
 
         page.update()
 
-    username_subtitle = ft.Text("", size=11, color="#9e9e9e")
+    username_text = ft.Text("", size=11, color="#9e9e9e")
+    status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ff6b6b")
+    status_label = ft.Text("Offline", size=10, color="#ff6b6b", weight=ft.FontWeight.BOLD)
+    
+    username_subtitle = ft.Row(
+        controls=[
+            username_text,
+            ft.Text("|", size=10, color="#2a2f4e"),
+            status_dot,
+            status_label
+        ],
+        spacing=6,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    def update_connection_status(is_connected: bool):
+        if is_connected:
+            status_dot.bgcolor = "#4caf50"  # Green
+            status_label.value = "Online"
+            status_label.color = "#4caf50"
+        else:
+            status_dot.bgcolor = "#ff6b6b"  # Red
+            status_label.value = "Offline"
+            status_label.color = "#ff6b6b"
+        try: page.update()
+        except: pass
 
     chat_view = ft.Container(
         content=ft.Column(
@@ -1840,7 +1867,7 @@ def main(page: ft.Page):
         page.update()
 
     def show_chat_screen():
-        username_subtitle.value = f"Kullanici: {state['username']}"
+        username_text.value = f"Kullanici: {state['username']}"
         page.controls.clear()
         page.add(chat_view)
         page.update()

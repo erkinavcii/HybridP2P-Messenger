@@ -149,28 +149,47 @@ def main(page: ft.Page):
         )
 
     def create_view_once_bubble(sender: str, time_str: str, is_mine: bool,
-                                 encrypted_payload: str):
+                                 encrypted_payload: str, plaintext_fallback: str = ""):
         """
         Tek görünümlü mesaj baloncuğu.
         Tıklanınca içerik diyalogda gösterilir, kapanınca silinir.
         """
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
         color = "#6c63ff" if is_mine else "#1e2337"
+        bubble_row = None
 
         def on_tap(e):
-            try:
-                plaintext = decrypt_message(encrypted_payload, state["private_key"])
-            except Exception as ex:
-                plaintext = f"[Cozme hatasi: {ex}]"
+            nonlocal bubble_row
+            if is_mine:
+                plaintext = plaintext_fallback or "Tek gorunumlu mesaj gonderildi."
+            else:
+                try:
+                    plaintext = decrypt_message(encrypted_payload, state["private_key"])
+                except Exception as ex:
+                    plaintext = f"[Cozme hatasi: {ex}]"
 
-            # Countdown sayacı
-            countdown_text = ft.Text("10", size=24, color="#ff6b6b",
-                                      weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-            content_text   = ft.Text(plaintext, size=15, color="#ffffff",
-                                      selectable=False, text_align=ft.TextAlign.CENTER)
+            content_text = ft.Text(plaintext, size=15, color="#ffffff",
+                                   selectable=True, text_align=ft.TextAlign.CENTER)
+
+            def close_dialog(e):
+                dialog.open = False
+                page.update()
+
+            def on_dismiss(e):
+                # Bu popup kapatıldığında hem page.overlay'den hem de chat'ten mesaj silinir
+                try:
+                    page.overlay.remove(dialog)
+                except:
+                    pass
+                try:
+                    if bubble_row in chat_list.controls:
+                        chat_list.controls.remove(bubble_row)
+                except:
+                    pass
+                page.update()
 
             dialog = ft.AlertDialog(
-                modal=True,
+                modal=False,  # Herhangi bir yere tıklayınca da kapansın
                 title=ft.Row(
                     controls=[
                         ft.Icon(ft.Icons.VISIBILITY, color="#ff6b6b", size=20),
@@ -181,36 +200,25 @@ def main(page: ft.Page):
                 content=ft.Column(
                     controls=[
                         content_text,
-                        ft.Container(height=8),
-                        ft.Text("Kapanmaya kadar:", size=11, color="#9e9e9e",
-                                 text_align=ft.TextAlign.CENTER),
-                        countdown_text,
+                        ft.Container(height=12),
+                        ft.Text("Bu pencere kapatildiginda mesaj sohbetten kalici olarak silinecektir.",
+                                size=11, color="#ff6b6b", text_align=ft.TextAlign.CENTER),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     tight=True,
                 ),
+                actions=[
+                    ft.TextButton("Kapat (Sil)", on_click=close_dialog)
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+                on_dismiss=on_dismiss,
                 bgcolor="#141832",
             )
             page.overlay.append(dialog)
             dialog.open = True
             page.update()
 
-            # 10s countdown
-            def countdown():
-                for i in range(9, -1, -1):
-                    import time; time.sleep(1)
-                    countdown_text.value = str(i)
-                    try: page.update()
-                    except: pass
-                dialog.open = False
-                try:
-                    page.overlay.remove(dialog)
-                    page.update()
-                except: pass
-
-            threading.Thread(target=countdown, daemon=True).start()
-
-        return ft.Row(
+        bubble_row = ft.Row(
             alignment=align,
             controls=[
                 ft.GestureDetector(
@@ -249,6 +257,7 @@ def main(page: ft.Page):
                 ),
             ],
         )
+        return bubble_row
 
     def create_file_bubble(sender: str, file_uuid: str, original_name: str,
                             file_type: str, time_str: str, is_mine: bool,
@@ -540,8 +549,8 @@ def main(page: ft.Page):
         if not time_str: time_str = datetime.now().strftime("%H:%M")
         else: time_str = _fmt_time(time_str)
 
-        if view_once and not is_mine:
-            bubble = create_view_once_bubble(sender, time_str, is_mine, encrypted_payload)
+        if view_once:
+            bubble = create_view_once_bubble(sender, time_str, is_mine, encrypted_payload, plaintext_fallback=text)
         else:
             bubble = create_message_bubble(sender, text, time_str, is_mine)
 
@@ -954,7 +963,10 @@ def main(page: ft.Page):
                                     log_status(f"'{r}' cevrimdisi. Mesaj saklandı.")
 
                         except json.JSONDecodeError: pass
-            except Exception:
+            except Exception as ex:
+                print(f"[WS Connection Error] Exception in WebSocket listener loop: {ex}")
+                import traceback
+                traceback.print_exc()
                 state["ws"] = None
                 log_status(f"WS koptu. {reconnect_delay}s sonra tekrar...")
                 await asyncio.sleep(reconnect_delay)
@@ -1475,7 +1487,8 @@ def main(page: ft.Page):
             # Kendi ekranında göster
             add_message_to_chat(
                 sender=state["username"], text=text,
-                is_mine=True, save=not view_once, view_once=False,
+                is_mine=True, save=not view_once, view_once=view_once,
+                encrypted_payload=encrypted,
             )
 
         message_input.value = ""

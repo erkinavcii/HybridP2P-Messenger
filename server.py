@@ -355,6 +355,27 @@ async def get_public_key(
         return {"username": username, "public_key": row["public_key"]}
 
 
+@app.get("/api/status/{username}")
+async def get_user_status(
+    request: Request,
+    username: str,
+    x_username: str = Header(...),
+    x_timestamp: str = Header(...),
+    x_signature: str = Header(...)
+):
+    """
+    Belirtilen kullanıcının online durumunu sorgular.
+    """
+    await verify_request_signature(request, x_username, x_timestamp, x_signature)
+    async with db_session() as db:
+        cursor = await db.execute("SELECT username FROM users WHERE username = ?", (username,))
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
+            
+    return {"username": username, "online": manager.is_online(username)}
+
+
 @app.get("/api/users")
 async def list_users(
     request: Request,

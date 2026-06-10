@@ -19,7 +19,7 @@ import tempfile
 import base64
 import mimetypes
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 import flet as ft
@@ -1792,10 +1792,11 @@ def main(page: ft.Page):
                     log_status(f"Group encryption error: {ex}")
                     return
 
-                send_group_message_via_ws(group_id, encrypted)
+                timestamp = datetime.now(timezone.utc).isoformat()
+                send_group_message_via_ws(group_id, encrypted, timestamp=timestamp)
                 add_message_to_chat(
                     sender=state["username"], text=text,
-                    is_mine=True, save=True, view_once=False
+                    is_mine=True, save=True, view_once=False, time_str=timestamp, is_read=False
                 )
             else:
                 if not state["recipient_pub_key"]:

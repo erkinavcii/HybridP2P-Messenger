@@ -801,7 +801,7 @@ def main(page: ft.Page):
                 "public_key": pem_str,
                 "fingerprint": fingerprint
             }
-            page.set_clipboard(json.dumps(card, indent=2))
+            copy_to_clipboard(json.dumps(card, indent=2))
             log_status("Contact card copied to clipboard!")
         except Exception as ex:
             log_status(f"Kopyalama hatasi: {ex}")
@@ -1144,6 +1144,14 @@ def main(page: ft.Page):
         status_text.value = msg
         try: page.update()
         except: pass
+
+    def copy_to_clipboard(text: str):
+        async def do_copy():
+            try:
+                await ft.Clipboard().set(text)
+            except Exception as ex:
+                print(f"[Clipboard Error] {ex}")
+        page.run_task(do_copy)
 
     chat_list = ft.ListView(expand=True, spacing=8,
                              padding=ft.Padding(12, 8, 12, 8),
@@ -2517,21 +2525,30 @@ def main(page: ft.Page):
     def open_settings_dialog(e):
         from crypto_utils import serialize_private_key
         
+        def clean_pem_for_display(pem_str: str) -> str:
+            lines = pem_str.strip().splitlines()
+            body_lines = [line for line in lines if not line.strip().startswith("-----")]
+            return "\n".join(body_lines).strip()
+
         # Format keys
         try:
             pub_pem = public_key_to_pem_string(state["public_key"])
+            pub_pem_display = clean_pem_for_display(pub_pem)
         except Exception as ex:
             pub_pem = f"Error: {ex}"
+            pub_pem_display = pub_pem
             
         try:
             priv_pem = serialize_private_key(state["private_key"]).decode("utf-8")
+            priv_pem_display = clean_pem_for_display(priv_pem)
         except Exception as ex:
             priv_pem = f"Error: {ex}"
+            priv_pem_display = priv_pem
 
         # Public Key textfield (read-only, multiline)
         pub_key_tf = ft.TextField(
             label="Public Key PEM",
-            value=pub_pem,
+            value=pub_pem_display,
             multiline=True,
             min_lines=3,
             max_lines=5,
@@ -2586,7 +2603,7 @@ def main(page: ft.Page):
                 
             def proceed_reveal(e):
                 confirm_dialog.open = False
-                priv_key_tf.value = priv_pem
+                priv_key_tf.value = priv_pem_display
                 priv_key_tf.focused_border_color = "#8b5cf6"
                 reveal_btn.visible = False
                 copy_btn.visible = True
@@ -2618,7 +2635,7 @@ def main(page: ft.Page):
         reveal_btn.on_click = confirm_reveal_key
 
         def copy_private_key(e):
-            page.set_clipboard(priv_pem)
+            copy_to_clipboard(priv_pem)
             log_status("Private Key copied to clipboard!")
             
         copy_btn.on_click = copy_private_key

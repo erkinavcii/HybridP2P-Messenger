@@ -292,9 +292,79 @@ Sesli aramanın performansı ve güvenliği için aşağıdaki mimari kurulacakt
 
 ---
 
+## 👥 Özellik 6: Okundu Bilgisi (Read Receipts)
+
+### Ne İstiyoruz?
+Kullanıcıların gönderdiği mesajların karşı tarafça okunup okunmadığını görebilmesi (çift mavi tik özelliği). 
+
+### Kullanıcı Akışı
+```
+  Gönderici tarafında mesaj durum göstergeleri:
+    ⚪ Gönderiliyor... (Sunucuya ulaşmaya çalışıyor)
+    ☑️ İletildi (Sunucuya ulaştı, offline kuyruğunda veya alıcı online ama henüz aktif chati açmadı)
+    ✅ Okundu (Alıcı sohbeti açtı ve okudu)
+```
+
+### Teknik Yaklaşım
+1. **Sinyalleşme ve WebSocket Mesaj Tipi**:
+   * Alıcı sohbet ekranını açtığında (veya sohbet açıkken yeni mesaj geldiğinde), istemci sunucuya bir `read_receipt` paketi gönderir:
+     ```json
+     {
+       "type": "read_receipt",
+       "sender": "bob",
+       "recipient": "alice",
+       "timestamp": "2026-06-10T23:16:00Z"
+     }
+     ```
+   * Sunucu bu paketi doğrudan göndericiye (`alice`) yönlendirir.
+2. **Kuyruk / Veritabanı Güncellemesi**:
+   * Gönderici online ise anında durum `read` olarak güncellenir.
+   * Gönderici offline ise, alıcı tarafı `read_receipt` göndermez; gönderici online olup websocket bağlantısını açtığında, alıcının istemcisi okuma durumunu WS üzerinden bildirir.
+
+---
+
+## 🌐 Özellik 7: Standalone Web App Modeli (WhatsApp Web Model)
+
+### Ne İstiyoruz?
+Kullanıcıların herhangi bir tarayıcı üzerinden VPS/Cloud sunucusunda barındırılan web arayüzünü kullanarak, masaüstü uygulaması kurmadan tam özellikli E2EE mesajlaşma yapabilmesi.
+
+### Teknik Yaklaşım (Fazlar)
+1. **Faz 1: Sunucu Hazırlığı**:
+   * CORS ayarlarının explicit (belirli) domain listesine çekilmesi.
+   * Session ve token çerezleri için `Secure`, `HttpOnly` ve `SameSite=Strict` bayraklarının eklenmesi.
+2. **Faz 2: Güvenli Anahtar Depolama (IndexedDB)**:
+   * Private key'lerin XSS saldırılarına açık olan `localStorage` yerine `IndexedDB` üzerinde şifreli olarak saklanması.
+   * Parola korumalı AES-şifreli PEM export/import akışının kurulması.
+3. **Faz 3: Feature Parity (Özellik Eşitleme)**:
+   * Web client'ta dosya ve resim gönderim desteğinin (Web Crypto AES-GCM ile şifrelenip upload edilmesi) sağlanması.
+   * Web client üzerinde grup sohbetlerinin ve yerel arama özelliklerinin tamamlanması.
+4. **Faz 4: Deployment & Barındırma**:
+   * Nginx veya Caddy reverse proxy ile statik dosyaların doğrudan sunulması, API ve WS isteklerinin `server.py` FastAPI sürecine yönlendirilmesi.
+   * Systemd servisi ile arka plan sunucu yönetimi.
+5. **Faz 5: PWA (Progressive Web App)**:
+   * `manifest.json` ve service worker desteği eklenerek web uygulamasının mobil ve masaüstü tarayıcılarda kurulabilir yerel bir uygulama gibi davranmasının sağlanması.
+
+---
+
+## ⚙️ Özellik 8: Gelişmiş Sunucu Konfigürasyonu (Optional / Futures)
+
+### Ne İstiyoruz?
+Sunucu güvenliğini ve kaynak kullanımını optimize etmek amacıyla isteğe bağlı gelişmiş yapılandırmaların sunulması.
+
+### Teknik Yaklaşım
+1. **Rate Limiting**:
+   * `/api/register`, `/api/public_key` ve `/api/send_ws_fallback` gibi kritik endpoint'lere istemci IP'si başına limit (örn. dakikada max 30 istek) getirilmesi.
+2. **Health Endpoint**:
+   * Sunucu durumu, çalışma süresi (uptime), DB bağlantı durumu ve aktif websocket bağlantı sayısını döndüren `/api/health` endpoint'inin sağlanması.
+3. **Maksimum Dosya Boyutu ve Kota**:
+   * Sunucu tarafında tekil dosya yükleme limitinin (örn. 50MB) enforcer edilmesi ve kullanıcı başına toplam kota kontrolünün yapılması.
+
+---
+
 ## 🔖 Notlar
 
 - Tüm özellikler Zero-Knowledge prensibini koruyacak — sunucu hiçbir zaman plaintext veya özel anahtar görmeyecek
 - View-once mesajlar yerel geçmişe hiç yazılmaz, grup üyelerinde de aynı kural
 - Dosya upload'ları teslim sonrası sunucudan silinir (offline_msgs ile aynı prensip)
 - Grup anahtarı yönetimi (re-keying) ileri aşama için ayrı bir mini-protokol gerektirir
+- Rate Limiting ve Sunucu Konfigürasyonu gibi altyapı özellikleri "Futures Optional" olarak değerlendirilecektir.

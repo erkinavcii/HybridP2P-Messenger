@@ -2269,18 +2269,25 @@ def main(page: ft.Page):
 
         tabs = ft.Tabs(
             selected_index=default_tab_index,
-            tabs=[
-                ft.Tab(
-                    label="Direct Message",
-                    icon=ft.Icons.PERSON,
-                    content=dm_tab_content,
-                ),
-                ft.Tab(
-                    label="Group Chat",
-                    icon=ft.Icons.GROUP,
-                    content=group_tab_content,
-                ),
-            ],
+            length=2,
+            content=ft.Column(
+                controls=[
+                    ft.TabBar(
+                        tabs=[
+                            ft.Tab(label="Direct Message", icon=ft.Icons.PERSON),
+                            ft.Tab(label="Group Chat", icon=ft.Icons.GROUP),
+                        ],
+                    ),
+                    ft.TabBarView(
+                        controls=[
+                            dm_tab_content,
+                            group_tab_content,
+                        ],
+                        expand=True,
+                    ),
+                ],
+                expand=True,
+            ),
             expand=True,
             animation_duration=200,
         )

@@ -115,7 +115,7 @@
 - [ ] **Sesli Mesaj**: Mikrofon kaydi → sifrelenmis ses dosyasi gonderimi
 - [x] **Grup Sohbeti**: Birden fazla aliciya sifreli simetrik mesaj (Shared Group Key + Rekeying) ✅
 - [ ] **Mesaj Duzenleme/Silme**: Gonderilenin her iki taraftan silinmesi
-- [ ] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi
+- [x] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi (masaüstü & web tarafında çift yeşil tik) ✅
 - [ ] **Yaziyor... Gostergesi**: Karsi tarafin yazma durumu
 - [x] **Mesaj Arama**: Yerel gecmiste arama (Sohbet ve Mesaj Gövdesi Arama) ✅
 

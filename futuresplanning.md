@@ -22,7 +22,7 @@
 | 5 | **Web'de grup desteği yok** | Desktop'ta grup oluşturma/mesajlaşma var, web client'ta grup UI'ı ve `group_message` / `group_key_dist` WS handler'ları yok. |
 | 6 | **Web'de arama (search) yok** | Desktop'ta inbox search var, web'de yalnızca basit chat listesi render ediliyor, filtreleme/mesaj içi arama yok. |
 | 7 | **Web'de view-once mesaj alımı** | Gelen view-once mesajlar web'de görünüyor ama decrypt + self-destruct akışı kısmen var — countdown ve mesaj silme güvenilir değil (sayfa yenilenince mesaj localStorage'da kalıyor). |
-| 8 | **Okundu bilgisi (Read Receipt)** | Ne desktop ne web'de "okundu" tiki var. Mesaj iletildi/saklandı ACK'ı var ama "görüldü" durumu yok. |
+| 8 | **Okundu bilgisi (Read Receipt)** | ✅ Tamamlandı — Çift yeşil tik okundu bilgisi desktop ve web için eklendi. |
 | 9 | **"Yazıyor..." göstergesi** | Hiçbir platformda typing indicator yok. |
 
 ### 🟢 Düşük — Cilalama / Polish
@@ -52,6 +52,7 @@
 | Chat inbox listesi | ✅ | ✅ |
 | Mesaj arama | ✅ | ❌ |
 | Server status göstergesi | ✅ | ✅ |
+| Okundu bilgisi (çift yeşil tik) | ✅ | ✅ |
 | Secret key backup | kısmen | kısmen |
 
 ---
@@ -213,7 +214,7 @@ Mevcut `static/index.html`'yi tam özellikli hale getirmek:
 | View-once (güvenilir) | Kısmen | Sayfa yenilemesinde temizleme + IndexedDB'den silme |
 | System mesaj CSS | ❌ | `.msg-system-bubble` CSS class ekleme |
 | Bildirim sesi | ❌ | `new Audio()` ile ping sesi |
-| Okundu bilgisi | ❌ | `read_receipt` WS mesaj tipi ekleme (server + web + desktop) |
+| Okundu bilgisi | ✅ | Eklendi (server + web + desktop, çift yeşil tik okundu bilgisi) |
 
 ### Faz 4: Deployment (1 gün)
 

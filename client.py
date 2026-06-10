@@ -1704,7 +1704,7 @@ def main(page: ft.Page):
     )
     
     def update_recipient_status_ui(online):
-        if online is None:
+        if state.get("is_group", False) or not state["recipient"]:
             recipient_status_row.visible = False
         else:
             recipient_status_row.visible = True
@@ -1719,20 +1719,27 @@ def main(page: ft.Page):
         try: page.update()
         except: pass
 
+    def refresh_recipient_status():
+        if not state["recipient"] or state.get("is_group", False):
+            update_recipient_status_ui(None)
+            return
+
+        def run():
+            try:
+                r = signed_get(f"/api/status/{state['recipient']}", timeout=3)
+                if r.status_code == 200:
+                    online = r.json().get("online", False)
+                    update_recipient_status_ui(online)
+                else:
+                    update_recipient_status_ui(False)
+            except:
+                update_recipient_status_ui(False)
+
+        threading.Thread(target=run, daemon=True).start()
+
     def check_recipient_status_loop():
         while True:
-            if state["recipient"] and not state.get("is_group", False):
-                try:
-                    r = signed_get(f"/api/status/{state['recipient']}", timeout=3)
-                    if r.status_code == 200:
-                        online = r.json().get("online", False)
-                        update_recipient_status_ui(online)
-                    else:
-                        update_recipient_status_ui(None)
-                except:
-                    update_recipient_status_ui(None)
-            else:
-                update_recipient_status_ui(None)
+            refresh_recipient_status()
             import time; time.sleep(5)
 
     threading.Thread(target=check_recipient_status_loop, daemon=True, name="status-checker").start()
@@ -2374,6 +2381,7 @@ def main(page: ft.Page):
             chat_title_text.value = "No active chat"
             
         username_text.value = f"User: {state['username']}"
+        refresh_recipient_status()
         page.controls.clear()
         page.add(chat_view)
         page.update()

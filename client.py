@@ -2271,12 +2271,12 @@ def main(page: ft.Page):
             selected_index=default_tab_index,
             tabs=[
                 ft.Tab(
-                    text="Direct Message",
+                    label="Direct Message",
                     icon=ft.Icons.PERSON,
                     content=dm_tab_content,
                 ),
                 ft.Tab(
-                    text="Group Chat",
+                    label="Group Chat",
                     icon=ft.Icons.GROUP,
                     content=group_tab_content,
                 ),

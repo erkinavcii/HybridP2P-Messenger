@@ -199,5 +199,36 @@ python client.py
 The clients will automatically generate their RSA-4096 keys under `~/.hybridp2p_messenger/` on the first launch, register their public keys to the server, and open the chat dashboard.
 
 ### 4. Dynamic Server Configuration (GUI)
-* When launching the client, the login screen includes a **Sunucu Adresi (Server Address)** field (defaults to `127.0.0.1:8000`).
-* To connect clients across different machines on the same local network (LAN) or over the internet, simply input the server's IP address and port (e.g., `192.168.1.50:8000`) in the login view before clicking **Giriş Yap**.
+* When launching the client, the login screen includes a **Server Address** field (defaults to `127.0.0.1:8000`).
+* To connect clients across different machines on the same local network (LAN) or over the internet, simply input the server's IP address and port (e.g., `192.168.1.50:8000`) in the login view before clicking **Sign In**.
+
+### 5. Using the E2EE Web Messenger (Web Client)
+The server automatically hosts a self-contained, browser-side Zero-Knowledge E2EE Web Client directly at the root path (`/`).
+
+* **Localhost Access:** Simply open your web browser and navigate to `http://127.0.0.1:8000/`.
+* **Private Key Import & Export (Device/Account Transfer):**
+  * To log in as your existing desktop user on the Web Client, click **Import existing Private Key (.pem)** on the web login screen, and paste your private key PEM. The client will derive your public key using WebCrypto SubtleCrypto and authenticate securely.
+  * You can retrieve your private key from the Web Client anytime by clicking the key icon (`🔑`) in the sidebar header to copy/backup it.
+
+### 6. Hosting Your Own E2EE Server (LAN & Internet Access)
+You can turn your local PC into an active web messenger server for clients on other networks or mobile/browser devices:
+
+#### Method A: Local Network (LAN) Hosting
+1. Find your hosting PC's local IP address (e.g., run `ipconfig` on Windows, or `ifconfig` / `ip a` on Linux/macOS) — let's say it is `192.168.1.100`.
+2. Run the server on your PC (`python server.py`).
+3. Any device (phone, laptop) on the same Wi-Fi/local network can access the Web Client by entering `http://192.168.1.100:8000/` in their web browser, or configure their desktop client to use `192.168.1.100:8000` as the **Server Address**.
+
+#### Method B: Public Internet Tunneling (Using Ngrok)
+To allow users outside your local network (anywhere in the world) to connect to your local server without complex port forwarding configurations:
+1. Download and install [ngrok](https://ngrok.com/).
+2. Start your local relay server:
+   ```bash
+   python server.py
+   ```
+3. Expose port `8000` to the internet:
+   ```bash
+   ngrok http 8000
+   ```
+4. Ngrok will generate a secure public HTTPS URL (e.g., `https://xxxx-xx-xx.ngrok-free.app`).
+5. Share this URL with your friends! They can open it directly in their browser to load the E2EE Web Client, or type the host address (e.g., `xxxx-xx-xx.ngrok-free.app`) in the **Server Address** field of the desktop client.
+   * *Note:* The Web Client automatically connects its WebSockets dynamically to the hosting origin (secure or insecure), allowing zero-configuration E2EE out-of-the-box.

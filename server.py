@@ -1176,6 +1176,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 sender = username
                 encrypted_payload = message.get("encrypted_payload", "")
                 view_once = bool(message.get("view_once", False))
+                timestamp = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
 
                 if manager.is_online(recipient):
                     await manager.send_to_user(recipient, {
@@ -1183,7 +1184,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                         "sender": sender,
                         "encrypted_payload": encrypted_payload,
                         "view_once": view_once,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": timestamp,
                     })
                     await manager.send_to_user(sender, {
                         "type": "delivery_ack",
@@ -1198,7 +1199,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                                VALUES (?, ?, ?, 'message', ?, ?)""",
                             (sender, recipient, encrypted_payload,
                              json.dumps({"view_once": view_once}),
-                             datetime.now(timezone.utc).isoformat())
+                             timestamp)
                         )
                         await db.commit()
                         print(f"[Server] Stored offline message from '{sender}' to '{recipient}'")
@@ -1307,6 +1308,29 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                         )
                         await db.commit()
 
+            elif msg_type == "read_receipt":
+                recipient = message.get("recipient", "")
+                sender = username
+                timestamp = message.get("timestamp", "")
+
+                receipt_payload = {
+                    "type": "read_receipt",
+                    "sender": sender,
+                    "timestamp": timestamp,
+                }
+
+                if manager.is_online(recipient):
+                    await manager.send_to_user(recipient, receipt_payload)
+                else:
+                    async with db_session() as db:
+                        await db.execute(
+                            """INSERT INTO offline_msgs
+                               (sender, recipient, msg_type, extra_data, timestamp)
+                               VALUES (?, ?, 'read_receipt', ?, ?)""",
+                            (sender, recipient, json.dumps({"timestamp": timestamp}), timestamp)
+                        )
+                        await db.commit()
+
             elif msg_type == "group_message":
                 group_id = message.get("group_id", "")
                 sender = username
@@ -1333,13 +1357,15 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                     )
                     members = await cursor.fetchall()
 
+                timestamp = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
+
                 group_msg_payload = {
                     "type": "group_message",
                     "sender": sender,
                     "group_id": group_id,
                     "encrypted_payload": encrypted_payload,
                     "signature": signature,  # Korumayı alıcıya iletiyoruz
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": timestamp,
                 }
 
                 # Tek bir db bağlantısı üzerinden offline üyeleri kaydedelim (daha performanslı)
@@ -1357,7 +1383,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                                    VALUES (?, ?, ?, 'group_message', ?, ?)""",
                                 (sender, recipient, encrypted_payload, 
                                  json.dumps({"group_id": group_id, "signature": signature}),
-                                 datetime.now(timezone.utc).isoformat())
+                                 timestamp)
                             )
                     await db.commit()
 
@@ -1426,6 +1452,13 @@ async def _deliver_pending_messages(username: str):
                     "encrypted_payload": row["encrypted_payload"],
                     "signature": extra.get("signature", ""),  # Offline mesajdan da imzayı iletiyoruz
                     "timestamp": row["timestamp"],
+                })
+            elif row_type == "read_receipt":
+                extra = json.loads(row["extra_data"] or "{}")
+                await manager.send_to_user(username, {
+                    "type": "read_receipt",
+                    "sender": row["sender"],
+                    "timestamp": extra.get("timestamp", ""),
                 })
 
         # ✅ Teslim edilen tüm kuyruğu sil (Zero-Knowledge)

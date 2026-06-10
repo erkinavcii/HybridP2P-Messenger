@@ -118,10 +118,30 @@ def main(page: ft.Page):
     # ║                     MESAJ BALONCULARI                          ║
     # ╚═══════════════════════════════════════════════════════════════╝
 
-    def create_message_bubble(sender: str, text: str, time_str: str, is_mine: bool):
+    def create_message_bubble(sender: str, text: str, time_str: str, is_mine: bool, is_read: bool = True):
         bubble_color = "#8b5cf6" if is_mine else "#27272a"
         text_color   = "#ffffff" if is_mine else "#e0e0e0"
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
+        
+        # Build timestamp row containing tick status icons for sender's messages
+        time_row_controls = [
+            ft.Text(time_str, size=10, color="#888888")
+        ]
+        if is_mine:
+            tick_icon = ft.Icon(
+                name=ft.Icons.DONE_ALL if is_read else ft.Icons.DONE,
+                size=14,
+                color="#a78bfa" if is_read else "#71717a"
+            )
+            time_row_controls.append(tick_icon)
+
+        time_row = ft.Row(
+            controls=time_row_controls,
+            spacing=4,
+            alignment=ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START,
+            tight=True
+        )
+
         return ft.Row(
             alignment=align,
             controls=[
@@ -131,8 +151,7 @@ def main(page: ft.Page):
                             ft.Text(sender, size=11, color="#9e9e9e",
                                     weight=ft.FontWeight.BOLD, visible=not is_mine),
                             ft.Text(text, size=14, color=text_color, selectable=True),
-                            ft.Text(time_str, size=10, color="#888888",
-                                    text_align=ft.TextAlign.RIGHT if is_mine else ft.TextAlign.LEFT),
+                            time_row,
                         ],
                         spacing=2, tight=True,
                     ),
@@ -673,23 +692,26 @@ def main(page: ft.Page):
 
     def add_message_to_chat(sender: str, text: str, is_mine: bool,
                              time_str: str = "", save: bool = True,
-                             view_once: bool = False, encrypted_payload: str = ""):
+                             view_once: bool = False, encrypted_payload: str = "",
+                             is_read: bool = True):
         from datetime import timezone
         if not time_str:
             time_str = datetime.now(timezone.utc).isoformat()
-        time_str = _fmt_time(time_str)
+        
+        raw_ts = time_str
+        display_ts = _fmt_time(time_str)
 
         if view_once:
-            bubble = create_view_once_bubble(sender, time_str, is_mine, encrypted_payload, plaintext_fallback=text)
+            bubble = create_view_once_bubble(sender, display_ts, is_mine, encrypted_payload, plaintext_fallback=text)
         else:
-            bubble = create_message_bubble(sender, text, time_str, is_mine)
+            bubble = create_message_bubble(sender, text, display_ts, is_mine, is_read=is_read)
 
         chat_list.controls.append(bubble)
 
         if save and state["recipient"] and state["store"] and not view_once:
             state["store"].save_message(
                 partner=state["recipient"], sender=sender,
-                content=text, is_mine=is_mine, is_read=1
+                content=text, is_mine=is_mine, timestamp=raw_ts, is_read=(0 if is_mine else 1)
             )
         try: page.update()
         except: pass
@@ -722,6 +744,7 @@ def main(page: ft.Page):
                                  time_str=timestamp, save=True,
                                  view_once=view_once,
                                  encrypted_payload=encrypted_payload)
+            send_read_receipt(sender, timestamp)
         else:
             if state["store"] and not view_once:
                 state["store"].save_message(
@@ -750,8 +773,9 @@ def main(page: ft.Page):
                 chat_list.controls.append(create_system_bubble(m["content"]))
             else:
                 ts = _fmt_time(m["timestamp"])
+                is_read_val = bool(m.get("is_read", 1))
                 chat_list.controls.append(
-                    create_message_bubble(m["sender"], m["content"], ts, bool(m["is_mine"]))
+                    create_message_bubble(m["sender"], m["content"], ts, bool(m["is_mine"]), is_read=is_read_val)
                 )
         try: page.update()
         except: pass
@@ -1039,6 +1063,14 @@ def main(page: ft.Page):
                                 elif s == "stored_offline":
                                     log_status(f"'{r}' cevrimdisi. Mesaj saklandı.")
 
+                            elif t == "read_receipt":
+                                sender = data.get("sender", "?")
+                                ts = data.get("timestamp", "")
+                                if state["store"]:
+                                    state["store"].mark_sent_messages_as_read(sender, ts)
+                                if state["recipient"] == sender:
+                                    load_history_to_chat()
+
                         except json.JSONDecodeError: pass
             except Exception as ex:
                 import websockets
@@ -1097,17 +1129,24 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"[REST] Thread baslatma hatasi: {ex}")
 
-    def send_message_via_ws(recipient: str, encrypted_payload: str, view_once: bool):
+    def send_message_via_ws(recipient: str, encrypted_payload: str, view_once: bool, timestamp: str = None):
+        from datetime import timezone
+        if not timestamp:
+            timestamp = datetime.now(timezone.utc).isoformat()
         msg = {
             "type":              "message",
             "sender":            state["username"],
             "recipient":         recipient,
             "encrypted_payload": encrypted_payload,
             "view_once":         view_once,
+            "timestamp":         timestamp,
         }
         send_ws_message_with_fallback(msg)
 
-    def send_group_message_via_ws(group_id: str, encrypted_payload: str):
+    def send_group_message_via_ws(group_id: str, encrypted_payload: str, timestamp: str = None):
+        from datetime import timezone
+        if not timestamp:
+            timestamp = datetime.now(timezone.utc).isoformat()
         from crypto_utils import sign_data
         data_to_sign = f"{state['username']}:{group_id}:{encrypted_payload}".encode("utf-8")
         sig = sign_data(state["private_key"], data_to_sign)
@@ -1119,6 +1158,7 @@ def main(page: ft.Page):
             "group_id":          group_id,
             "encrypted_payload": encrypted_payload,
             "signature":         sig_b64,
+            "timestamp":         timestamp,
         }
         send_ws_message_with_fallback(msg)
 
@@ -1152,6 +1192,15 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"[Clipboard Error] {ex}")
         page.run_task(do_copy)
+
+    def send_read_receipt(recipient: str, timestamp: str):
+        if state.get("is_group", False) or not recipient or not timestamp:
+            return
+        send_ws_message_with_fallback({
+            "type": "read_receipt",
+            "recipient": recipient,
+            "timestamp": timestamp
+        })
 
     chat_list = ft.ListView(expand=True, spacing=8,
                              padding=ft.Padding(12, 8, 12, 8),
@@ -1408,6 +1457,11 @@ def main(page: ft.Page):
 
             if state["store"]:
                 state["store"].mark_as_read(rec)
+                history = state["store"].get_messages(rec)
+                received_msgs = [m for m in history if not m.get("is_mine", False)]
+                if received_msgs:
+                    latest_ts = received_msgs[-1]["timestamp"]
+                    send_read_receipt(rec, latest_ts)
 
             ephemeral = state["store"].is_ephemeral(rec)
             state["ephemeral"] = ephemeral
@@ -1753,11 +1807,12 @@ def main(page: ft.Page):
                     log_status(f"Encryption error: {ex}")
                     return
 
-                send_message_via_ws(recipient, encrypted, view_once)
+                timestamp = datetime.now(timezone.utc).isoformat()
+                send_message_via_ws(recipient, encrypted, view_once, timestamp=timestamp)
                 add_message_to_chat(
                     sender=state["username"], text=text,
                     is_mine=True, save=not view_once, view_once=view_once,
-                    encrypted_payload=encrypted,
+                    encrypted_payload=encrypted, time_str=timestamp, is_read=False
                 )
                 load_inbox_chats()
 

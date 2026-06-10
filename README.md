@@ -17,6 +17,10 @@ The core design philosophy of HybridP2P Messenger is **Zero-Knowledge and Hostil
 ### 2. Resistance to Passive Wiretapping
 All communications (WebSockets and REST API) are encrypted end-to-end. Even without TLS/HTTPS at the transport layer, an attacker sniffing the network packets cannot decrypt the payloads because the cryptographic handshake happens strictly peer-to-peer at the application layer.
 
+### 3. Web Client Security Discrepancy & Self-Hosting
+* **Web Client Security Caveat:** Unlike the native desktop client (`client.py`) which runs code locally, the web client (`static/index.html`) is served directly by the relay server. If the server is compromised, an attacker could inject malicious JavaScript to intercept private keys or plaintexts. Thus, the Web client is for convenience, while the desktop client should be used for maximum security.
+* **Self-Hosting as a Private Node:** Anyone can run `server.py` on their private computer to instantly designate it as a private central messaging node and server. This keeps all metadata and encrypted database storage under your direct physical custody.
+
 ---
 
 ## 🔑 Cryptographic Architecture

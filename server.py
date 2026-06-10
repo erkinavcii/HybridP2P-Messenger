@@ -512,11 +512,21 @@ async def upload_file(
     """
     Sifrelenmis dosyayi alir, UUID ile veritabanina kaydeder.
     Sunucu dosya icerigini gormez — sadece sifrelenmis blob saklar (Zero-Knowledge).
-    Dosya max ~10MB olmali (base64 encode ~%33 buyutur).
+    Dosya max 10MB olmali.
     """
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != req.sender:
         raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
+        
+    # Enforce 10 MB limit on the decoded file size
+    # Base64 size formula: (len * 3) / 4
+    estimated_size = (len(req.encrypted_data) * 3) // 4
+    if estimated_size > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, 
+            detail="Dosya boyutu çok büyük! Maksimum limit 10 MB'tır."
+        )
+
     file_uuid = str(uuid_lib.uuid4())
     async with db_session() as db:
         await db.execute(

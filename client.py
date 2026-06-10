@@ -1185,6 +1185,29 @@ def main(page: ft.Page):
         cursor_color="#8b5cf6", text_size=15, height=55,
     )
 
+    import_key_checkbox = ft.Checkbox(
+        label="Import existing Private Key (.pem)",
+        value=False,
+        on_change=lambda e: on_import_key_change(e),
+    )
+
+    import_key_field = ft.TextField(
+        label="Private Key PEM",
+        hint_text="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+        multiline=True,
+        min_lines=3,
+        max_lines=6,
+        visible=False,
+        border_color="#8b5cf6",
+        focused_border_color="#a78bfa",
+        cursor_color="#8b5cf6",
+        text_size=12,
+    )
+
+    def on_import_key_change(e):
+        import_key_field.visible = import_key_checkbox.value
+        page.update()
+
     login_btn = ft.ElevatedButton(
         content=ft.Row(
             controls=[
@@ -1224,6 +1247,29 @@ def main(page: ft.Page):
         def do_login():
             try:
                 state["username"] = username
+                if import_key_checkbox.value:
+                    imported_pem = import_key_field.value.strip()
+                    if not imported_pem:
+                        login_btn.disabled = False
+                        login_btn.content.controls[1].value = "Sign In"
+                        username_field.error_text = "Please paste your Private Key PEM."
+                        log_status("Sign in failed. Private key empty.")
+                        page.update()
+                        return
+                    try:
+                        from crypto_utils import deserialize_private_key, save_keys_to_disk
+                        priv = deserialize_private_key(imported_pem.encode("utf-8"))
+                        pub = priv.public_key()
+                        save_keys_to_disk(username, priv, pub)
+                        print(f"[Import] Key successfully imported and stored for user '{username}'.")
+                    except Exception as e_key:
+                        login_btn.disabled = False
+                        login_btn.content.controls[1].value = "Sign In"
+                        username_field.error_text = f"Invalid Private Key PEM: {e_key}"
+                        log_status(f"Import failed: {e_key}")
+                        page.update()
+                        return
+
                 priv, pub = initialize_keys(username)
                 state["private_key"] = priv
                 state["public_key"]  = pub
@@ -1280,6 +1326,9 @@ def main(page: ft.Page):
                             server_address_field,
                             ft.Container(height=12),
                             username_field,
+                            ft.Container(height=12),
+                            import_key_checkbox,
+                            import_key_field,
                             ft.Container(height=16),
                             login_btn,
                         ],
@@ -1356,24 +1405,37 @@ def main(page: ft.Page):
             show_chat_screen()
             page.update()
 
-        def close_warning_dialog(dialog, accept, rec=None, new_pem=None):
-            dialog.open = False
+        _active_dialog = [None]  # mutable container to hold current open dialog
+
+        def _dismiss_active_dialog():
+            """Single shared function to safely close whatever dialog is open."""
+            d = _active_dialog[0]
+            if d is None:
+                return
+            _active_dialog[0] = None
+            d.open = False
+            try:
+                page.overlay.remove(d)
+            except Exception:
+                pass
             page.update()
+
+        def close_warning_dialog(accept, rec=None, new_pem=None):
+            _dismiss_active_dialog()
             if accept and rec and new_pem:
                 try:
                     new_pub_key = pem_string_to_public_key(new_pem)
                     fingerprint = get_public_key_fingerprint(new_pub_key)
                     state["store"].save_contact(rec, new_pem, fingerprint)
-                    log_status(f"'{rec}' icin yeni anahtar kabul edildi.")
+                    log_status(f"New key for '{rec}' accepted.")
                     connect_to_recipient_final(rec, new_pub_key)
                 except Exception as ex:
-                    log_status(f"Hata: {ex}")
+                    log_status(f"Error: {ex}")
             else:
                 log_status("Connection rejected for security reasons.")
 
-        def close_tofu_dialog(dialog, accept, rec=None, pem=None, pub=None):
-            dialog.open = False
-            page.update()
+        def close_tofu_dialog(accept, rec=None, pem=None, pub=None):
+            _dismiss_active_dialog()
             if accept and rec and pem and pub:
                 try:
                     fingerprint = get_public_key_fingerprint(pub)
@@ -1381,7 +1443,7 @@ def main(page: ft.Page):
                     print(f"[Contact] Saved public key for '{rec}' to local DB")
                     connect_to_recipient_final(rec, pub)
                 except Exception as ex:
-                    log_status(f"Hata: {ex}")
+                    log_status(f"Error: {ex}")
             else:
                 log_status("Connection not approved.")
 
@@ -1453,7 +1515,7 @@ def main(page: ft.Page):
                 server_pub_pem = public_key_to_pem_string(server_pub_key)
                 if server_pub_pem != local_contact["public_key"]:
                     dialog = ft.AlertDialog(
-                        modal=True,
+                        modal=False,
                         title=ft.Row(
                             controls=[
                                 ft.Icon(ft.Icons.WARNING_ROUNDED, color="#ef4444"),
@@ -1462,21 +1524,22 @@ def main(page: ft.Page):
                             spacing=8
                         ),
                         content=ft.Text(
-                            f"DIKKAT: '{recipient}' kullanicisinin sunucudaki kimlik anahtari yerel kaydinizdan farkli!\n\n"
-                            f"This could indicate a MITM attack or a key renewal.\n\n"
+                            f"WARNING: The server key for '{recipient}' differs from your local record!\n\n"
+                            f"This could indicate a MITM attack or the user has regenerated their key.\n\n"
                             f"Do you want to accept the new key from the server?",
                             color="#ffffff"
                         ),
                         actions=[
-                            ft.TextButton("Reject (Safe)"),
-                            ft.TextButton("Accept New Key")
+                            ft.TextButton("Reject (Safe)",
+                                on_click=lambda e: close_warning_dialog(accept=False)),
+                            ft.TextButton("Accept New Key",
+                                on_click=lambda e: close_warning_dialog(accept=True, rec=recipient, new_pem=server_pub_pem)),
                         ],
                         actions_alignment=ft.MainAxisAlignment.END,
-                        bgcolor="#18181b"
+                        bgcolor="#18181b",
                     )
-                    dialog.actions[0].on_click = lambda e: close_warning_dialog(dialog, accept=False)
-                    dialog.actions[1].on_click = lambda e: close_warning_dialog(dialog, accept=True, rec=recipient, new_pem=server_pub_pem)
-                    page.dialog = dialog
+                    _active_dialog[0] = dialog
+                    page.overlay.append(dialog)
                     dialog.open = True
                     page.update()
                     return
@@ -1486,9 +1549,9 @@ def main(page: ft.Page):
                 pub_key_pem = public_key_to_pem_string(pub_key)
                 fingerprint = get_public_key_fingerprint(pub_key)
                 
-                # Show TOFU verification warning dialog
+                # Show TOFU verification dialog
                 dialog = ft.AlertDialog(
-                    modal=True,
+                    modal=False,
                     title=ft.Row(
                         controls=[
                             ft.Icon(ft.Icons.SHIELD_OUTLINED, color="#22c55e"),
@@ -1498,30 +1561,37 @@ def main(page: ft.Page):
                     ),
                     content=ft.Column(
                         controls=[
-                            ft.Text(f"'{recipient}' kullanicisi ile ilk defa baglanti kuruluyor.", color="#ffffff"),
+                            ft.Text(f"Connecting to '{recipient}' for the first time.", color="#ffffff"),
                             ft.Text("Identity fingerprint received from server:", color="#aaaaaa", size=12),
                             ft.Container(
                                 content=ft.Text(fingerprint, weight=ft.FontWeight.BOLD, color="#22c55e", size=13, selectable=True),
                                 bgcolor="#27272a",
                                 padding=10,
                                 border_radius=8,
-                                border=ft.Border(left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"), right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")),
+                                border=ft.Border(
+                                    left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"),
+                                    right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")
+                                ),
                             ),
-                            ft.Text("For your safety, verify this fingerprint with your friend through another channel.", color="#ef4444", size=11),
+                            ft.Text(
+                                "For your security, verify this fingerprint with your contact through a separate channel.",
+                                color="#ef4444", size=11
+                            ),
                         ],
                         tight=True,
                         spacing=8
                     ),
                     actions=[
-                        ft.TextButton("Cancel (Safe)"),
-                        ft.TextButton("Approve Key & Connect")
+                        ft.TextButton("Cancel (Safe)",
+                            on_click=lambda e: close_tofu_dialog(accept=False)),
+                        ft.TextButton("Approve Key & Connect",
+                            on_click=lambda e: close_tofu_dialog(accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key)),
                     ],
                     actions_alignment=ft.MainAxisAlignment.END,
-                    bgcolor="#18181b"
+                    bgcolor="#18181b",
                 )
-                dialog.actions[0].on_click = lambda e: close_tofu_dialog(dialog, accept=False)
-                dialog.actions[1].on_click = lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key)
-                page.dialog = dialog
+                _active_dialog[0] = dialog
+                page.overlay.append(dialog)
                 dialog.open = True
                 page.update()
                 return

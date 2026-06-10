@@ -660,6 +660,7 @@ async def send_ws_fallback(
         recipient = message.get("recipient", "")
         encrypted_payload = message.get("encrypted_payload", "")
         view_once = bool(message.get("view_once", False))
+        timestamp = message.get("timestamp") or ts
         
         if manager.is_online(recipient):
             await manager.send_to_user(recipient, {
@@ -667,7 +668,7 @@ async def send_ws_fallback(
                 "sender": x_username,
                 "encrypted_payload": encrypted_payload,
                 "view_once": view_once,
-                "timestamp": ts,
+                "timestamp": timestamp,
             })
         else:
             async with db_session() as db:
@@ -675,7 +676,7 @@ async def send_ws_fallback(
                     """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                        VALUES (?, ?, ?, 'message', ?, ?)""",
                     (x_username, recipient, encrypted_payload,
-                     json.dumps({"view_once": view_once}), ts)
+                     json.dumps({"view_once": view_once}), timestamp)
                 )
                 await db.commit()
                 
@@ -685,6 +686,7 @@ async def send_ws_fallback(
         original_name = message.get("original_name", "dosya")
         file_type = message.get("file_type", "document")
         view_once = bool(message.get("view_once", False))
+        timestamp = message.get("timestamp") or ts
         
         file_msg = {
             "type":          "file_message",
@@ -693,7 +695,7 @@ async def send_ws_fallback(
             "original_name": original_name,
             "file_type":     file_type,
             "view_once":     view_once,
-            "timestamp":     ts,
+            "timestamp":     timestamp,
         }
         
         if manager.is_online(recipient):
@@ -704,7 +706,7 @@ async def send_ws_fallback(
                     """INSERT INTO offline_msgs
                        (sender, recipient, msg_type, extra_data, timestamp)
                        VALUES (?, ?, 'file_message', ?, ?)""",
-                    (x_username, recipient, json.dumps(file_msg), ts)
+                    (x_username, recipient, json.dumps(file_msg), timestamp)
                 )
                 await db.commit()
                 
@@ -712,6 +714,7 @@ async def send_ws_fallback(
         recipient = message.get("recipient", "")
         ephemeral = bool(message.get("ephemeral", False))
         chat_id = _make_chat_id(x_username, recipient)
+        timestamp = message.get("timestamp") or ts
         
         async with db_session() as db:
             await db.execute(
@@ -721,7 +724,7 @@ async def send_ws_fallback(
                        ephemeral=excluded.ephemeral,
                        changed_by=excluded.changed_by,
                        changed_at=excluded.changed_at""",
-                (chat_id, 1 if ephemeral else 0, x_username, ts)
+                (chat_id, 1 if ephemeral else 0, x_username, timestamp)
             )
             await db.commit()
             
@@ -729,7 +732,7 @@ async def send_ws_fallback(
                 "type": "ephemeral_toggle",
                 "sender": x_username,
                 "ephemeral": ephemeral,
-                "timestamp": ts,
+                "timestamp": timestamp,
             }
             
             if manager.is_online(recipient):
@@ -739,7 +742,7 @@ async def send_ws_fallback(
                     """INSERT INTO offline_msgs
                        (sender, recipient, msg_type, extra_data, timestamp)
                        VALUES (?, ?, 'ephemeral_toggle', ?, ?)""",
-                    (x_username, recipient, json.dumps({"ephemeral": ephemeral}), ts)
+                    (x_username, recipient, json.dumps({"ephemeral": ephemeral}), timestamp)
                 )
                 await db.commit()
                 
@@ -747,13 +750,14 @@ async def send_ws_fallback(
         recipient = message.get("recipient", "")
         encrypted_payload = message.get("encrypted_payload", "")
         group_id = message.get("group_id", "")
+        timestamp = message.get("timestamp") or ts
         
         dist_payload = {
             "type": "group_key_dist",
             "sender": x_username,
             "group_id": group_id,
             "encrypted_payload": encrypted_payload,
-            "timestamp": ts,
+            "timestamp": timestamp,
         }
         
         if manager.is_online(recipient):
@@ -764,7 +768,7 @@ async def send_ws_fallback(
                     """INSERT INTO offline_msgs
                        (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                        VALUES (?, ?, ?, 'group_key_dist', ?, ?)""",
-                    (x_username, recipient, encrypted_payload, json.dumps({"group_id": group_id}), ts)
+                    (x_username, recipient, encrypted_payload, json.dumps({"group_id": group_id}), timestamp)
                 )
                 await db.commit()
                 
@@ -772,6 +776,7 @@ async def send_ws_fallback(
         group_id = message.get("group_id", "")
         encrypted_payload = message.get("encrypted_payload", "")
         signature = message.get("signature", "")
+        timestamp = message.get("timestamp") or ts
         
         async with db_session() as db:
             cursor = await db.execute(
@@ -793,7 +798,7 @@ async def send_ws_fallback(
             "group_id": group_id,
             "encrypted_payload": encrypted_payload,
             "signature": signature,
-            "timestamp": ts,
+            "timestamp": timestamp,
         }
         
         async with db_session() as db:
@@ -809,9 +814,30 @@ async def send_ws_fallback(
                            (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                            VALUES (?, ?, ?, 'group_message', ?, ?)""",
                         (x_username, recipient, encrypted_payload,
-                         json.dumps({"group_id": group_id, "signature": signature}), ts)
+                         json.dumps({"group_id": group_id, "signature": signature}), timestamp)
                     )
             await db.commit()
+
+    elif msg_type == "read_receipt":
+        recipient = message.get("recipient", "")
+        timestamp = message.get("timestamp", "")
+        
+        receipt_payload = {
+            "type": "read_receipt",
+            "sender": x_username,
+            "timestamp": timestamp,
+        }
+        
+        if manager.is_online(recipient):
+            await manager.send_to_user(recipient, receipt_payload)
+        else:
+            async with db_session() as db:
+                await db.execute(
+                    """INSERT INTO offline_msgs (sender, recipient, msg_type, extra_data, timestamp)
+                       VALUES (?, ?, 'read_receipt', ?, ?)""",
+                    (x_username, recipient, json.dumps({"timestamp": timestamp}), timestamp)
+                )
+                await db.commit()
             
     return {"status": "ok", "delivered_or_stored": True}
 
@@ -1216,6 +1242,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 original_name = message.get("original_name", "dosya")
                 file_type    = message.get("file_type", "document")
                 view_once    = bool(message.get("view_once", False))
+                timestamp    = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
 
                 file_msg = {
                     "type":          "file_message",
@@ -1224,7 +1251,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                     "original_name": original_name,
                     "file_type":     file_type,
                     "view_once":     view_once,
-                    "timestamp":     datetime.now(timezone.utc).isoformat(),
+                    "timestamp":     timestamp,
                 }
 
                 if manager.is_online(recipient):
@@ -1235,8 +1262,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                             """INSERT INTO offline_msgs
                                (sender, recipient, msg_type, extra_data, timestamp)
                                VALUES (?, ?, 'file_message', ?, ?)""",
-                            (sender, recipient, json.dumps(file_msg),
-                             datetime.now(timezone.utc).isoformat())
+                            (sender, recipient, json.dumps(file_msg), timestamp)
                         )
                         await db.commit()
 
@@ -1286,13 +1312,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 sender = username
                 encrypted_payload = message.get("encrypted_payload", "")
                 group_id = message.get("group_id", "")
+                timestamp = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
 
                 dist_payload = {
                     "type": "group_key_dist",
                     "sender": sender,
                     "group_id": group_id,
                     "encrypted_payload": encrypted_payload,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": timestamp,
                 }
 
                 if manager.is_online(recipient):
@@ -1303,8 +1330,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                             """INSERT INTO offline_msgs
                                (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                                VALUES (?, ?, ?, 'group_key_dist', ?, ?)""",
-                            (sender, recipient, encrypted_payload, json.dumps({"group_id": group_id}),
-                             datetime.now(timezone.utc).isoformat())
+                            (sender, recipient, encrypted_payload, json.dumps({"group_id": group_id}), timestamp)
                         )
                         await db.commit()
 

@@ -111,6 +111,7 @@ def main(page: ft.Page):
         "ephemeral":         False,
         "view_once_mode":    False,   # per-mesaj view-once toggle
         "staged_file":       None,
+        "logged_in":         False,
     }
 
     # ╔═══════════════════════════════════════════════════════════════╗
@@ -884,9 +885,11 @@ def main(page: ft.Page):
         import websockets
         state["ws_loop"] = asyncio.get_running_loop()
         reconnect_delay = 2
-        while True:
+        while state.get("logged_in", False):
             try:
                 async with websockets.connect(f"{WS_URL}/ws/{state['username']}") as ws:
+                    if not state.get("logged_in", False):
+                        break
                     # Challenge-Response Handshake:
                     # 1. Receive challenge nonce
                     challenge_raw = await ws.recv()
@@ -1046,6 +1049,8 @@ def main(page: ft.Page):
                     import traceback
                     traceback.print_exc()
                 state["ws"] = None
+                if not state.get("logged_in", False):
+                    break
                 log_status(f"WS disconnected. Reconnecting in {reconnect_delay}s...")
                 update_connection_status(False)
                 await asyncio.sleep(reconnect_delay)
@@ -1287,6 +1292,7 @@ def main(page: ft.Page):
                 login_btn.disabled = False
                 login_btn.content.controls[1].value = "Sign In"
 
+                state["logged_in"] = True
                 show_inbox_screen()
                 sync_chat_settings()
                 sync_user_groups_from_server()
@@ -2471,6 +2477,227 @@ def main(page: ft.Page):
         on_change=on_search_change,
     )
 
+    def perform_logout(e=None):
+        # 1. Set logged_in flag to False to break ws loop
+        state["logged_in"] = False
+        
+        # 2. Close WS if exists
+        ws = state.get("ws")
+        loop = state.get("ws_loop")
+        if ws and loop:
+            try:
+                asyncio.run_coroutine_threadsafe(ws.close(), loop)
+                print("[Logout] WebSocket connection closed.")
+            except Exception as ex:
+                print(f"[Logout] Error closing ws: {ex}")
+        
+        # 3. Reset state
+        state["username"] = None
+        state["private_key"] = None
+        state["public_key"] = None
+        state["recipient"] = None
+        state["recipient_pub_key"] = None
+        state["ws"] = None
+        state["ws_loop"] = None
+        state["store"] = None
+        state["ephemeral"] = False
+        state["view_once_mode"] = False
+        state["staged_file"] = None
+        
+        # 4. Reset login inputs
+        username_field.value = ""
+        username_field.error_text = None
+        import_key_checkbox.value = False
+        import_key_field.value = ""
+        import_key_field.visible = False
+        
+        log_status("Signed out successfully.")
+        show_login_screen()
+
+    def open_settings_dialog(e):
+        from crypto_utils import serialize_private_key
+        
+        # Format keys
+        try:
+            pub_pem = public_key_to_pem_string(state["public_key"])
+        except Exception as ex:
+            pub_pem = f"Error: {ex}"
+            
+        try:
+            priv_pem = serialize_private_key(state["private_key"]).decode("utf-8")
+        except Exception as ex:
+            priv_pem = f"Error: {ex}"
+
+        # Public Key textfield (read-only, multiline)
+        pub_key_tf = ft.TextField(
+            label="Public Key PEM",
+            value=pub_pem,
+            multiline=True,
+            min_lines=3,
+            max_lines=5,
+            read_only=True,
+            border_color="#27272a",
+            focused_border_color="#8b5cf6",
+            text_size=11,
+            cursor_color="#8b5cf6",
+        )
+
+        # Private Key container. Initially hidden (shown as dots)
+        priv_key_value = "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
+        
+        priv_key_tf = ft.TextField(
+            label="Private Key PEM (Secret)",
+            value=priv_key_value,
+            multiline=True,
+            min_lines=3,
+            max_lines=5,
+            read_only=True,
+            border_color="#27272a",
+            focused_border_color="#ef4444",
+            text_size=11,
+            cursor_color="#8b5cf6",
+        )
+
+        reveal_btn = ft.IconButton(
+            icon=ft.Icons.VISIBILITY,
+            icon_color="#ef4444",
+            icon_size=20,
+            tooltip="Reveal Private Key",
+        )
+        
+        copy_btn = ft.IconButton(
+            icon=ft.Icons.COPY,
+            icon_color="#8b5cf6",
+            icon_size=20,
+            tooltip="Copy Private Key",
+            visible=False,
+        )
+
+        def close_settings(e):
+            dialog.open = False
+            page.update()
+
+        def confirm_reveal_key(e):
+            confirm_dialog = None
+            
+            def cancel_reveal(e):
+                confirm_dialog.open = False
+                page.update()
+                
+            def proceed_reveal(e):
+                confirm_dialog.open = False
+                priv_key_tf.value = priv_pem
+                priv_key_tf.focused_border_color = "#8b5cf6"
+                reveal_btn.visible = False
+                copy_btn.visible = True
+                page.update()
+
+            confirm_dialog = ft.AlertDialog(
+                title=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.WARNING_ROUNDED, color="#ef4444"),
+                        ft.Text("Warning: Reveal Private Key", size=16, color="#ef4444", weight=ft.FontWeight.BOLD),
+                    ],
+                    spacing=8,
+                ),
+                content=ft.Text(
+                    "Are you sure you want to reveal your Private Key?\n\nAnyone with access to this key can decrypt and read your E2EE messages. Keep it highly secure!",
+                    size=13,
+                    color="#e0e0e0"
+                ),
+                actions=[
+                    ft.TextButton("Cancel", on_click=cancel_reveal),
+                    ft.TextButton("Reveal", on_click=proceed_reveal, style=ft.ButtonStyle(color="#ef4444")),
+                ],
+                bgcolor="#18181b",
+            )
+            page.overlay.append(confirm_dialog)
+            confirm_dialog.open = True
+            page.update()
+
+        reveal_btn.on_click = confirm_reveal_key
+
+        def copy_private_key(e):
+            page.set_clipboard(priv_pem)
+            log_status("Private Key copied to clipboard!")
+            
+        copy_btn.on_click = copy_private_key
+
+        def on_signout_click(e):
+            dialog.open = False
+            page.update()
+            perform_logout()
+
+        dialog = ft.AlertDialog(
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.SETTINGS, color="#8b5cf6"),
+                    ft.Text("Settings", size=18, color="#ffffff", weight=ft.FontWeight.BOLD),
+                    ft.Container(expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE,
+                        icon_size=18,
+                        icon_color="#888888",
+                        on_click=close_settings,
+                    ),
+                ],
+                spacing=8,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                ft.Text("Logged in as:", size=12, color="#888888"),
+                                ft.Text(state["username"], size=14, color="#ffffff", weight=ft.FontWeight.BOLD),
+                            ],
+                            alignment=ft.MainAxisAlignment.START,
+                        ),
+                        ft.Divider(color="#27272a", height=10),
+                        pub_key_tf,
+                        ft.Container(height=5),
+                        ft.Row(
+                            controls=[
+                                ft.Text("Private Key PEM", size=12, color="#888888", weight=ft.FontWeight.BOLD),
+                                ft.Container(expand=True),
+                                reveal_btn,
+                                copy_btn,
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        priv_key_tf,
+                        ft.Container(height=15),
+                        ft.ElevatedButton(
+                            content=ft.Row(
+                                controls=[
+                                    ft.Icon(ft.Icons.LOGOUT, size=18, color="#ffffff"),
+                                    ft.Text("Sign Out", size=14, weight=ft.FontWeight.BOLD, color="#ffffff"),
+                                ],
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                spacing=8,
+                            ),
+                            on_click=on_signout_click,
+                            style=ft.ButtonStyle(
+                                bgcolor="#ef4444",
+                                padding=ft.Padding(16, 12, 16, 12),
+                                shape=ft.RoundedRectangleBorder(radius=6),
+                            ),
+                            width=300,
+                        ),
+                    ],
+                    spacing=8,
+                    tight=True,
+                ),
+                width=360,
+                padding=ft.Padding(0, 10, 0, 10),
+            ),
+            bgcolor="#18181b",
+        )
+
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
     def refresh_inbox_and_messages():
         search_field.value = ""
         fetch_offline_messages()
@@ -2502,6 +2729,11 @@ def main(page: ft.Page):
                                 icon=ft.Icons.REFRESH, icon_color="#8b5cf6",
                                 icon_size=20, tooltip="Refresh",
                                 on_click=lambda e: refresh_inbox_and_messages(),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.SETTINGS, icon_color="#8b5cf6",
+                                icon_size=20, tooltip="Settings",
+                                on_click=open_settings_dialog,
                             ),
                         ],
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,

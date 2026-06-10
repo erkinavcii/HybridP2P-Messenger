@@ -281,6 +281,21 @@ class MessageStore:
         finally:
             conn.close()
 
+    def mark_sent_messages_as_read(self, partner: str, max_timestamp: str):
+        """Karşı tarafın gönderdiğimiz mesajları okuduğunu yerel DB'de işaretler."""
+        cid = self._chat_id(partner)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "UPDATE messages SET is_read = 1 WHERE chat_id = ? AND is_mine = 1 AND timestamp = ? AND is_read = 0",
+                (cid, max_timestamp)
+            )
+            conn.commit()
+        except Exception as ex:
+            print(f"[DB Error] mark_sent_messages_as_read error: {ex}")
+        finally:
+            conn.close()
+
     def get_messages(self, partner: str, limit: int = 200) -> list:
         """
         Belirli bir partnerle olan mesaj geçmişini döndürür.
@@ -291,7 +306,7 @@ class MessageStore:
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(
-                """SELECT sender, content, timestamp, is_mine, msg_type
+                """SELECT sender, content, timestamp, is_mine, msg_type, is_read
                    FROM messages
                    WHERE chat_id = ?
                    ORDER BY timestamp ASC

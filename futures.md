@@ -227,9 +227,11 @@ MVP ✅
   │         │
   │         └──► Özellik 4: Grup Sohbeti  [Özellik 1'e bağlı]
   │                   │
-  └──► Özellik 3: Dosya/Resim Gönderimi  [Bağımsız, paralel yapılabilir]
-            │
-            └──► Özellik 4 ile birleşir (grupta dosya paylaşımı)
+  ├──► Özellik 3: Dosya/Resim Gönderimi  [Bağımsız, paralel yapılabilir]
+  │         │
+  │         └──► Özellik 4 ile birleşir (grupta dosya paylaşımı)
+  │
+  └──► Özellik 5: E2EE Sesli Arama (VoIP)  [Bağımsız, UDP/Sinyalleşme gerekir]
 ```
 
 | # | Özellik | Karmaşıklık | Etki | Bağımlılık |
@@ -238,6 +240,55 @@ MVP ✅
 | 2 | Tek Görünümlü Mesaj | Düşük | Yüksek | Özellik 1 |
 | 3 | Dosya/Resim Gönderimi | Yüksek | Yüksek | — |
 | 4 | Grup Sohbeti (Yaklaşım A) | Orta | Çok Yüksek | Özellik 1 |
+| 5 | E2EE Sesli Arama (VoIP) | Çok Yüksek | Kritik | MVP / Sinyalleşme |
+
+---
+
+## 📞 Özellik 5: Uçtan Uca Şifreli Sesli Arama (E2EE VoIP)
+
+### Ne İstiyoruz?
+İki kullanıcı arasında tamamen uçtan uca şifrelenmiş (E2EE) ve gerçek zamanlı (real-time) sesli arama (VoIP) yapabilmek. Görüşme verileri sunucuya uğramadan doğrudan peer-to-peer (P2P) UDP akışı şeklinde iletilecektir. Sunucu görüşme içeriğini asla dinleyemez veya çözemez.
+
+### Kullanıcı Akışı
+```
+Sohbet Ekranı üst barında Arama [📞] ikonu:
+
+  Alice [📞] ikonuna tıklar ➔ "Calling Bob..." arama ekranı açılır (çalma sesi).
+  
+  Bob'un ekranında popup / arama penceresi açılır:
+    ┌─────────────────────────────────┐
+    │  Incoming Voice Call            │
+    │  Alice is calling...            │
+    │  [Decline (🔴)]   [Accept (🟢)]  │
+    └─────────────────────────────────┘
+    
+  Bob Kabul ederse (🟢):
+    ➔ Arama başlar, arama süresi sayacı gösterilir.
+    ➔ Mikrofon / Hoparlör ikonları ile ses kontrol edilir.
+    ➔ "End Call" butonu aramayı kapatır.
+```
+
+### Teknik Yaklaşım
+
+Sesli aramanın performansı ve güvenliği için aşağıdaki mimari kurulacaktır:
+
+1. **Uçtan Uca Şifreleme (ECDH Key Exchange)**:
+   * Arama kurulduğu an Alice ve Bob, geçici (ephemeral) bir Diffie-Hellman veya Elliptic-Curve Diffie-Hellman (ECDH) anahtar değişimi yapar.
+   * Bu değişim, mevcut E2EE sinyalleşme kanalımız (WebSocket/REST) üzerinden güvenli bir şekilde aktarılır ve tarafların kalıcı RSA anahtarları ile imzalanır.
+   * Taraflar ortak bir simetrik ses anahtarı (AES-256) türetir. Ses paketleri asimetrik (RSA) değil, simetrik (AES) olarak şifrelenir.
+
+2. **Peer-to-Peer Ses Akışı (WebRTC & NAT Traversal)**:
+   * Gerçek zamanlı ses için UDP protokolü tercih edilir. Gecikmeyi önlemek için P2P bağlantı esastır.
+   * **STUN/TURN**: Güvenlik duvarlarını aşmak (NAT traversal / UDP hole punching) için STUN sunucuları kullanılacaktır. P2P kurulamayan çok kısıtlı ağlarda TURN sunucusu üzerinden şifreli röle yapılır (sunucu veriyi çözemez, sadece iletir).
+   * İstemcide Python WebRTC implementasyonu için `aiortc` kütüphanesi veya `PyAudio` (Ses yakalama) + `opuslib` (Ses sıkıştırma) + `cryptography` ile özel UDP socket motoru entegre edilebilir.
+
+3. **Sinyalleşme Protokolü**:
+   * Arama istekleri (OFFER/ANSWER) ve ağ adres adayları (ICE Candidates), röle sunucumuz (`server.py`) üzerindeki WebSocket kanalı aracılığıyla takas edilir.
+
+### Bağımlılıklar
+- Sinyalleşme için WebSocket sunucu altyapısı ✅
+- `aiortc` veya `PyAudio` + `opuslib` + `cryptography`
+- Genel STUN/TURN sunucu adresleri (örneğin Google public STUN sunucuları)
 
 ---
 

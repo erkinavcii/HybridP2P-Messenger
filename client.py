@@ -131,7 +131,7 @@ def main(page: ft.Page):
             tick_icon = ft.Icon(
                 ft.Icons.DONE_ALL if is_read else ft.Icons.DONE,
                 size=14,
-                color="#a78bfa" if is_read else "#71717a"
+                color="#22c55e" if is_read else "#71717a"
             )
             time_row_controls.append(tick_icon)
 
@@ -604,28 +604,40 @@ def main(page: ft.Page):
         return requests.post(f"{BASE_URL}{path}", data=body_text.encode("utf-8"), headers=headers, timeout=timeout)
 
     def register_with_server(username: str, public_key, private_key) -> bool:
-        try:
-            from datetime import datetime, timezone
-            import base64
-            from crypto_utils import sign_data
-            
-            pem_key = public_key_to_pem_string(public_key)
-            timestamp = datetime.now(timezone.utc).isoformat()
-            
-            data_to_sign = f"{username}:{timestamp}:{pem_key}".encode("utf-8")
-            sig = sign_data(private_key, data_to_sign)
-            sig_b64 = base64.b64encode(sig).decode("ascii")
+        from datetime import datetime, timezone
+        import base64
+        from crypto_utils import sign_data
+        
+        pem_key = public_key_to_pem_string(public_key)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        
+        data_to_sign = f"{username}:{timestamp}:{pem_key}".encode("utf-8")
+        sig = sign_data(private_key, data_to_sign)
+        sig_b64 = base64.b64encode(sig).decode("ascii")
 
+        try:
             resp = requests.post(f"{BASE_URL}/api/register", json={
                 "username": username,
                 "public_key": pem_key,
                 "timestamp": timestamp,
                 "signature": sig_b64
             }, timeout=5)
-            return resp.status_code == 200
+        except requests.exceptions.Timeout:
+            raise Exception("Server request timed out after 5 seconds.")
+        except requests.exceptions.ConnectionError as conn_err:
+            raise Exception(f"Server did not respond (offline or connection refused): {conn_err}")
         except Exception as ex:
-            print(f"[Register Error] {ex}")
-            return False
+            raise Exception(f"Network error: {ex}")
+
+        if resp.status_code == 200:
+            return True
+            
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:
+            detail = resp.text
+            
+        raise Exception(f"Server rejected registration ({resp.status_code}): {detail}")
 
     def fetch_recipient_pub_key(recipient: str):
         try:
@@ -1337,13 +1349,7 @@ def main(page: ft.Page):
                 state["public_key"]  = pub
                 state["store"]       = MessageStore(username)
 
-                if not register_with_server(username, pub, priv):
-                    login_btn.disabled = False
-                    login_btn.content.controls[1].value = "Sign In"
-                    username_field.error_text = "Server connection error! (Is it running?)"
-                    log_status("Sign in failed. Server connection error.")
-                    page.update()
-                    return
+                register_with_server(username, pub, priv)
 
                 # Reset button state
                 login_btn.disabled = False

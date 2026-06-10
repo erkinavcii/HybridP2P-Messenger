@@ -548,6 +548,17 @@
             color: rgba(255, 255, 255, 0.6);
         }
 
+        .msg-status-tick {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: bold;
+            margin-left: 2px;
+        }
+
+        .msg-status-tick.read {
+            color: var(--online-color); /* Green double tick */
+        }
+
         /* System and Ephemeral Messages */
         .msg-container.system {
             justify-content: center;
@@ -1815,6 +1826,13 @@
             if (state.chats[partner]) {
                 state.chats[partner].messages.forEach(m => m.read = true);
                 persistChats();
+                
+                // Trigger read receipt for the latest received message
+                const receivedMsgs = state.chats[partner].messages.filter(m => m.sender !== state.username);
+                if (receivedMsgs.length > 0) {
+                    const latestMsg = receivedMsgs[receivedMsgs.length - 1];
+                    sendReadReceipt(partner, latestMsg.timestamp);
+                }
             }
             
             // Sync ephemeral button visual state with this chat's setting
@@ -1912,6 +1930,7 @@
                         ${textNodeHtml}
                         <div class="msg-meta">
                             <span class="msg-time">${formatTime(m.timestamp)}</span>
+                            ${isMe ? `<span class="msg-status-tick ${m.read ? 'read' : ''}">${m.read ? '✓✓' : '✓'}</span>` : ""}
                         </div>
                     </div>
                 `;
@@ -2038,6 +2057,34 @@
                 viewOnceBtn.classList.remove("view-once-active");
             }
         });
+
+        // Send read receipt
+        async function sendReadReceipt(recipient, timestamp) {
+            if (!recipient || !timestamp) return;
+            const payload = {
+                type: "read_receipt",
+                recipient: recipient,
+                timestamp: timestamp
+            };
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify(payload));
+            } else {
+                // REST fallback
+                const path = "/api/send_ws_fallback";
+                const bodyText = JSON.stringify({ payload: JSON.stringify(payload) });
+                try {
+                    const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+                    headers["Content-Type"] = "application/json";
+                    await fetch(`${API_URL}${path}`, {
+                        method: "POST",
+                        headers: headers,
+                        body: bodyText
+                    });
+                } catch (err) {
+                    console.error("Failed to send read receipt fallback:", err);
+                }
+            }
+        }
 
         // Send message
         async function sendMessage() {
@@ -2187,7 +2234,10 @@
                             if (!exists) state.chats[sender].messages.push(msgObj);
                             persistChats();
 
-                            if (isActive) renderMessages();
+                            if (isActive) {
+                                renderMessages();
+                                sendReadReceipt(sender, msgObj.timestamp);
+                            }
                             renderInbox();
                         } catch (decryptErr) {
                             console.error("Gelen mesaj çözülemedi:", decryptErr);
@@ -2223,6 +2273,25 @@
                     // 5. Delivery Status Ack
                     else if (data.type === "delivery_ack") {
                         console.log("Delivery ack:", data);
+                    }
+                    
+                    // 6. Read Receipt received
+                    else if (data.type === "read_receipt") {
+                        const sender = data.sender;
+                        const timestamp = data.timestamp;
+                        console.log(`Received read receipt from ${sender} for timestamp ${timestamp}`);
+                        
+                        if (state.chats[sender]) {
+                            state.chats[sender].messages.forEach(m => {
+                                if (m.sender === state.username && m.timestamp === timestamp) {
+                                    m.read = true;
+                                }
+                            });
+                            persistChats();
+                            if (state.recipient === sender) {
+                                renderMessages();
+                            }
+                        }
                     }
                 } catch (e) {
                     console.error("WS mesaj işleme hatası:", e);

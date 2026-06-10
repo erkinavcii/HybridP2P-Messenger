@@ -1,6 +1,6 @@
 # 🔐 HybridP2P Messenger: Zero-Knowledge E2EE Messenger
 
-A secure, private, and lightweight hybrid peer-to-peer messaging application designed to withstand network-level surveillance and server compromises. Built with **FastAPI** (Server) and **Flet** (Client, Python-based Flutter), it employs state-of-the-art cryptography (RSA-4096 and AES-256-GCM) to implement true **End-to-End Encryption (E2EE)** for text messages, ephemeral/view-once chats, files, and multi-user groups.
+A secure, private, and lightweight hybrid peer-to-peer messaging application designed to withstand network-level surveillance and server compromises. Built with **FastAPI** (Server) and **Flet** (Client, Python-based Flutter), it employs state-of-the-art cryptography (RSA-4096 and AES-256-GCM) to implement true **End-to-End Encryption (E2EE)** for text messages, E2EE read receipts (double green ticks), ephemeral/view-once chats, files, and multi-user groups.
 
 ---
 

@@ -82,11 +82,19 @@ def serialize_public_key(public_key) -> bytes:
 
 def deserialize_private_key(pem_data: bytes):
     """PEM formatındaki byte verisinden Private Key nesnesi oluşturur."""
+    pem_str = pem_data.decode("utf-8", errors="ignore").strip()
+    if pem_str and not pem_str.startswith("-----BEGIN"):
+        pem_str = f"-----BEGIN PRIVATE KEY-----\n{pem_str}\n-----END PRIVATE KEY-----"
+        pem_data = pem_str.encode("utf-8")
     return serialization.load_pem_private_key(pem_data, password=None)
 
 
 def deserialize_public_key(pem_data: bytes):
     """PEM formatındaki byte verisinden Public Key nesnesi oluşturur."""
+    pem_str = pem_data.decode("utf-8", errors="ignore").strip()
+    if pem_str and not pem_str.startswith("-----BEGIN"):
+        pem_str = f"-----BEGIN PUBLIC KEY-----\n{pem_str}\n-----END PUBLIC KEY-----"
+        pem_data = pem_str.encode("utf-8")
     return serialization.load_pem_public_key(pem_data)
 
 

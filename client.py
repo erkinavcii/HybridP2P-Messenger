@@ -95,8 +95,8 @@ def main(page: ft.Page):
     page.window.width  = 480
     page.window.height = 820
     page.padding     = 0
-    page.bgcolor     = "#0a0e1a"
-    page.theme       = ft.Theme(color_scheme_seed="#6c63ff", font_family="Segoe UI")
+    page.bgcolor     = "#09090b"
+    page.theme       = ft.Theme(color_scheme_seed="#8b5cf6", font_family="Inter, sans-serif")
 
     # ── Uygulama Durumu ──────────────────────────────────────────────
     state = {
@@ -110,6 +110,7 @@ def main(page: ft.Page):
         "store":             None,
         "ephemeral":         False,
         "view_once_mode":    False,   # per-mesaj view-once toggle
+        "staged_file":       None,
     }
 
     # ╔═══════════════════════════════════════════════════════════════╗
@@ -117,7 +118,7 @@ def main(page: ft.Page):
     # ╚═══════════════════════════════════════════════════════════════╝
 
     def create_message_bubble(sender: str, text: str, time_str: str, is_mine: bool):
-        bubble_color = "#6c63ff" if is_mine else "#1e2337"
+        bubble_color = "#8b5cf6" if is_mine else "#27272a"
         text_color   = "#ffffff" if is_mine else "#e0e0e0"
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
         return ft.Row(
@@ -137,9 +138,9 @@ def main(page: ft.Page):
                     bgcolor=bubble_color,
                     padding=ft.Padding(14, 10, 14, 10),
                     border_radius=ft.BorderRadius(
-                        top_left=18, top_right=18,
-                        bottom_left=4 if is_mine else 18,
-                        bottom_right=18 if is_mine else 4,
+                        top_left=14, top_right=14,
+                        bottom_left=4 if is_mine else 14,
+                        bottom_right=14 if is_mine else 4,
                     ),
                     width=300,
                     shadow=ft.BoxShadow(blur_radius=8, color="#00000033", offset=ft.Offset(0, 2)),
@@ -155,13 +156,13 @@ def main(page: ft.Page):
         Tıklanınca içerik diyalogda gösterilir, kapanınca silinir.
         """
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
-        color = "#6c63ff" if is_mine else "#1e2337"
+        color = "#8b5cf6" if is_mine else "#27272a"
         bubble_row = None
 
         def on_tap(e):
             nonlocal bubble_row
             if is_mine:
-                plaintext = plaintext_fallback or "Tek gorunumlu mesaj gonderildi."
+                plaintext = plaintext_fallback or "View-once message sent."
             else:
                 try:
                     plaintext = decrypt_message(encrypted_payload, state["private_key"])
@@ -191,41 +192,45 @@ def main(page: ft.Page):
             def close_dialog(e):
                 dialog.open = False
                 page.update()
+                clean_up()
 
             dialog = ft.AlertDialog(
                 modal=False,  # Herhangi bir yere tıklayınca da kapansın
-                title=ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.VISIBILITY, color="#ff6b6b", size=20),
-                        ft.Text("Tek Gorunumlu Mesaj", size=14, color="#ff6b6b"),
-                        ft.Container(expand=True),
-                        ft.IconButton(
-                            icon=ft.Icons.CLOSE,
-                            icon_color="#ff6b6b",
-                            icon_size=18,
-                            on_click=close_dialog,
-                            tooltip="Kapat",
-                        ),
-                    ],
-                    spacing=8,
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                ),
                 content=ft.Column(
                     controls=[
+                        # Header Row (interactive elements inside content to avoid click blocking in title)
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.VISIBILITY, color="#ef4444", size=20),
+                                ft.Text("View-Once Message", size=14, color="#ef4444", weight=ft.FontWeight.BOLD),
+                                ft.Container(expand=True),
+                                ft.IconButton(
+                                    icon=ft.Icons.CLOSE,
+                                    icon_color="#ef4444",
+                                    icon_size=18,
+                                    on_click=close_dialog,
+                                    tooltip="Close",
+                                ),
+                            ],
+                            spacing=8,
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Divider(color="#ef444444", height=1),
+                        ft.Container(height=10),
                         content_text,
                         ft.Container(height=12),
-                        ft.Text("Bu pencere kapatildiginda mesaj sohbetten kalici olarak silinecektir.",
-                                size=11, color="#ff6b6b", text_align=ft.TextAlign.CENTER),
+                        ft.Text("This message will be permanently deleted from the chat once closed.",
+                                size=11, color="#ef4444", text_align=ft.TextAlign.CENTER),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     tight=True,
                 ),
                 actions=[
-                    ft.TextButton("Kapat (Sil)", on_click=close_dialog)
+                    ft.TextButton("Close (Delete)", on_click=close_dialog)
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
                 on_dismiss=lambda e: clean_up(),
-                bgcolor="#141832",
+                bgcolor="#18181b",
             )
             page.overlay.append(dialog)
             dialog.open = True
@@ -239,16 +244,16 @@ def main(page: ft.Page):
                     content=ft.Container(
                         content=ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.VISIBILITY, color="#ff6b6b", size=18),
+                                ft.Icon(ft.Icons.VISIBILITY, color="#ef4444", size=18),
                                 ft.Column(
                                     controls=[
                                         ft.Text(
-                                            "Gonderici" if not is_mine else "Sen",
+                                            "Sender" if not is_mine else "You",
                                             size=11, color="#9e9e9e", visible=not is_mine
                                         ),
-                                        ft.Text("Tek gorunumlu mesaj",
-                                                size=13, color="#ff6b6b"),
-                                        ft.Text("Gormek icin dokun",
+                                        ft.Text("View-once message",
+                                                size=13, color="#ef4444"),
+                                        ft.Text("Tap to view",
                                                 size=10, color="#888888"),
                                         ft.Text(time_str, size=9, color="#666666"),
                                     ],
@@ -260,11 +265,11 @@ def main(page: ft.Page):
                         bgcolor=color,
                         padding=ft.Padding(14, 10, 14, 10),
                         border_radius=ft.BorderRadius(
-                            top_left=18, top_right=18,
-                            bottom_left=4 if is_mine else 18,
-                            bottom_right=18 if is_mine else 4,
+                            top_left=14, top_right=14,
+                        bottom_left=4 if is_mine else 14,
+                        bottom_right=14 if is_mine else 4,
                         ),
-                        border=ft.Border(left=ft.BorderSide(1, "#ff6b6b44"), top=ft.BorderSide(1, "#ff6b6b44"), right=ft.BorderSide(1, "#ff6b6b44"), bottom=ft.BorderSide(1, "#ff6b6b44")),
+                        border=ft.Border(left=ft.BorderSide(1, "#ef444444"), top=ft.BorderSide(1, "#ef444444"), right=ft.BorderSide(1, "#ef444444"), bottom=ft.BorderSide(1, "#ef444444")),
                         width=260,
                     ),
                 ),
@@ -280,12 +285,12 @@ def main(page: ft.Page):
         Resimler için indirme sonrası thumbnail gösterilir.
         """
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
-        color = "#6c63ff" if is_mine else "#1e2337"
+        color = "#8b5cf6" if is_mine else "#27272a"
         icon  = FILE_ICONS.get(file_type, ft.Icons.DESCRIPTION)
         bubble_row = None
 
         # İndirme durumu için durum göstergesi
-        status_text = ft.Text("Indir", size=11, color="#a0a0ff")
+        status_text = ft.Text("Download", size=11, color="#a78bfa")
         image_display = ft.Column(controls=[], visible=False)
 
         def show_view_once_dialog(content_control, message_text):
@@ -311,41 +316,45 @@ def main(page: ft.Page):
             def close_dialog(e):
                 dialog.open = False
                 page.update()
+                clean_up()
 
             dialog = ft.AlertDialog(
                 modal=False,  # Herhangi bir yere tıklayınca da kapansın
-                title=ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.VISIBILITY, color="#ff6b6b", size=20),
-                        ft.Text("Tek Gorunumlu Dosya", size=14, color="#ff6b6b"),
-                        ft.Container(expand=True),
-                        ft.IconButton(
-                            icon=ft.Icons.CLOSE,
-                            icon_color="#ff6b6b",
-                            icon_size=18,
-                            on_click=close_dialog,
-                            tooltip="Kapat",
-                        ),
-                    ],
-                    spacing=8,
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                ),
                 content=ft.Column(
                     controls=[
+                        # Header Row
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.VISIBILITY, color="#ef4444", size=20),
+                                ft.Text("View-Once File", size=14, color="#ef4444", weight=ft.FontWeight.BOLD),
+                                ft.Container(expand=True),
+                                ft.IconButton(
+                                    icon=ft.Icons.CLOSE,
+                                    icon_color="#ef4444",
+                                    icon_size=18,
+                                    on_click=close_dialog,
+                                    tooltip="Close",
+                                ),
+                            ],
+                            spacing=8,
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Divider(color="#ef444444", height=1),
+                        ft.Container(height=10),
                         content_control,
                         ft.Container(height=12),
                         ft.Text(message_text,
-                                size=11, color="#ff6b6b", text_align=ft.TextAlign.CENTER),
+                                size=11, color="#ef4444", text_align=ft.TextAlign.CENTER),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     tight=True,
                 ),
                 actions=[
-                    ft.TextButton("Kapat (Sil)", on_click=close_dialog)
+                    ft.TextButton("Close (Delete)", on_click=close_dialog)
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
                 on_dismiss=lambda e: clean_up(),
-                bgcolor="#141832",
+                bgcolor="#18181b",
             )
             page.overlay.append(dialog)
             dialog.open = True
@@ -355,11 +364,11 @@ def main(page: ft.Page):
             if view_once and is_mine:
                 show_view_once_dialog(
                     ft.Text(f"Gonderdiginiz dosya: {original_name}", size=14, color="#ffffff"),
-                    "Bu pencere kapatildiginda mesaj sohbetten kalici olarak silinecektir."
+                    "This message will be permanently deleted from the chat once closed."
                 )
                 return
 
-            status_text.value = "Indiriliyor..."
+            status_text.value = "Downloading..."
             page.update()
 
             def do_download():
@@ -377,12 +386,12 @@ def main(page: ft.Page):
                                 img = ft.Image(
                                     src=data_url,
                                     width=300, height=250,
-                                    fit=ft.ImageFit.CONTAIN,
+                                    fit="contain",
                                     border_radius=8,
                                 )
                                 show_view_once_dialog(
                                     img,
-                                    "Bu dosya pencere kapatildiginda sohbetten kalici olarak silinecektir."
+                                    "This file will be permanently deleted from the chat once closed."
                                 )
                             else:
                                 downloads = Path.home() / "Downloads"
@@ -391,7 +400,7 @@ def main(page: ft.Page):
                                 dest.write_bytes(raw)
                                 show_view_once_dialog(
                                     ft.Text(f"Dosya indirildi ve kaydedildi:\n{dest.name}", size=13, color="#ffffff", text_align=ft.TextAlign.CENTER),
-                                    "Bu dosya yerel Downloads klasorune kaydedildi. Pencere kapatildiginda mesaj sohbetten kalici olarak silinecektir."
+                                    "This file has been saved to your local Downloads folder. It will be permanently deleted from the chat once closed."
                                 )
                         else:
                             if file_type == "image":
@@ -401,7 +410,7 @@ def main(page: ft.Page):
                                 img = ft.Image(
                                     src=data_url,
                                     width=250, height=200,
-                                    fit=ft.ImageFit.CONTAIN,
+                                    fit="contain",
                                     border_radius=8,
                                 )
                                 image_display.controls.clear()
@@ -416,7 +425,7 @@ def main(page: ft.Page):
                                 status_text.value = f"Kaydedildi: {dest.name}"
                             page.update()
                     else:
-                        status_text.value = "Indirme basarisiz veya zaten indirildi."
+                        status_text.value = "Download failed or already downloaded."
                         page.update()
                 except Exception as ex:
                     status_text.value = f"Hata: {ex}"
@@ -427,8 +436,8 @@ def main(page: ft.Page):
         vo_badge = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.VISIBILITY, size=10, color="#ff6b6b"),
-                    ft.Text("Tek gorunumlu", size=9, color="#ff6b6b"),
+                    ft.Icon(ft.Icons.VISIBILITY, size=10, color="#ef4444"),
+                    ft.Text("View-once", size=9, color="#ef4444"),
                 ],
                 spacing=2,
             ),
@@ -443,7 +452,7 @@ def main(page: ft.Page):
                     vo_badge,
                     ft.Row(
                         controls=[
-                            ft.Icon(icon, size=24, color="#a0a0ff"),
+                            ft.Icon(icon, size=24, color="#a78bfa"),
                             ft.Column(
                                 controls=[
                                     ft.Text(original_name, size=12,
@@ -455,10 +464,10 @@ def main(page: ft.Page):
                             ),
                             ft.IconButton(
                                 icon=ft.Icons.DOWNLOAD if not view_once else ft.Icons.VISIBILITY,
-                                icon_color="#ff6b6b" if view_once else "#a0a0ff",
+                                icon_color="#ef4444" if view_once else "#a78bfa",
                                 icon_size=18,
                                 on_click=on_download,
-                                tooltip="Goruntule" if view_once else "Indir ve Coz",
+                                tooltip="View" if view_once else "Download & Decrypt",
                             ),
                         ],
                         spacing=6,
@@ -471,11 +480,11 @@ def main(page: ft.Page):
             bgcolor=color,
             padding=ft.Padding(14, 10, 14, 10),
             border_radius=ft.BorderRadius(
-                top_left=18, top_right=18,
-                bottom_left=4 if is_mine else 18,
-                bottom_right=18 if is_mine else 4,
+                top_left=14, top_right=14,
+                        bottom_left=4 if is_mine else 14,
+                        bottom_right=14 if is_mine else 4,
             ),
-            border=ft.Border(left=ft.BorderSide(1, "#ff6b6b44"), top=ft.BorderSide(1, "#ff6b6b44"), right=ft.BorderSide(1, "#ff6b6b44"), bottom=ft.BorderSide(1, "#ff6b6b44")) if view_once else None,
+            border=ft.Border(left=ft.BorderSide(1, "#ef444444"), top=ft.BorderSide(1, "#ef444444"), right=ft.BorderSide(1, "#ef444444"), bottom=ft.BorderSide(1, "#ef444444")) if view_once else None,
             width=300,
             shadow=ft.BoxShadow(blur_radius=8, color="#00000033",
                                 offset=ft.Offset(0, 2)),
@@ -507,10 +516,10 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Text(text, size=11, color="#aaaaaa",
                                     text_align=ft.TextAlign.CENTER),
-                    bgcolor="#151a2e",
+                    bgcolor="#27272a",
                     padding=ft.Padding(16, 6, 16, 6),
-                    border_radius=12,
-                    border=ft.Border(left=ft.BorderSide(1, "#2a2f4e"), top=ft.BorderSide(1, "#2a2f4e"), right=ft.BorderSide(1, "#2a2f4e"), bottom=ft.BorderSide(1, "#2a2f4e")),
+                    border_radius=8,
+                    border=ft.Border(left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"), right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")),
                 ),
             ],
         )
@@ -522,13 +531,13 @@ def main(page: ft.Page):
     def initialize_keys(username: str):
         priv, pub = load_keys_from_disk(username)
         if priv and pub:
-            log_status("Mevcut anahtarlar yuklendi.")
+            log_status("Existing keys loaded.")
             return priv, pub
-        log_status("RSA-4096 uretiliyor...")
+        log_status("Generating RSA-4096 keys...")
         page.update()
         priv, pub = generate_rsa_keypair()
         save_keys_to_disk(username, priv, pub)
-        log_status("Anahtarlar olusturuldu.")
+        log_status("Keys generated.")
         return priv, pub
 
     def _canonical_json(payload: dict) -> str:
@@ -644,7 +653,7 @@ def main(page: ft.Page):
                         _on_incoming_message(msg["sender"], f"[Hata: {ex}]",
                                              msg.get("timestamp", ""))
         except Exception as e:
-            log_status("Cevrimdisi mesajlar alinamadi.")
+            log_status("Failed to fetch offline messages.")
             print(f"[REST] Cevrimdisi mesajlar sunucudan cekilemedi: {e}")
 
     # ╔═══════════════════════════════════════════════════════════════╗
@@ -653,15 +662,21 @@ def main(page: ft.Page):
 
     def _fmt_time(ts: str) -> str:
         try:
-            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            return dt.strftime("%H:%M")
+            ts_norm = ts.replace("Z", "+00:00").replace(" ", "T")
+            dt = datetime.fromisoformat(ts_norm)
+            if dt.tzinfo is None:
+                from datetime import timezone
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone().strftime("%H:%M")
         except: return ts[:5] if ts else ""
 
     def add_message_to_chat(sender: str, text: str, is_mine: bool,
                              time_str: str = "", save: bool = True,
                              view_once: bool = False, encrypted_payload: str = ""):
-        if not time_str: time_str = datetime.now().strftime("%H:%M")
-        else: time_str = _fmt_time(time_str)
+        from datetime import timezone
+        if not time_str:
+            time_str = datetime.now(timezone.utc).isoformat()
+        time_str = _fmt_time(time_str)
 
         if view_once:
             bubble = create_view_once_bubble(sender, time_str, is_mine, encrypted_payload, plaintext_fallback=text)
@@ -681,8 +696,10 @@ def main(page: ft.Page):
     def add_file_to_chat(sender: str, file_uuid: str, original_name: str,
                           file_type: str, is_mine: bool, time_str: str = "",
                           view_once: bool = False):
-        if not time_str: time_str = datetime.now().strftime("%H:%M")
-        else: time_str = _fmt_time(time_str)
+        from datetime import timezone
+        if not time_str:
+            time_str = datetime.now(timezone.utc).isoformat()
+        time_str = _fmt_time(time_str)
 
         bubble = create_file_bubble(sender, file_uuid, original_name,
                                      file_type, time_str, is_mine, view_once)
@@ -711,6 +728,7 @@ def main(page: ft.Page):
                     content=plaintext, is_mine=False, timestamp=timestamp,
                 )
             log_status(f"'{sender}' adlisindan yeni mesaj var!")
+        load_inbox_chats()
 
     def _on_incoming_file(sender: str, file_uuid: str, original_name: str,
                            file_type: str, timestamp: str, view_once: bool):
@@ -720,6 +738,7 @@ def main(page: ft.Page):
                               view_once=view_once)
         else:
             log_status(f"'{sender}' adlisindan dosya var! ({original_name})")
+        load_inbox_chats()
 
     def load_history_to_chat():
         if not state["recipient"] or not state["store"]: return
@@ -741,7 +760,7 @@ def main(page: ft.Page):
 
     def toggle_ephemeral(e):
         if not state["recipient"]:
-            log_status("Once bir alici secin!")
+            log_status("Please select a recipient first!")
             return
         new_val = not state["ephemeral"]
         state["ephemeral"] = new_val
@@ -755,19 +774,19 @@ def main(page: ft.Page):
             "ephemeral": new_val,
         })
 
-        label = ("Gecici sohbet modu ACILDI — mesajlar kaydedilmiyor"
-                 if new_val else "Mesaj kayit modu ACILDI — mesajlar kaydediliyor")
+        label = ("Ephemeral mode ON — messages are not saved"
+                 if new_val else "Message history ON — messages are saved")
         add_system_event(label, partner=state["recipient"])
 
     def _update_ephemeral_ui():
         if state["ephemeral"]:
             ephemeral_btn.icon       = ft.Icons.VISIBILITY_OFF
-            ephemeral_btn.icon_color = "#ff6b6b"
-            ephemeral_btn.tooltip    = "Gecici mod ACIK — kapat"
+            ephemeral_btn.icon_color = "#ef4444"
+            ephemeral_btn.tooltip    = "Ephemeral mode ON — disable"
         else:
             ephemeral_btn.icon       = ft.Icons.VISIBILITY
-            ephemeral_btn.icon_color = "#6c63ff"
-            ephemeral_btn.tooltip    = "Gecici sohbete gec"
+            ephemeral_btn.icon_color = "#8b5cf6"
+            ephemeral_btn.tooltip    = "Switch to Ephemeral Chat"
         try: page.update()
         except: pass
 
@@ -781,7 +800,7 @@ def main(page: ft.Page):
                 "fingerprint": fingerprint
             }
             page.set_clipboard(json.dumps(card, indent=2))
-            log_status("Kimlik kartiniz panoya kopyalandi!")
+            log_status("Contact card copied to clipboard!")
         except Exception as ex:
             log_status(f"Kopyalama hatasi: {ex}")
 
@@ -804,96 +823,48 @@ def main(page: ft.Page):
         state["view_once_mode"] = not state["view_once_mode"]
         if state["view_once_mode"]:
             view_once_msg_btn.icon       = ft.Icons.VISIBILITY_OFF
-            view_once_msg_btn.icon_color = "#ff6b6b"
-            view_once_msg_btn.tooltip    = "Tek gorunumlu ACIK — kapat"
+            view_once_msg_btn.icon_color = "#ef4444"
+            view_once_msg_btn.tooltip    = "View-once ON — disable"
         else:
             view_once_msg_btn.icon       = ft.Icons.VISIBILITY
             view_once_msg_btn.icon_color = "#888888"
-            view_once_msg_btn.tooltip    = "Tek gorunumlu gonder"
+            view_once_msg_btn.tooltip    = "Send as view-once"
         page.update()
 
     # ╔═══════════════════════════════════════════════════════════════╗
     # ║                DOSYA / RESİM GÖNDERİMİ                        ║
     # ╚═══════════════════════════════════════════════════════════════╝
 
-    def on_attach_click(e):
+    async def on_attach_click(e):
         if not state["recipient"]:
-            log_status("Once bir aliciya veya gruba baglanin!")
+            log_status("Please connect to a recipient or group first!")
             return
-        file_picker.pick_files(allow_multiple=False)
+        files = await file_picker.pick_files(allow_multiple=False)
+        if not files: return
+        f = files[0]
+        
+        # Check size limit
+        try:
+            sz = os.path.getsize(f.path)
+            if sz > 10 * 1024 * 1024:  # 10 MB limit
+                log_status("File too large! Max 10 MB.")
+                return
+        except:
+            pass
 
-    def on_file_picked(e):
-        if not e.files: return
-        f = e.files[0]
-        log_status(f"Dosya sifreleniyor: {f.name}...")
+        file_type = _guess_file_type(f.name)
+        
+        # Stage the file in state
+        state["staged_file"] = {
+            "name": f.name,
+            "path": f.path,
+            "type": file_type,
+        }
+        
+        staged_file_name_text.value = f.name
+        staged_file_container.visible = True
         page.update()
-
-        def do_upload():
-            try:
-                raw = Path(f.path).read_bytes()
-                if len(raw) > 10 * 1024 * 1024:  # 10 MB limit
-                    log_status("Dosya cok buyuk! Max 10 MB.")
-                    page.update()
-                    return
-
-                file_type = _guess_file_type(f.name)
-                encrypted = encrypt_bytes(raw, state["recipient_pub_key"])
-
-                resp = signed_post(
-                    "/api/upload_file",
-                    {
-                        "sender":         state["username"],
-                        "recipient":      state["recipient"],
-                        "encrypted_data": encrypted,
-                        "original_name":  f.name,
-                        "file_type":      file_type,
-                    },
-                    timeout=60,
-                )
-                if resp.status_code != 200:
-                    log_status(f"Upload basarisiz: {resp.text}")
-                    page.update()
-                    return
-
-                file_uuid = resp.json()["uuid"]
-                view_once = state["view_once_mode"]
-
-                # WS üzerinden alıcıya bildir
-                # REST veya WS ile alıcıya bildir
-                send_ws_message_with_fallback({
-                    "type":          "file_message",
-                    "sender":        state["username"],
-                    "recipient":     state["recipient"],
-                    "file_uuid":     file_uuid,
-                    "original_name": f.name,
-                    "file_type":     file_type,
-                    "view_once":     view_once,
-                })
-
-                # Kendi ekranında göster
-                add_file_to_chat(
-                    sender=state["username"],
-                    file_uuid=file_uuid,
-                    original_name=f.name,
-                    file_type=file_type,
-                    is_mine=True,
-                    view_once=view_once,
-                )
-
-                # View-once sıfırla
-                if view_once:
-                    state["view_once_mode"] = False
-                    view_once_msg_btn.icon       = ft.Icons.VISIBILITY
-                    view_once_msg_btn.icon_color = "#888888"
-
-                log_status(f"{f.name} gonderildi.")
-                page.update()
-
-            except Exception as ex:
-                log_status(f"Dosya gonderim hatasi: {ex}")
-                page.update()
-
-        threading.Thread(target=do_upload, daemon=True).start()
+        log_status(f"Staged file: '{f.name}'. Press send button to encrypt & upload.")
 
     # ╔═══════════════════════════════════════════════════════════════╗
     # ║                   WEBSOCKET İLETİŞİMİ                          ║
@@ -901,7 +872,7 @@ def main(page: ft.Page):
 
     def start_websocket_listener():
         threading.Thread(target=_run_ws_loop, daemon=True, name="ws-listener").start()
-        log_status("WebSocket baglantisi kuruluyor...")
+        log_status("Establishing WebSocket connection...")
 
     def _run_ws_loop():
         loop = asyncio.new_event_loop()
@@ -920,7 +891,7 @@ def main(page: ft.Page):
                     challenge_raw = await ws.recv()
                     challenge_msg = json.loads(challenge_raw)
                     if challenge_msg.get("type") != "challenge":
-                        raise Exception("Handshake hatası: Sunucudan challenge alınamadı.")
+                        raise Exception("Handshake error: No challenge received from server.")
                         
                     challenge = challenge_msg["challenge"]
                     
@@ -939,12 +910,12 @@ def main(page: ft.Page):
                     auth_res_raw = await ws.recv()
                     auth_res = json.loads(auth_res_raw)
                     if auth_res.get("type") != "auth_result" or auth_res.get("status") != "success":
-                        err_msg = auth_res.get("message", "Kimlik doğrulama başarısız.")
+                        err_msg = auth_res.get("message", "Authentication failed.")
                         log_status(f"Kimlik doğrulama hatası: {err_msg}")
                         raise Exception(f"Kimlik doğrulama hatası: {err_msg}")
                         
                     state["ws"] = ws
-                    log_status("Baglanti kuruldu.")
+                    log_status("Connection established.")
                     update_connection_status(True)
                     page.update()
                     async for raw in ws:
@@ -1051,6 +1022,7 @@ def main(page: ft.Page):
                                             chat_info = state["store"].get_chat_info(group_id)
                                             gname = chat_info.get("partner", group_id)
                                             log_status(f"Grup '{gname}'dan yeni mesaj!")
+                                        load_inbox_chats()
                                     except Exception as ex:
                                         print(f"Grup mesaji cozme hatasi: {ex}")
 
@@ -1072,7 +1044,7 @@ def main(page: ft.Page):
                     import traceback
                     traceback.print_exc()
                 state["ws"] = None
-                log_status(f"WS koptu. {reconnect_delay}s sonra tekrar...")
+                log_status(f"WS disconnected. Reconnecting in {reconnect_delay}s...")
                 update_connection_status(False)
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 2, 30)
@@ -1105,15 +1077,15 @@ def main(page: ft.Page):
                         if r.status_code == 200:
                             print(f"[REST] Fallback ile '{t}' basariyla gonderildi.")
                             if t == "message":
-                                log_status("Mesaj REST ile iletildi.")
+                                log_status("Message delivered via REST.")
                         else:
                             print(f"[REST] HATA: Fallback basarisiz ({r.status_code}): {r.text}")
                             if t == "message":
-                                log_status("Mesaj iletilemedi!")
+                                log_status("Message could not be delivered!")
                     except Exception as ex:
                         print(f"[REST] HATA: Fallback baglanti hatasi: {ex}")
                         if t == "message":
-                            log_status("Mesaj iletilemedi!")
+                            log_status("Message could not be delivered!")
                 threading.Thread(target=do_rest, daemon=True).start()
             except Exception as ex:
                 print(f"[REST] Thread baslatma hatasi: {ex}")
@@ -1158,7 +1130,7 @@ def main(page: ft.Page):
     # ║                     UI BİLEŞENLERİ                             ║
     # ╚═══════════════════════════════════════════════════════════════╝
 
-    status_text = ft.Text("Hos geldiniz!", size=11, color="#9e9e9e",
+    status_text = ft.Text("Welcome!", size=11, color="#9e9e9e",
                            max_lines=2, overflow=ft.TextOverflow.ELLIPSIS)
 
     def log_status(msg: str):
@@ -1172,58 +1144,58 @@ def main(page: ft.Page):
 
     # Ephemeral toggle (chat seviyesi)
     ephemeral_btn = ft.IconButton(
-        icon=ft.Icons.VISIBILITY, icon_color="#6c63ff", icon_size=20,
-        tooltip="Gecici sohbete gec", on_click=toggle_ephemeral,
+        icon=ft.Icons.VISIBILITY, icon_color="#8b5cf6", icon_size=20,
+        tooltip="Switch to Ephemeral Chat", on_click=toggle_ephemeral,
     )
 
     # View-once toggle (mesaj seviyesi — input yanında)
     view_once_msg_btn = ft.IconButton(
         icon=ft.Icons.VISIBILITY, icon_color="#888888", icon_size=18,
-        tooltip="Tek gorunumlu gonder", on_click=toggle_view_once_msg,
+        tooltip="Send as view-once", on_click=toggle_view_once_msg,
     )
 
     # Dosya ekleme butonu
     attach_btn = ft.IconButton(
         icon=ft.Icons.ATTACH_FILE, icon_color="#888888", icon_size=20,
-        tooltip="Dosya / Resim gonder", on_click=on_attach_click,
+        tooltip="Send File / Image", on_click=on_attach_click,
     )
 
     # Dosya seçici
-    file_picker = ft.FilePicker(on_result=on_file_picked)
-    page.overlay.append(file_picker)
+    file_picker = ft.FilePicker()
+    # page.overlay.append(file_picker)  # Flet 0.23+ treats this as a Service, appending causes Unknown Control
 
     # ╔═══════════════════════════════════════════════════════════════╗
     # ║                     GİRİŞ EKRANI                               ║
     # ╚═══════════════════════════════════════════════════════════════╝
 
     server_address_field = ft.TextField(
-        label="Sunucu Adresi", value="127.0.0.1:8000",
-        hint_text="Ornek: 127.0.0.1:8000 veya sunucu.com:8000",
+        label="Server Address", value="127.0.0.1:8000",
+        hint_text="Example: 127.0.0.1:8000 or server.com:8000",
         prefix_icon=ft.Icons.COMPUTER,
-        border_color="#6c63ff", focused_border_color="#a29bfe",
-        cursor_color="#6c63ff", text_size=15, height=55,
+        border_color="#8b5cf6", focused_border_color="#a78bfa",
+        cursor_color="#8b5cf6", text_size=15, height=55,
     )
 
     username_field = ft.TextField(
-        label="Kullanici Adi", hint_text="Ornek: alice",
+        label="Username", hint_text="Example: alice",
         prefix_icon=ft.Icons.PERSON,
-        border_color="#6c63ff", focused_border_color="#a29bfe",
-        cursor_color="#6c63ff", text_size=15, height=55,
+        border_color="#8b5cf6", focused_border_color="#a78bfa",
+        cursor_color="#8b5cf6", text_size=15, height=55,
     )
 
     login_btn = ft.ElevatedButton(
         content=ft.Row(
             controls=[
                 ft.Icon(ft.Icons.LOGIN, size=20),
-                ft.Text("Giris Yap", size=15, weight=ft.FontWeight.BOLD),
+                ft.Text("Sign In", size=15, weight=ft.FontWeight.BOLD),
             ],
             alignment=ft.MainAxisAlignment.CENTER, spacing=8,
         ),
         on_click=lambda e: on_login_click(e),
         style=ft.ButtonStyle(
-            bgcolor="#6c63ff", color="#ffffff",
+            bgcolor="#8b5cf6", color="#ffffff",
             padding=ft.Padding(32, 16, 32, 16),
-            shape=ft.RoundedRectangleBorder(radius=12),
+            shape=ft.RoundedRectangleBorder(radius=8),
             elevation=4,
         ),
         width=280, height=52,
@@ -1232,7 +1204,7 @@ def main(page: ft.Page):
     def on_login_click(e):
         username = username_field.value.strip().lower()
         if not username or len(username) < 2:
-            username_field.error_text = "En az 2 karakter!"
+            username_field.error_text = "At least 2 characters required!"
             page.update()
             return
         username_field.error_text = None
@@ -1243,8 +1215,8 @@ def main(page: ft.Page):
         
         # Disable button and update text
         login_btn.disabled = True
-        login_btn.content.controls[1].value = "Lutfen bekleyin..."
-        log_status("Giris yapiliyor...")
+        login_btn.content.controls[1].value = "Please wait..."
+        log_status("Signing in...")
         page.update()
 
         def do_login():
@@ -1257,24 +1229,24 @@ def main(page: ft.Page):
 
                 if not register_with_server(username, pub, priv):
                     login_btn.disabled = False
-                    login_btn.content.controls[1].value = "Giris Yap"
-                    username_field.error_text = "Sunucu baglanti hatasi! (Sunucu acik mi?)"
-                    log_status("Giris basarisiz. Sunucu baglanti hatasi.")
+                    login_btn.content.controls[1].value = "Sign In"
+                    username_field.error_text = "Server connection error! (Is it running?)"
+                    log_status("Sign in failed. Server connection error.")
                     page.update()
                     return
 
                 # Reset button state
                 login_btn.disabled = False
-                login_btn.content.controls[1].value = "Giris Yap"
+                login_btn.content.controls[1].value = "Sign In"
 
-                show_chat_screen()
+                show_inbox_screen()
                 sync_chat_settings()
                 sync_user_groups_from_server()
                 fetch_offline_messages()
                 start_websocket_listener()
             except Exception as ex:
                 login_btn.disabled = False
-                login_btn.content.controls[1].value = "Giris Yap"
+                login_btn.content.controls[1].value = "Sign In"
                 username_field.error_text = f"Hata: {ex}"
                 log_status(f"Giris sirasinda hata olustu: {ex}")
                 page.update()
@@ -1288,11 +1260,11 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Column(
                         controls=[
-                            ft.Icon(ft.Icons.LOCK_OUTLINE, size=64, color="#6c63ff"),
+                            ft.Icon(ft.Icons.LOCK_OUTLINE, size=64, color="#8b5cf6"),
                             ft.Text("HybridP2P", size=32, weight=ft.FontWeight.BOLD, color="#ffffff"),
-                            ft.Text("Messenger", size=18, weight=ft.FontWeight.W_300, color="#6c63ff"),
+                            ft.Text("Messenger", size=18, weight=ft.FontWeight.W_300, color="#8b5cf6"),
                             ft.Container(height=4),
-                            ft.Text("Uctan Uca Sifrelenmiş Mesajlasma", size=13,
+                            ft.Text("End-to-End Encrypted Messaging", size=13,
                                     color="#9e9e9e", text_align=ft.TextAlign.CENTER),
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2,
@@ -1317,8 +1289,8 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Row(
                         controls=[
-                            ft.Icon(ft.Icons.SHIELD, size=14, color="#4caf50"),
-                            ft.Text("RSA-4096 + AES-256-GCM + E2EE Dosya", size=11, color="#4caf50"),
+                            ft.Icon(ft.Icons.SHIELD, size=14, color="#22c55e"),
+                            ft.Text("RSA-4096 + AES-256-GCM + E2EE Dosya", size=11, color="#22c55e"),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER, spacing=6,
                     ),
@@ -1330,7 +1302,7 @@ def main(page: ft.Page):
         expand=True,
         gradient=ft.LinearGradient(
             begin=ft.Alignment(0, -1), end=ft.Alignment(0, 1),
-            colors=["#0a0e1a", "#141832", "#0a0e1a"],
+            colors=["#09090b", "#18181b", "#09090b"],
         ),
     )
 
@@ -1339,16 +1311,16 @@ def main(page: ft.Page):
     # ╚═══════════════════════════════════════════════════════════════╝
 
     recipient_field = ft.TextField(
-        label="Alici", hint_text="Ornek: bob",
+        label="Recipient", hint_text="Example: bob",
         prefix_icon=ft.Icons.PERSON_SEARCH,
-        border_color="#6c63ff", focused_border_color="#a29bfe",
-        cursor_color="#6c63ff", text_size=14, height=48, expand=True,
+        border_color="#8b5cf6", focused_border_color="#a78bfa",
+        cursor_color="#8b5cf6", text_size=14, height=48, expand=True,
     )
 
     message_input = ft.TextField(
-        hint_text="Mesajinizi yazin...",
-        border_color="#2a2f4e", focused_border_color="#6c63ff",
-        cursor_color="#6c63ff", text_size=14,
+        hint_text="Type your message...",
+        border_color="#3f3f46", focused_border_color="#8b5cf6",
+        cursor_color="#8b5cf6", text_size=14,
         min_lines=1, max_lines=3, expand=True,
         on_submit=lambda e: on_send_click(e),
         shift_enter=True,
@@ -1357,7 +1329,7 @@ def main(page: ft.Page):
     def on_connect_recipient(e):
         recipient_input = recipient_field.value.strip()
         if not recipient_input:
-            log_status("Alici adi veya grup ID bos olamaz!")
+            log_status("Recipient name or group ID cannot be empty!")
             return
 
         def connect_to_recipient_final(rec, pub):
@@ -1366,7 +1338,7 @@ def main(page: ft.Page):
             state["recipient_pub_key"] = pub
             recipient_field.value      = rec
             recipient_field.read_only  = True
-            recipient_field.border_color = "#4caf50"
+            recipient_field.border_color = "#22c55e"
             ephemeral_btn.disabled = False
 
             ephemeral = state["store"].is_ephemeral(rec)
@@ -1374,8 +1346,9 @@ def main(page: ft.Page):
             _update_ephemeral_ui()
             load_history_to_chat()
             if ephemeral:
-                add_system_event("Bu sohbet GECICI moddadir — mesajlar kaydedilmiyor")
+                add_system_event("This chat is in EPHEMERAL mode — messages are not saved")
             log_status(f"'{rec}' ile sohbet basladi.")
+            show_chat_screen()
             page.update()
 
         def close_warning_dialog(dialog, accept, rec=None, new_pem=None):
@@ -1393,7 +1366,7 @@ def main(page: ft.Page):
                 except Exception as ex:
                     log_status(f"Hata: {ex}")
             else:
-                log_status("Baglanti guvenlik nedeniyle reddedildi.")
+                log_status("Connection rejected for security reasons.")
 
         def close_tofu_dialog(dialog, accept, rec=None, pem=None, pub=None):
             dialog.open = False
@@ -1409,7 +1382,7 @@ def main(page: ft.Page):
                 except Exception as ex:
                     log_status(f"Hata: {ex}")
             else:
-                log_status("Baglanti onaylanmadi.")
+                log_status("Connection not approved.")
 
         # Check if the input is a JSON contact card
         imported_card = None
@@ -1424,7 +1397,7 @@ def main(page: ft.Page):
         if imported_card:
             recipient = imported_card["username"].lower()
             if recipient == state["username"]:
-                log_status("Kendi kimlik kartinizi ekleyemezsiniz!")
+                log_status("You cannot add your own contact card!")
                 return
             
             pub_key_pem = imported_card["public_key"]
@@ -1434,19 +1407,20 @@ def main(page: ft.Page):
                 state["store"].save_contact(recipient, pub_key_pem, fingerprint)
                 log_status(f"'{recipient}' kimlik karti basariyla import edildi!")
                 recipient_field.value = recipient
+                recipient_input = recipient
             except Exception as ex:
                 log_status(f"Kimlik karti yukleme hatasi: {ex}")
                 return
         else:
             recipient = recipient_input.lower()
             if recipient == state["username"]:
-                log_status("Kendinize mesaj gonderemezsiniz!")
+                log_status("You cannot send a message to yourself!")
                 return
 
         if recipient.startswith("group_"):
             key = state["store"].get_group_key(recipient)
             if not key:
-                log_status("Hata: Bu grubun sifreleme anahtari sizde yok!")
+                log_status("Error: You don't have the encryption key for this group!")
                 return
             
             state["recipient"] = recipient
@@ -1457,11 +1431,12 @@ def main(page: ft.Page):
             
             recipient_field.value = gname
             recipient_field.read_only = True
-            recipient_field.border_color = "#4caf50"
+            recipient_field.border_color = "#22c55e"
             ephemeral_btn.disabled = True
             
             load_history_to_chat()
             log_status(f"'{gname}' grubu ile sohbet basladi.")
+            show_chat_screen()
             page.update()
             return
 
@@ -1477,23 +1452,23 @@ def main(page: ft.Page):
                         modal=True,
                         title=ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.WARNING_ROUNDED, color="#ff6b6b"),
-                                ft.Text("GUVENLIK UYARISI!", color="#ff6b6b", weight=ft.FontWeight.BOLD)
+                                ft.Icon(ft.Icons.WARNING_ROUNDED, color="#ef4444"),
+                                ft.Text("SECURITY WARNING!", color="#ef4444", weight=ft.FontWeight.BOLD)
                             ],
                             spacing=8
                         ),
                         content=ft.Text(
                             f"DIKKAT: '{recipient}' kullanicisinin sunucudaki kimlik anahtari yerel kaydinizdan farkli!\n\n"
-                            f"Bu durum bir MITM dinleme saldirisina veya anahtar yenilenmesine isaret edebilir.\n\n"
-                            f"Sunucudaki yeni anahtari kabul etmek istiyor musunuz?",
+                            f"This could indicate a MITM attack or a key renewal.\n\n"
+                            f"Do you want to accept the new key from the server?",
                             color="#ffffff"
                         ),
                         actions=[
-                            ft.TextButton("Reddet (Guvenli)", on_click=lambda e: close_warning_dialog(dialog, accept=False)),
-                            ft.TextButton("Yeni Anahtari Kabul Et", on_click=lambda e: close_warning_dialog(dialog, accept=True, rec=recipient, new_pem=server_pub_pem))
+                            ft.TextButton("Reject (Safe)", on_click=lambda e: close_warning_dialog(dialog, accept=False)),
+                            ft.TextButton("Accept New Key", on_click=lambda e: close_warning_dialog(dialog, accept=True, rec=recipient, new_pem=server_pub_pem))
                         ],
                         actions_alignment=ft.MainAxisAlignment.END,
-                        bgcolor="#1e1b30"
+                        bgcolor="#18181b"
                     )
                     page.overlay.append(dialog)
                     dialog.open = True
@@ -1510,33 +1485,33 @@ def main(page: ft.Page):
                     modal=True,
                     title=ft.Row(
                         controls=[
-                            ft.Icon(ft.Icons.SHIELD_OUTLINED, color="#4caf50"),
-                            ft.Text("Ilk Baglanti & Kimlik Dogrulama", color="#ffffff", weight=ft.FontWeight.BOLD)
+                            ft.Icon(ft.Icons.SHIELD_OUTLINED, color="#22c55e"),
+                            ft.Text("First Connection & Authentication", color="#ffffff", weight=ft.FontWeight.BOLD)
                         ],
                         spacing=8
                     ),
                     content=ft.Column(
                         controls=[
                             ft.Text(f"'{recipient}' kullanicisi ile ilk defa baglanti kuruluyor.", color="#ffffff"),
-                            ft.Text("Sunucudan alinan kimlik parmak izi (Fingerprint):", color="#aaaaaa", size=12),
+                            ft.Text("Identity fingerprint received from server:", color="#aaaaaa", size=12),
                             ft.Container(
-                                content=ft.Text(fingerprint, weight=ft.FontWeight.BOLD, color="#4caf50", size=13, selectable=True),
-                                bgcolor="#1e2337",
+                                content=ft.Text(fingerprint, weight=ft.FontWeight.BOLD, color="#22c55e", size=13, selectable=True),
+                                bgcolor="#27272a",
                                 padding=10,
                                 border_radius=8,
-                                border=ft.Border(left=ft.BorderSide(1, "#2a2f4e"), top=ft.BorderSide(1, "#2a2f4e"), right=ft.BorderSide(1, "#2a2f4e"), bottom=ft.BorderSide(1, "#2a2f4e")),
+                                border=ft.Border(left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"), right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")),
                             ),
-                            ft.Text("Guvenliginiz icin bu parmak izini arkadasinizla baska bir kanaldan dogrulamaniz onerilir.", color="#ff6b6b", size=11),
+                            ft.Text("For your safety, verify this fingerprint with your friend through another channel.", color="#ef4444", size=11),
                         ],
                         tight=True,
                         spacing=8
                     ),
                     actions=[
-                        ft.TextButton("Iptal Et (Guvenli)", on_click=lambda e: close_tofu_dialog(dialog, accept=False)),
-                        ft.TextButton("Anahtari Onayla ve Baglan", on_click=lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key))
+                        ft.TextButton("Cancel (Safe)", on_click=lambda e: close_tofu_dialog(dialog, accept=False)),
+                        ft.TextButton("Approve Key & Connect", on_click=lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key))
                     ],
                     actions_alignment=ft.MainAxisAlignment.END,
-                    bgcolor="#141832"
+                    bgcolor="#18181b"
                 )
                 page.overlay.append(dialog)
                 dialog.open = True
@@ -1549,74 +1524,165 @@ def main(page: ft.Page):
             log_status(f"'{recipient}' bulunamadi.")
 
     def on_send_click(e):
-        text      = message_input.value.strip()
-        view_once = state["view_once_mode"]
-        if not text: return
-        if not state["recipient"]:
-            log_status("Once bir aliciya veya gruba baglanin!")
+        recipient = state["recipient"]
+        if not recipient:
+            log_status("Please connect to a recipient or group first!")
             return
 
-        is_group = bool(state.get("is_group", False))
+        text = message_input.value.strip()
+        view_once = state["view_once_mode"]
+        staged = state.get("staged_file")
 
-        if is_group:
-            group_id = state["recipient"]
-            group_key = state["store"].get_group_key(group_id)
-            if not group_key:
-                log_status("Hata: Grubun sifreleme anahtari bulunamadi!")
-                return
-            try:
-                encrypted = encrypt_symmetric(text, group_key)
-            except Exception as ex:
-                log_status(f"Grup sifreleme hatasi: {ex}")
-                return
+        if not text and not staged:
+            return
 
-            send_group_message_via_ws(group_id, encrypted)
-            
-            # Kendi ekraninda goster ve yerel gecmise kaydet
-            add_message_to_chat(
-                sender=state["username"], text=text,
-                is_mine=True, save=True, view_once=False
-            )
-        else:
-            if not state["recipient_pub_key"]:
-                log_status("Alici public key bulunamadi!")
-                print(f"[Send] HATA: '{state['recipient']}' kullanicisinin public key'i bulunamadi!")
-                return
-            try:
-                print(f"[Send] Mesaj '{state['recipient']}' icin RSA-4096 ile sifreleniyor...")
-                encrypted = encrypt_message(text, state["recipient_pub_key"])
-            except Exception as ex:
-                log_status(f"Sifreleme hatasi: {ex}")
-                print(f"[Send] HATA: Sifreleme hatasi: {ex}")
-                return
-
-            send_message_via_ws(state["recipient"], encrypted, view_once)
-
-            # Kendi ekranında göster
-            add_message_to_chat(
-                sender=state["username"], text=text,
-                is_mine=True, save=not view_once, view_once=view_once,
-                encrypted_payload=encrypted,
-            )
-
+        # Clear input field immediately
         message_input.value = ""
-
-        # View-once sıfırla
-        if view_once:
-            state["view_once_mode"] = False
-            view_once_msg_btn.icon       = ft.Icons.VISIBILITY
-            view_once_msg_btn.icon_color = "#888888"
-
         page.update()
 
+        if staged:
+            # Show progress bar and disable attach/staged remove controls
+            upload_progress.visible = True
+            staged_file_container.disabled = True
+            attach_btn.disabled = True
+            upload_progress.value = 0.2
+            log_status(f"Encrypting '{staged['name']}'...")
+            page.update()
+
+            def do_file_upload_and_send():
+                try:
+                    raw = Path(staged["path"]).read_bytes()
+                    file_type = staged["type"]
+                    
+                    upload_progress.value = 0.4
+                    log_status("Uploading encrypted payload...")
+                    page.update()
+
+                    encrypted = encrypt_bytes(raw, state["recipient_pub_key"])
+                    upload_progress.value = 0.6
+                    page.update()
+
+                    resp = signed_post(
+                        "/api/upload_file",
+                        {
+                            "sender":         state["username"],
+                            "recipient":      recipient,
+                            "encrypted_data": encrypted,
+                            "original_name":  staged["name"],
+                            "file_type":      file_type,
+                        },
+                        timeout=60,
+                    )
+                    
+                    if resp.status_code != 200:
+                        log_status(f"Upload failed: {resp.text}")
+                        upload_progress.visible = False
+                        staged_file_container.disabled = False
+                        attach_btn.disabled = False
+                        page.update()
+                        return
+
+                    upload_progress.value = 0.8
+                    page.update()
+
+                    file_uuid = resp.json()["uuid"]
+                    
+                    send_ws_message_with_fallback({
+                        "type":          "file_message",
+                        "sender":        state["username"],
+                        "recipient":     recipient,
+                        "file_uuid":     file_uuid,
+                        "original_name": staged["name"],
+                        "file_type":     file_type,
+                        "view_once":     view_once,
+                    })
+
+                    add_file_to_chat(
+                        sender=state["username"],
+                        file_uuid=file_uuid,
+                        original_name=staged["name"],
+                        file_type=file_type,
+                        is_mine=True,
+                        view_once=view_once,
+                    )
+                    load_inbox_chats()
+
+                    # Reset view-once toggle
+                    if view_once:
+                        state["view_once_mode"] = False
+                        view_once_msg_btn.icon       = ft.Icons.VISIBILITY
+                        view_once_msg_btn.icon_color = "#888888"
+
+                    log_status(f"Sent: {staged['name']}")
+                    
+                    # Clear staged state and reset UI
+                    state["staged_file"] = None
+                    staged_file_container.visible = False
+                    staged_file_container.disabled = False
+                    upload_progress.visible = False
+                    attach_btn.disabled = False
+                    page.update()
+
+                except Exception as ex:
+                    log_status(f"Upload error: {ex}")
+                    upload_progress.visible = False
+                    staged_file_container.disabled = False
+                    attach_btn.disabled = False
+                    page.update()
+
+            threading.Thread(target=do_file_upload_and_send, daemon=True).start()
+
+        if text:
+            is_group = bool(state.get("is_group", False))
+            if is_group:
+                group_id = recipient
+                group_key = state["store"].get_group_key(group_id)
+                if not group_key:
+                    log_status("Error: Group encryption key not found!")
+                    return
+                try:
+                    encrypted = encrypt_symmetric(text, group_key)
+                except Exception as ex:
+                    log_status(f"Group encryption error: {ex}")
+                    return
+
+                send_group_message_via_ws(group_id, encrypted)
+                add_message_to_chat(
+                    sender=state["username"], text=text,
+                    is_mine=True, save=True, view_once=False
+                )
+            else:
+                if not state["recipient_pub_key"]:
+                    log_status("Recipient public key not found!")
+                    return
+                try:
+                    encrypted = encrypt_message(text, state["recipient_pub_key"])
+                except Exception as ex:
+                    log_status(f"Encryption error: {ex}")
+                    return
+
+                send_message_via_ws(recipient, encrypted, view_once)
+                add_message_to_chat(
+                    sender=state["username"], text=text,
+                    is_mine=True, save=not view_once, view_once=view_once,
+                    encrypted_payload=encrypted,
+                )
+                load_inbox_chats()
+
+            if view_once:
+                state["view_once_mode"] = False
+                view_once_msg_btn.icon       = ft.Icons.VISIBILITY
+                view_once_msg_btn.icon_color = "#888888"
+                page.update()
+
     username_text = ft.Text("", size=11, color="#9e9e9e")
-    status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ff6b6b")
-    status_label = ft.Text("Offline", size=10, color="#ff6b6b", weight=ft.FontWeight.BOLD)
+    status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ef4444")
+    status_label = ft.Text("Server: Offline", size=10, color="#ef4444", weight=ft.FontWeight.BOLD)
     
     username_subtitle = ft.Row(
         controls=[
             username_text,
-            ft.Text("|", size=10, color="#2a2f4e"),
+            ft.Text("|", size=10, color="#3f3f46"),
             status_dot,
             status_label
         ],
@@ -1624,8 +1690,8 @@ def main(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER
     )
 
-    recipient_status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ff6b6b")
-    recipient_status_label = ft.Text("Offline", size=10, color="#ff6b6b", weight=ft.FontWeight.BOLD)
+    recipient_status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ef4444")
+    recipient_status_label = ft.Text("Offline", size=10, color="#ef4444", weight=ft.FontWeight.BOLD)
     
     recipient_status_row = ft.Row(
         controls=[
@@ -1643,13 +1709,13 @@ def main(page: ft.Page):
         else:
             recipient_status_row.visible = True
             if online:
-                recipient_status_dot.bgcolor = "#4caf50"
+                recipient_status_dot.bgcolor = "#22c55e"
                 recipient_status_label.value = "Online"
-                recipient_status_label.color = "#4caf50"
+                recipient_status_label.color = "#22c55e"
             else:
-                recipient_status_dot.bgcolor = "#ff6b6b"
+                recipient_status_dot.bgcolor = "#ef4444"
                 recipient_status_label.value = "Offline"
-                recipient_status_label.color = "#ff6b6b"
+                recipient_status_label.color = "#ef4444"
         try: page.update()
         except: pass
 
@@ -1673,137 +1739,161 @@ def main(page: ft.Page):
 
     def update_connection_status(is_connected: bool):
         if is_connected:
-            status_dot.bgcolor = "#4caf50"  # Green
-            status_label.value = "Online"
-            status_label.color = "#4caf50"
+            status_dot.bgcolor = "#3b82f6"  # Blue
+            status_label.value = "Server: Online"
+            status_label.color = "#60a5fa"
         else:
-            status_dot.bgcolor = "#ff6b6b"  # Red
-            status_label.value = "Offline"
-            status_label.color = "#ff6b6b"
+            status_dot.bgcolor = "#ef4444"  # Red
+            status_label.value = "Server: Offline"
+            status_label.color = "#ef4444"
         try: page.update()
         except: pass
 
-    chat_view = ft.Container(
-        content=ft.Column(
-            controls=[
-                # App Bar
-                ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            ft.Icon(ft.Icons.LOCK, size=20, color="#6c63ff"),
-                            ft.Column(
-                                controls=[
-                                    ft.Text("HybridP2P Messenger", size=16,
-                                            weight=ft.FontWeight.BOLD, color="#ffffff"),
-                                    username_subtitle,
-                                ],
-                                spacing=0, tight=True,
-                            ),
-                            ft.Container(expand=True),
-                            ft.IconButton(
-                                icon=ft.Icons.GROUP, icon_color="#6c63ff",
-                                icon_size=20, tooltip="Grup Yonetimi",
-                                on_click=lambda e: show_group_dialog(e),
-                            ),
-                            ephemeral_btn,
-                            ft.IconButton(
-                                icon=ft.Icons.COPY, icon_color="#6c63ff",
-                                icon_size=20, tooltip="Kimligi Kopyala (Contact Card)",
-                                on_click=copy_public_key,
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.REFRESH, icon_color="#6c63ff",
-                                icon_size=20, tooltip="Cevrimdisi mesajlari cek",
-                                on_click=lambda e: fetch_offline_messages(),
-                            ),
-                        ],
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    bgcolor="#0f1328",
-                    padding=ft.Padding(16, 10, 16, 10),
-                    border=ft.Border(bottom=ft.BorderSide(1, "#1e2337")),
-                ),
+    chat_title_text = ft.Text("No active chat", size=16, weight=ft.FontWeight.BOLD, color="#ffffff")
+    inbox_list = ft.ListView(expand=True, spacing=4, padding=8)
 
-                # Alıcı seçimi
-                ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            recipient_field,
-                            recipient_status_row,
-                            ft.IconButton(
-                                icon=ft.Icons.LINK, icon_color="#6c63ff",
-                                icon_size=22, tooltip="Aliciya baglan",
-                                on_click=on_connect_recipient,
-                                style=ft.ButtonStyle(
-                                    bgcolor="#1e2337",
-                                    shape=ft.RoundedRectangleBorder(radius=10),
-                                ),
-                            ),
-                        ],
-                        spacing=8,
-                    ),
-                    padding=ft.Padding(12, 8, 12, 8),
-                    bgcolor="#0d1124",
-                ),
-
-                # Chat listesi
-                ft.Container(content=chat_list, expand=True, bgcolor="#0a0e1a"),
-
-                # Durum çubuğu
-                ft.Container(
-                    content=status_text,
-                    padding=ft.Padding(16, 4, 16, 4),
-                    bgcolor="#0d1124",
-                ),
-
-                # Mesaj giriş alanı — view-once + attach + send
-                ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            view_once_msg_btn,
-                            attach_btn,
-                            message_input,
-                            ft.FloatingActionButton(
-                                icon=ft.Icons.SEND_ROUNDED, bgcolor="#6c63ff",
-                                mini=True, on_click=on_send_click,
-                                tooltip="Gonder (E2EE)",
-                            ),
-                        ],
-                        spacing=4,
-                        vertical_alignment=ft.CrossAxisAlignment.END,
-                    ),
-                    bgcolor="#0f1328",
-                    padding=ft.Padding(12, 10, 12, 10),
-                    border=ft.Border(top=ft.BorderSide(1, "#1e2337")),
-                ),
-            ],
-            spacing=0, expand=True,
-        ),
-        expand=True,
+    # Define a single floating action button
+    fab = ft.FloatingActionButton(
+        icon=ft.Icons.CHAT,
+        bgcolor="#8b5cf6",
+        on_click=lambda e: open_new_chat_dialog(e, 0),
+        tooltip="Start New Chat / Group",
+        visible=False,
     )
+    page.floating_action_button = fab
 
-    def show_group_dialog(e):
-        group_name_input = ft.TextField(label="Grup Adi", hint_text="Ornek: Aile", border_color="#6c63ff")
-        group_members_input = ft.TextField(
-            label="Uyeler",
-            hint_text="Ornek: bob, charlie (virgülle ayirin)",
-            border_color="#6c63ff"
+    def load_inbox_chats():
+        if not state["store"]: return
+        inbox_list.controls.clear()
+        chats = state["store"].get_all_chats()
+        
+        if not chats:
+            inbox_list.controls.append(
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Icon(ft.Icons.CHAT_BUBBLE_OUTLINE, size=48, color="#3f3f46"),
+                            ft.Text("No chats yet.", size=14, color="#9e9e9e"),
+                            ft.Text("Start a new chat by clicking the '+' button.", size=11, color="#666666"),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=6,
+                    ),
+                    padding=40,
+                    alignment=ft.Alignment(0, 0),
+                )
+            )
+        else:
+            for c in chats:
+                partner = c["partner"]
+                chat_id = c["chat_id"]
+                is_group = bool(c.get("is_group", 0))
+                last_msg = c.get("last_message") or ""
+                last_time = _fmt_time(c.get("last_time")) if c.get("last_time") else ""
+                
+                if len(last_msg) > 35:
+                    last_msg = last_msg[:32] + "..."
+                
+                avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
+                avatar_color = "#8b5cf6" if is_group else "#007acc"
+                
+                def on_chat_tile_click(e, p=partner, ig=is_group):
+                    recipient_field.value = p
+                    on_connect_recipient(None)
+                
+                inbox_list.controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.CircleAvatar(
+                                    content=ft.Icon(avatar_icon, color="#ffffff", size=18),
+                                    bgcolor=avatar_color,
+                                    radius=20,
+                                ),
+                                ft.Column(
+                                    controls=[
+                                        ft.Row(
+                                            controls=[
+                                                ft.Text(partner, weight=ft.FontWeight.BOLD, size=14, color="#ffffff"),
+                                                ft.Text(last_time, size=10, color="#888888"),
+                                            ],
+                                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                        ),
+                                        ft.Text(last_msg or "No messages yet", size=12, color="#9e9e9e", max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                    ],
+                                    spacing=2,
+                                    expand=True,
+                                ),
+                            ],
+                            spacing=12,
+                        ),
+                        padding=ft.Padding(12, 10, 12, 10),
+                        border_radius=8,
+                        ink=True,
+                        on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click(e, p, ig),
+                        bgcolor="#18181b",
+                    )
+                )
+        try: page.update()
+        except: pass
+
+    def open_new_chat_dialog(e, default_tab_index=0):
+        # 1. DM Tab Controls
+        name_input = ft.TextField(
+            label="Username",
+            hint_text="Example: bob",
+            border_color="#8b5cf6",
+            focused_border_color="#a78bfa",
+            cursor_color="#8b5cf6",
         )
         
-        groups_list_column = ft.Column(spacing=6, height=200, scroll=ft.ScrollMode.AUTO)
+        # 2. Group Tab Controls
+        group_name_input = ft.TextField(
+            label="Group Name",
+            hint_text="Example: Family",
+            border_color="#8b5cf6",
+            focused_border_color="#a78bfa",
+            cursor_color="#8b5cf6",
+        )
+        group_members_input = ft.TextField(
+            label="Members",
+            hint_text="Example: bob, charlie (comma separated)",
+            border_color="#8b5cf6",
+            focused_border_color="#a78bfa",
+            cursor_color="#8b5cf6",
+        )
         
-        try:
-            resp = signed_get(f"/api/groups/{state['username']}", timeout=5)
-            groups = resp.json().get("groups", []) if resp.status_code == 200 else []
-        except:
-            groups = []
+        groups_list_column = ft.Column(spacing=6, height=180, scroll=ft.ScrollMode.AUTO)
+        groups_loading = ft.Row(
+            controls=[
+                ft.ProgressRing(width=16, height=16, stroke_width=2, color="#8b5cf6"),
+                ft.Text(" Loading groups...", size=12, color="#888888")
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+        )
+        groups_list_column.controls.append(groups_loading)
+
+        def close_dialog(e):
+            dialog.open = False
+            page.update()
+
+        def on_confirm(e):
+            rec = name_input.value.strip().lower()
+            if not rec: return
+            if rec == state["username"]:
+                name_input.error_text = "You cannot chat with yourself!"
+                page.update()
+                return
+            
+            close_dialog(None)
+            recipient_field.value = rec
+            on_connect_recipient(None)
 
         def on_group_select(group_id, name):
             key = state["store"].get_group_key(group_id)
             if not key:
-                log_status("Hata: Bu grubun sifreleme anahtari sizde yok!")
-                dialog.open = False
-                page.update()
+                log_status("Error: You don't have the encryption key for this group!")
+                close_dialog(None)
                 return
             
             state["recipient"] = group_id
@@ -1811,116 +1901,74 @@ def main(page: ft.Page):
             
             recipient_field.value = name
             recipient_field.read_only = True
-            recipient_field.border_color = "#4caf50"
+            recipient_field.border_color = "#22c55e"
             ephemeral_btn.disabled = True
             
             load_history_to_chat()
             log_status(f"'{name}' grubu ile sohbet basladi.")
-            dialog.open = False
-            page.update()
+            show_chat_screen()
+            close_dialog(None)
 
         def on_group_rekey(group_id, name):
             import os
             new_key = os.urandom(32)
             state["store"].save_group_key(group_id, new_key.hex())
             
-            try:
-                m_resp = signed_get(f"/api/groups/{group_id}/members", timeout=5)
-                members = m_resp.json().get("members", []) if m_resp.status_code == 200 else []
-            except:
-                members = []
+            def do_rekey():
+                try:
+                    m_resp = signed_get(f"/api/groups/{group_id}/members", timeout=5)
+                    members = m_resp.json().get("members", []) if m_resp.status_code == 200 else []
+                except:
+                    members = []
+                    
+                for m in members:
+                    m_username = m["username"]
+                    if m_username == state["username"]: continue
+                    m_pub_key = fetch_recipient_pub_key(m_username)
+                    if not m_pub_key: continue
+                    
+                    enc_payload = encrypt_message(new_key.hex(), m_pub_key)
+                    
+                    send_ws_message_with_fallback({
+                        "type": "group_key_dist",
+                        "sender": state["username"],
+                        "recipient": m_username,
+                        "group_id": group_id,
+                        "encrypted_payload": enc_payload
+                    })
+                log_status(f"'{name}' grubunun anahtari yenilendi ve dagitildi.")
+                page.update()
                 
-            for m in members:
-                m_username = m["username"]
-                if m_username == state["username"]: continue
-                m_pub_key = fetch_recipient_pub_key(m_username)
-                if not m_pub_key: continue
-                
-                enc_payload = encrypt_message(new_key.hex(), m_pub_key)
-                
-                send_ws_message_with_fallback({
-                    "type": "group_key_dist",
-                    "sender": state["username"],
-                    "recipient": m_username,
-                    "group_id": group_id,
-                    "encrypted_payload": enc_payload
-                })
-                
-            log_status(f"'{name}' grubunun anahtari yenilendi ve dagitildi.")
-            dialog.open = False
-            page.update()
+            threading.Thread(target=do_rekey, daemon=True).start()
+            close_dialog(None)
 
         def on_group_leave(group_id, name):
-            try:
-                resp = signed_delete(f"/api/groups/{group_id}/members/{state['username']}", timeout=5)
-                if resp.status_code == 200:
-                    log_status(f"'{name}' grubundan ciktiniz.")
-                    if state["recipient"] == group_id:
-                        state["recipient"] = None
-                        state["is_group"] = False
-                        recipient_field.value = ""
-                        recipient_field.read_only = False
-                        recipient_field.border_color = "#6c63ff"
-                        chat_list.controls.clear()
-            except Exception as ex:
-                log_status(f"Gruptan cikma hatasi: {ex}")
-            dialog.open = False
-            page.update()
+            def do_leave():
+                try:
+                    resp = signed_delete(f"/api/groups/{group_id}/members/{state['username']}", timeout=5)
+                    if resp.status_code == 200:
+                        log_status(f"'{name}' grubundan ciktiniz.")
+                        if state["recipient"] == group_id:
+                            state["recipient"] = None
+                            state["is_group"] = False
+                            recipient_field.value = ""
+                            recipient_field.read_only = False
+                            recipient_field.border_color = "#8b5cf6"
+                            chat_list.controls.clear()
+                        load_inbox_chats()
+                except Exception as ex:
+                    log_status(f"Gruptan cikma hatasi: {ex}")
+                page.update()
+                
+            threading.Thread(target=do_leave, daemon=True).start()
+            close_dialog(None)
 
-        for g in groups:
-            gid = g["group_id"]
-            gname = g["group_name"]
-            
-            groups_list_column.controls.append(
-                ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Row(
-                                controls=[
-                                    ft.Text(gname, weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
-                                    ft.Container(expand=True),
-                                    ft.IconButton(
-                                        icon=ft.Icons.CHAT,
-                                        icon_size=16,
-                                        icon_color="#6c63ff",
-                                        tooltip="Sohbete Basla",
-                                        on_click=lambda e, gid=gid, gname=gname: on_group_select(gid, gname)
-                                    ),
-                                    ft.IconButton(
-                                        icon=ft.Icons.KEY,
-                                        icon_size=16,
-                                        icon_color="#4caf50",
-                                        tooltip="Anahtari Yenile (Rekey)",
-                                        on_click=lambda e, gid=gid, gname=gname: on_group_rekey(gid, gname)
-                                    ),
-                                    ft.IconButton(
-                                        icon=ft.Icons.EXIT_TO_APP,
-                                        icon_size=16,
-                                        icon_color="#ff6b6b",
-                                        tooltip="Gruptan Cik",
-                                        on_click=lambda e, gid=gid, gname=gname: on_group_leave(gid, gname)
-                                    )
-                                ],
-                                alignment=ft.MainAxisAlignment.CENTER,
-                                spacing=4
-                            ),
-                            ft.Text(f"ID: {gid}", size=9, color="#888888")
-                        ],
-                        spacing=2
-                    ),
-                    padding=6,
-                    border=ft.Border(left=ft.BorderSide(1, "#2a2f4e"), top=ft.BorderSide(1, "#2a2f4e"), right=ft.BorderSide(1, "#2a2f4e"), bottom=ft.BorderSide(1, "#2a2f4e")),
-                    border_radius=8,
-                    bgcolor="#1e2337"
-                )
-            )
-            
         def on_create_click(e):
             name = group_name_input.value.strip()
             members_raw = group_members_input.value.strip()
             
             if not name:
-                group_name_input.error_text = "Grup adi bos olamaz!"
+                group_name_input.error_text = "Group name cannot be empty!"
                 page.update()
                 return
                 
@@ -1932,98 +1980,409 @@ def main(page: ft.Page):
             import os
             group_key = os.urandom(32)
             
-            try:
-                resp = signed_post("/api/groups", {
-                    "group_id": group_id,
-                    "group_name": name,
-                    "creator": state["username"],
-                    "members": members
-                }, timeout=5)
-                
-                if resp.status_code == 200:
-                    state["store"].save_group_key(group_id, group_key.hex())
-                    state["store"].get_or_create_group_chat(group_id, name)
+            def do_create():
+                try:
+                    resp = signed_post("/api/groups", {
+                        "group_id": group_id,
+                        "group_name": name,
+                        "creator": state["username"],
+                        "members": members
+                    }, timeout=5)
                     
-                    for m in members:
-                        m_pub = fetch_recipient_pub_key(m)
-                        if m_pub:
-                            enc_key = encrypt_message(group_key.hex(), m_pub)
-                            
-                            send_ws_message_with_fallback({
-                                "type": "group_key_dist",
-                                "sender": state["username"],
-                                "recipient": m,
-                                "group_id": group_id,
-                                "encrypted_payload": enc_key
-                            })
-                            
-                    state["recipient"] = group_id
-                    state["is_group"] = True
-                    
-                    recipient_field.value = name
-                    recipient_field.read_only = True
-                    recipient_field.border_color = "#4caf50"
-                    ephemeral_btn.disabled = True
-                    
-                    load_history_to_chat()
-                    log_status(f"'{name}' grubu olusturuldu.")
-                    dialog.open = False
-                    page.update()
-                else:
-                    log_status(f"Grup olusturma hatasi: {resp.text}")
-                    dialog.open = False
-                    page.update()
-            except Exception as ex:
-                log_status(f"Grup olusturma hatasi: {ex}")
-                dialog.open = False
+                    if resp.status_code == 200:
+                        state["store"].save_group_key(group_id, group_key.hex())
+                        state["store"].get_or_create_group_chat(group_id, name)
+                        
+                        for m in members:
+                            m_pub = fetch_recipient_pub_key(m)
+                            if m_pub:
+                                enc_key = encrypt_message(group_key.hex(), m_pub)
+                                
+                                send_ws_message_with_fallback({
+                                    "type": "group_key_dist",
+                                    "sender": state["username"],
+                                    "recipient": m,
+                                    "group_id": group_id,
+                                    "encrypted_payload": enc_key
+                                })
+                                
+                        state["recipient"] = group_id
+                        state["is_group"] = True
+                        
+                        recipient_field.value = name
+                        recipient_field.read_only = True
+                        recipient_field.border_color = "#22c55e"
+                        ephemeral_btn.disabled = True
+                        
+                        load_history_to_chat()
+                        log_status(f"'{name}' grubu olusturuldu.")
+                        show_chat_screen()
+                    else:
+                        log_status(f"Grup olusturma hatasi: {resp.text}")
+                except Exception as ex:
+                    log_status(f"Grup olusturma hatasi: {ex}")
                 page.update()
+                
+            threading.Thread(target=do_create, daemon=True).start()
+            close_dialog(None)
+
+        # Tabs & layouts
+        dm_tab_content = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text("Enter username to chat directly:", size=13, color="#9e9e9e"),
+                    name_input,
+                    ft.Container(height=10),
+                    ft.Row(
+                        controls=[
+                            ft.TextButton("Cancel", on_click=close_dialog),
+                            ft.ElevatedButton(
+                                "Start Chat", 
+                                on_click=on_confirm, 
+                                style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff")
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.END,
+                    )
+                ],
+                spacing=8,
+                tight=True,
+            ),
+            padding=ft.Padding(12, 16, 12, 16),
+        )
+
+        group_tab_content = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text("Create New Group", weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
+                    group_name_input,
+                    group_members_input,
+                    ft.ElevatedButton(
+                        "Create Group",
+                        on_click=on_create_click,
+                        style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff")
+                    ),
+                    ft.Divider(color="#27272a"),
+                    ft.Text("My Groups", weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
+                    groups_list_column,
+                ],
+                spacing=8,
+                tight=True,
+            ),
+            padding=ft.Padding(12, 16, 12, 16),
+        )
+
+        tabs = ft.Tabs(
+            selected_index=default_tab_index,
+            tabs=[
+                ft.Tab(
+                    text="Direct Message",
+                    icon=ft.Icons.PERSON,
+                    content=dm_tab_content,
+                ),
+                ft.Tab(
+                    text="Group Chat",
+                    icon=ft.Icons.GROUP,
+                    content=group_tab_content,
+                ),
+            ],
+            expand=True,
+            animation_duration=200,
+        )
 
         dialog = ft.AlertDialog(
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.GROUP, color="#6c63ff"),
-                    ft.Text("Grup Yonetimi", size=16, color="#ffffff")
+                    ft.Icon(ft.Icons.CHAT_ROUNDED, color="#8b5cf6"),
+                    ft.Text("New Conversation", size=16, color="#ffffff"),
+                    ft.Container(expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE,
+                        icon_size=18,
+                        icon_color="#888888",
+                        on_click=close_dialog,
+                    ),
                 ],
-                spacing=8
+                spacing=8,
             ),
             content=ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Text("Yeni Grup Olustur", weight=ft.FontWeight.BOLD, size=13),
-                        group_name_input,
-                        group_members_input,
-                        ft.ElevatedButton(
-                            "Grup Olustur",
-                            on_click=on_create_click,
-                            style=ft.ButtonStyle(bgcolor="#6c63ff", color="#ffffff")
-                        ),
-                        ft.Divider(color="#2a2f4e"),
-                        ft.Text("Gruplarim", weight=ft.FontWeight.BOLD, size=13),
-                        groups_list_column
-                    ],
-                    spacing=8,
-                    tight=True
-                ),
-                width=350
+                content=tabs,
+                width=400,
+                height=520,
             ),
-            bgcolor="#141832"
+            bgcolor="#18181b",
         )
-        
+
+        def load_groups_async():
+            try:
+                resp = signed_get(f"/api/groups/{state['username']}", timeout=5)
+                groups = resp.json().get("groups", []) if resp.status_code == 200 else []
+            except:
+                groups = []
+            
+            groups_list_column.controls.clear()
+            
+            if not groups:
+                groups_list_column.controls.append(
+                    ft.Text("No groups found.", size=12, color="#888888")
+                )
+            else:
+                for g in groups:
+                    gid = g["group_id"]
+                    gname = g["group_name"]
+                    
+                    groups_list_column.controls.append(
+                        ft.Container(
+                            content=ft.Column(
+                                controls=[
+                                    ft.Row(
+                                        controls=[
+                                            ft.Text(gname, weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
+                                            ft.Container(expand=True),
+                                            ft.IconButton(
+                                                icon=ft.Icons.CHAT,
+                                                icon_size=16,
+                                                icon_color="#8b5cf6",
+                                                tooltip="Start Chat",
+                                                on_click=lambda e, gid=gid, gname=gname: on_group_select(gid, gname)
+                                            ),
+                                            ft.IconButton(
+                                                icon=ft.Icons.KEY,
+                                                icon_size=16,
+                                                icon_color="#22c55e",
+                                                tooltip="Refresh Key (Rekey)",
+                                                on_click=lambda e, gid=gid, gname=gname: on_group_rekey(gid, gname)
+                                            ),
+                                            ft.IconButton(
+                                                icon=ft.Icons.EXIT_TO_APP,
+                                                icon_size=16,
+                                                icon_color="#ef4444",
+                                                tooltip="Leave Group",
+                                                on_click=lambda e, gid=gid, gname=gname: on_group_leave(gid, gname)
+                                            )
+                                        ],
+                                        alignment=ft.MainAxisAlignment.CENTER,
+                                        spacing=4
+                                    ),
+                                    ft.Text(f"ID: {gid}", size=9, color="#888888")
+                                ],
+                                spacing=2
+                            ),
+                            padding=6,
+                            border=ft.Border(left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"), right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")),
+                            border_radius=8,
+                            bgcolor="#27272a"
+                        )
+                    )
+            try: page.update()
+            except: pass
+
         page.overlay.append(dialog)
         dialog.open = True
         page.update()
+        
+        threading.Thread(target=load_groups_async, daemon=True).start()
+
+    def refresh_inbox_and_messages():
+        fetch_offline_messages()
+        load_inbox_chats()
+
+    inbox_view = ft.Container(
+        content=ft.Column(
+            controls=[
+                # Inbox App Bar
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.LOCK, size=20, color="#8b5cf6"),
+                            ft.Column(
+                                controls=[
+                                    ft.Text("Chats", size=18,
+                                             weight=ft.FontWeight.BOLD, color="#ffffff"),
+                                    username_subtitle,
+                                ],
+                                spacing=0, tight=True,
+                            ),
+                            ft.Container(expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.GROUP, icon_color="#8b5cf6",
+                                icon_size=20, tooltip="Group Management",
+                                on_click=lambda e: open_new_chat_dialog(e, default_tab_index=1),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.REFRESH, icon_color="#8b5cf6",
+                                icon_size=20, tooltip="Refresh",
+                                on_click=lambda e: refresh_inbox_and_messages(),
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    bgcolor="#18181b",
+                    padding=ft.Padding(16, 10, 16, 10),
+                    border=ft.Border(bottom=ft.BorderSide(1, "#27272a")),
+                ),
+                
+                # Chat List
+                ft.Container(content=inbox_list, expand=True, bgcolor="#09090b"),
+                
+                # Durum çubuğu
+                ft.Container(
+                    content=status_text,
+                    padding=ft.Padding(16, 4, 16, 4),
+                    bgcolor="#18181b",
+                ),
+            ],
+            spacing=0, expand=True,
+        ),
+        expand=True,
+    )
+
+    # staged file controls
+    staged_file_name_text = ft.Text("", size=12, color="#ffffff", weight=ft.FontWeight.BOLD)
+    
+    def remove_staged_file(e):
+        state["staged_file"] = None
+        staged_file_container.visible = False
+        upload_progress.visible = False
+        page.update()
+
+    upload_progress = ft.ProgressBar(color="#8b5cf6", height=2, visible=False)
+
+    staged_file_container = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.ATTACH_FILE, color="#8b5cf6", size=16),
+                staged_file_name_text,
+                ft.Container(expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.CLOSE,
+                    icon_color="#ef4444",
+                    icon_size=14,
+                    on_click=remove_staged_file,
+                    tooltip="Remove file",
+                )
+            ],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+        bgcolor="#27272a",
+        padding=ft.Padding(8, 4, 8, 4),
+        border_radius=6,
+        visible=False,
+    )
+
+    chat_view = ft.Container(
+        content=ft.Column(
+            controls=[
+                # App Bar
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.IconButton(
+                                icon=ft.Icons.ARROW_BACK, icon_color="#ffffff",
+                                icon_size=20, on_click=lambda e: show_inbox_screen(),
+                            ),
+                            ft.Column(
+                                controls=[
+                                    chat_title_text,
+                                    recipient_status_row,
+                                ],
+                                spacing=0, tight=True,
+                            ),
+                            ft.Container(expand=True),
+                            ephemeral_btn,
+                            ft.IconButton(
+                                icon=ft.Icons.COPY, icon_color="#8b5cf6",
+                                icon_size=20, tooltip="Copy Contact Card",
+                                on_click=copy_public_key,
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.REFRESH, icon_color="#8b5cf6",
+                                icon_size=20, tooltip="Fetch Offline Messages",
+                                on_click=lambda e: fetch_offline_messages(),
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    bgcolor="#18181b",
+                    padding=ft.Padding(16, 10, 16, 10),
+                    border=ft.Border(bottom=ft.BorderSide(1, "#27272a")),
+                ),
+
+                # Chat listesi
+                ft.Container(content=chat_list, expand=True, bgcolor="#09090b"),
+
+                # Durum çubuğu
+                ft.Container(
+                    content=status_text,
+                    padding=ft.Padding(16, 4, 16, 4),
+                    bgcolor="#18181b",
+                ),
+
+                # Mesaj giriş alanı — view-once + attach + send
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            staged_file_container,
+                            upload_progress,
+                            ft.Row(
+                                controls=[
+                                    view_once_msg_btn,
+                                    attach_btn,
+                                    message_input,
+                                    ft.FloatingActionButton(
+                                        icon=ft.Icons.SEND_ROUNDED, bgcolor="#8b5cf6",
+                                        mini=True, on_click=on_send_click,
+                                        tooltip="Send (E2EE)",
+                                    ),
+                                ],
+                                spacing=4,
+                                vertical_alignment=ft.CrossAxisAlignment.END,
+                            ),
+                        ],
+                        spacing=6,
+                        tight=True,
+                    ),
+                    bgcolor="#18181b",
+                    padding=ft.Padding(12, 10, 12, 10),
+                    border=ft.Border(top=ft.BorderSide(1, "#27272a")),
+                ),
+            ],
+            spacing=0, expand=True,
+        ),
+        expand=True,
+    )
 
     # ── Ekran Geçişleri ──────────────────────────────────────────────
 
     def show_login_screen():
+        fab.visible = False
         page.controls.clear()
         page.add(login_view)
         page.update()
 
     def show_chat_screen():
-        username_text.value = f"Kullanici: {state['username']}"
+        fab.visible = False
+        if state["recipient"]:
+            if state.get("is_group", False):
+                chat_info = state["store"].get_chat_info(state["recipient"])
+                display_name = chat_info.get("partner", state["recipient"])
+                chat_title_text.value = f"Group: {display_name}"
+            else:
+                chat_title_text.value = f"Chat: {state['recipient']}"
+        else:
+            chat_title_text.value = "No active chat"
+            
+        username_text.value = f"User: {state['username']}"
         page.controls.clear()
         page.add(chat_view)
+        page.update()
+
+    def show_inbox_screen():
+        fab.visible = True
+        load_inbox_chats()
+        page.controls.clear()
+        page.add(inbox_view)
         page.update()
 
     show_login_screen()

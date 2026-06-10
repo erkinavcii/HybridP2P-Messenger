@@ -95,6 +95,12 @@ class MessageStore:
         except sqlite3.OperationalError:
             pass
 
+        # Eski veritabanları için msg_type sütununu ekle
+        try:
+            cursor.execute("ALTER TABLE messages ADD COLUMN msg_type TEXT DEFAULT 'text'")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
         conn.close()
 

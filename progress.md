@@ -70,6 +70,8 @@
 - [x] **Resim inline thumbnail** — data:// URL ile dogrudan gosterim
 - [x] **Dosya kaydetme** — ~/Downloads klasorune kaydeder
 - [x] **View-once dosya** — indirme sonrasi 10s icinde thumbnail silinir
+- [x] **WhatsApp-style Inbox / Chat List (Home screen)** — List of recent chats, avatar/initials, last message snippet, last message timestamp, click-to-open, floating action button for new chat, and dynamic list update.
+
 
 ### 📦 Proje Altyapısı
 - [x] `requirements.txt` oluşturma

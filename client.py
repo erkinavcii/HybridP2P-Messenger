@@ -129,7 +129,7 @@ def main(page: ft.Page):
         ]
         if is_mine:
             tick_icon = ft.Icon(
-                name=ft.Icons.DONE_ALL if is_read else ft.Icons.DONE,
+                ft.Icons.DONE_ALL if is_read else ft.Icons.DONE,
                 size=14,
                 color="#a78bfa" if is_read else "#71717a"
             )

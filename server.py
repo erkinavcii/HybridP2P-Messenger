@@ -1427,6 +1427,15 @@ async def _deliver_pending_messages(username: str):
             await db.commit()
             print(f"[Server] Delivered and deleted {len(rows)} pending messages for '{username}'.")
 
+# Yerel static web istemcisini ana dizinde sun
+try:
+    from fastapi.staticfiles import StaticFiles
+    import os
+    os.makedirs("static", exist_ok=True)
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    print("[Server] Static web client mounted successfully at '/'")
+except Exception as mount_ex:
+    print(f"[Warning] Static client mount error: {mount_ex}")
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║                        SUNUCU BAŞLATMA                            ║

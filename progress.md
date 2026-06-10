@@ -117,7 +117,7 @@
 - [ ] **Mesaj Duzenleme/Silme**: Gonderilenin her iki taraftan silinmesi
 - [ ] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi
 - [ ] **Yaziyor... Gostergesi**: Karsi tarafin yazma durumu
-- [ ] **Mesaj Arama**: Yerel gecmiste arama
+- [x] **Mesaj Arama**: Yerel gecmiste arama (Sohbet ve Mesaj Gövdesi Arama) ✅
 
 ### 🗄️ Veri Yönetimi
 - [x] **Yerel Mesaj Gecmisi (SQLite)** — istemci tarafinda message_store.py ✅
@@ -127,7 +127,7 @@
 - [ ] **Mesaj TTL (Time-to-Live)**: Teslim edilmemis mesajlarin belirli sure sonra otomatik silinmesi
 
 ### 🎨 Arayüz ve UX İyileştirmeleri
-- [ ] **Çoklu Sohbet Sekmesi**: Birden fazla kişiyle eş zamanlı sohbet
+- [x] **Çoklu Sohbet Sekmesi**: Birden fazla kişiyle eş zamanlı sohbet (WhatsApp tarzı Inbox / Sohbet Listesi) ✅
 - [ ] **Kişi Listesi / Rehber**: Kayıtlı kullanıcılar arasında arama ve favoriler
 - [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri
 - [ ] **Tema Seçimi**: Açık/koyu mod geçişi + özel renk temaları
@@ -148,7 +148,7 @@
 - [ ] **Android APK Derleme**: Flet ile Android paketleme
 - [ ] **iOS IPA Derleme**: Flet ile iOS paketleme
 - [ ] **Web Versiyonu**: Flet web hedefi ile tarayıcıda çalışma
-- [ ] **Masaüstü İnstaller**: Windows (.exe), macOS (.dmg), Linux (.deb) paketleme
+- [x] **Masaüstü İnstaller**: Windows (.exe), macOS (.dmg), Linux (.deb) paketleme (.exe derlendi) ✅
 - [ ] **Çoklu Cihaz Senkronizasyonu**: Aynı hesabı birden fazla cihazda kullanma
 
 ### 📊 İzleme ve Yönetim

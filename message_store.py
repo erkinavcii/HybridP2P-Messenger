@@ -67,6 +67,7 @@ class MessageStore:
                 timestamp    TEXT NOT NULL,
                 is_mine      INTEGER NOT NULL DEFAULT 0,
                 msg_type     TEXT NOT NULL DEFAULT 'text',
+                is_read      INTEGER NOT NULL DEFAULT 1,
                 FOREIGN KEY (chat_id) REFERENCES chats(chat_id)
             )
         """)
@@ -98,6 +99,12 @@ class MessageStore:
         # Eski veritabanları için msg_type sütununu ekle
         try:
             cursor.execute("ALTER TABLE messages ADD COLUMN msg_type TEXT DEFAULT 'text'")
+        except sqlite3.OperationalError:
+            pass
+
+        # Eski veritabanları için is_read sütununu ekle
+        try:
+            cursor.execute("ALTER TABLE messages ADD COLUMN is_read INTEGER DEFAULT 1")
         except sqlite3.OperationalError:
             pass
 
@@ -208,6 +215,7 @@ class MessageStore:
         timestamp: str = None,
         is_view_once: bool = False,
         msg_type: str = "text",
+        is_read: int = None,
     ) -> bool:
         """
         Mesajı yerel geçmişe kaydeder.
@@ -227,13 +235,16 @@ class MessageStore:
         cid = self._chat_id(partner)
         ts = timestamp or self._now()
 
+        if is_read is None:
+            is_read = 1 if is_mine else 0
+
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute(
                 """INSERT INTO messages
-                   (chat_id, sender, content, timestamp, is_mine, msg_type)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (cid, sender, content, ts, 1 if is_mine else 0, msg_type)
+                   (chat_id, sender, content, timestamp, is_mine, msg_type, is_read)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (cid, sender, content, ts, 1 if is_mine else 0, msg_type, is_read)
             )
             conn.commit()
             return True
@@ -257,6 +268,19 @@ class MessageStore:
 
     # ── Mesaj Okuma ─────────────────────────────────────────────────
 
+    def mark_as_read(self, partner: str):
+        """Sohbetteki okunmamış mesajları okundu olarak işaretler."""
+        cid = self._chat_id(partner)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "UPDATE messages SET is_read = 1 WHERE chat_id = ? AND is_mine = 0 AND is_read = 0",
+                (cid,)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def get_messages(self, partner: str, limit: int = 200) -> list:
         """
         Belirli bir partnerle olan mesaj geçmişini döndürür.
@@ -279,13 +303,14 @@ class MessageStore:
             conn.close()
 
     def get_all_chats(self) -> list:
-        """Tüm chat'leri son mesajlarıyla listeler (chat listesi için)."""
+        """Tüm chat'leri son mesajlarıyla ve okunmamış sayılarıyla listeler (chat listesi için)."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(
                 """SELECT c.chat_id, c.partner, c.ephemeral, c.changed_at, c.is_group,
-                          m.content as last_message, m.timestamp as last_time
+                          m.content as last_message, m.timestamp as last_time,
+                          (SELECT COUNT(*) FROM messages WHERE chat_id = c.chat_id AND is_mine = 0 AND is_read = 0) as unread_count
                    FROM chats c
                    LEFT JOIN messages m ON m.id = (
                        SELECT MAX(id) FROM messages WHERE chat_id = c.chat_id
@@ -293,6 +318,45 @@ class MessageStore:
                    ORDER BY COALESCE(m.timestamp, c.created_at) DESC"""
             ).fetchall()
             return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def search_chats_and_messages(self, query: str) -> dict:
+        """
+        Arama sorgusuna göre eşleşen sohbetleri ve mesajları döndürür.
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            # 1. Partner ismi eşleşen sohbetler
+            chat_rows = conn.execute(
+                """SELECT c.chat_id, c.partner, c.ephemeral, c.changed_at, c.is_group,
+                          m.content as last_message, m.timestamp as last_time,
+                          (SELECT COUNT(*) FROM messages WHERE chat_id = c.chat_id AND is_mine = 0 AND is_read = 0) as unread_count
+                   FROM chats c
+                   LEFT JOIN messages m ON m.id = (
+                       SELECT MAX(id) FROM messages WHERE chat_id = c.chat_id
+                   )
+                   WHERE c.partner LIKE ?
+                   ORDER BY COALESCE(m.timestamp, c.created_at) DESC""",
+                (f"%{query}%",)
+            ).fetchall()
+
+            # 2. İçeriği eşleşen mesajlar
+            msg_rows = conn.execute(
+                """SELECT c.partner, c.is_group, m.sender, m.content, m.timestamp
+                   FROM messages m
+                   JOIN chats c ON m.chat_id = c.chat_id
+                   WHERE m.content LIKE ? AND m.msg_type NOT IN ('system', 'file')
+                   ORDER BY m.timestamp DESC
+                   LIMIT 50""",
+                (f"%{query}%",)
+            ).fetchall()
+
+            return {
+                "chats": [dict(r) for r in chat_rows],
+                "messages": [dict(r) for r in msg_rows]
+            }
         finally:
             conn.close()
 

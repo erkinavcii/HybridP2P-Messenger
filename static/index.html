@@ -1,0 +1,2035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HybridP2P E2EE Web Messenger</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Custom Vanilla CSS for Premium UI/UX */
+        :root {
+            --bg-color: #09090b;
+            --container-bg: #18181b;
+            --border-color: #27272a;
+            --accent-color: #8b5cf6;
+            --accent-hover: #a78bfa;
+            --text-color: #ffffff;
+            --text-muted: #9e9e9e;
+            --bubble-me: #8b5cf6;
+            --bubble-other: #27272a;
+            --online-color: #22c55e;
+            --offline-color: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* App Wrapper */
+        #app {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            background-color: var(--bg-color);
+        }
+
+        /* Screens */
+        .screen {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        /* ── Login Screen ── */
+        #login-screen {
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1e1b4b 0%, #09090b 100%);
+        }
+
+        .login-card {
+            background-color: var(--container-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .logo-container {
+            margin-bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo-icon {
+            font-size: 48px;
+            color: var(--accent-color);
+            margin-bottom: 8px;
+        }
+
+        .login-card h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .login-card p {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .input-control {
+            width: 100%;
+            background-color: #09090b;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--text-color);
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .input-control:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .btn {
+            width: 100%;
+            background-color: var(--accent-color);
+            color: var(--text-color);
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            background-color: var(--border-color);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* ── Main Chat Screen ── */
+        #chat-screen {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 350px;
+            border-right: 1px solid var(--border-color);
+            background-color: var(--container-bg);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .user-profile {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .user-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .sidebar-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 6px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .action-icon-btn:hover {
+            background-color: #09090b;
+            color: var(--text-color);
+        }
+
+        /* Search Bar Wrapper */
+        .search-wrapper {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            background-color: var(--container-bg);
+        }
+
+        .search-box {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-box input {
+            width: 100%;
+            background-color: #09090b;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 12px 8px 36px;
+            color: var(--text-color);
+            font-size: 13px;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .search-box svg {
+            position: absolute;
+            left: 12px;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        /* Inbox List */
+        .inbox-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .chat-tile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            background-color: #18181b;
+        }
+
+        .chat-tile:hover {
+            background-color: #27272a;
+        }
+
+        .chat-tile.active {
+            background-color: #27272a;
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: white;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .avatar.group {
+            background-color: #007acc;
+        }
+
+        .chat-tile-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow: hidden;
+        }
+
+        .chat-tile-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-tile-name {
+            font-weight: 600;
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .chat-tile-time {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .chat-tile-time.unread {
+            color: var(--online-color);
+        }
+
+        .chat-tile-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .chat-tile-lastmsg {
+            font-size: 12px;
+            color: var(--text-muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+
+        .badge {
+            background-color: var(--accent-color);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+
+        .empty-inbox {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text-muted);
+            gap: 8px;
+        }
+
+        .empty-inbox-icon {
+            font-size: 36px;
+            color: var(--border-color);
+        }
+
+        /* Main Chat Window */
+        .chat-window {
+            flex: 1;
+            background-color: #09090b;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .empty-chat-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            gap: 12px;
+            background: radial-gradient(circle at center, #18181b 0%, #09090b 100%);
+        }
+
+        .empty-chat-icon {
+            font-size: 64px;
+            color: var(--border-color);
+        }
+
+        .chat-header {
+            padding: 12px 20px;
+            background-color: var(--container-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-header-meta {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .chat-header-status {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-muted);
+            display: inline-block;
+        }
+
+        .status-dot.online {
+            background-color: var(--online-color);
+        }
+
+        .status-dot.offline {
+            background-color: var(--offline-color);
+        }
+
+        .chat-header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Chat Body */
+        .chat-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* Message Bubbles */
+        .msg-container {
+            display: flex;
+            width: 100%;
+        }
+
+        .msg-container.me {
+            justify-content: flex-end;
+        }
+
+        .msg-container.other {
+            justify-content: flex-start;
+        }
+
+        .msg-bubble {
+            max-width: 65%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            position: relative;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            word-wrap: break-word;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .msg-container.me .msg-bubble {
+            background-color: var(--bubble-me);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg-container.other .msg-bubble {
+            background-color: var(--bubble-other);
+            color: white;
+            border-bottom-left-radius: 2px;
+            border: 1px solid var(--border-color);
+        }
+
+        .msg-sender {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--accent-hover);
+        }
+
+        .msg-text {
+            line-height: 1.4;
+        }
+
+        .msg-meta {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            margin-top: 2px;
+        }
+
+        .msg-time {
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* System and Ephemeral Messages */
+        .msg-container.system {
+            justify-content: center;
+        }
+
+        .msg-system-bubble {
+            background-color: rgba(39, 39, 42, 0.6);
+            color: var(--text-muted);
+            font-size: 11px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+            text-align: center;
+        }
+
+        /* Input Panel */
+        .chat-input-panel {
+            padding: 16px 20px;
+            background-color: var(--container-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .input-message-box {
+            flex: 1;
+            background-color: #09090b;
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 10px 18px;
+            color: var(--text-color);
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .input-message-box:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        /* Search Results Headers in global list */
+        .list-section-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent-color);
+            padding: 12px 12px 4px 12px;
+            letter-spacing: 0.05em;
+        }
+
+        /* Modals */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background-color: var(--container-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 450px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            animation: scaleUp 0.2s ease-out;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        /* ── Animations ── */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes scaleUp {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Hide elements helper */
+        .hidden {
+            display: none !important;
+        }
+
+        /* View Once Overlay inside chat */
+        .view-once-btn-badge {
+            background-color: #ef4444;
+            color: white;
+            font-size: 8px;
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 4px;
+            vertical-align: middle;
+            margin-left: 4px;
+        }
+
+        .view-once-placeholder {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ef4444;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .view-once-decrypted {
+            background-color: rgba(239, 68, 68, 0.1) !important;
+            border: 1px solid rgba(239, 68, 68, 0.3) !important;
+        }
+
+        /* Server Status & Key Backup CSS */
+        .sidebar-footer {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-color);
+            background-color: var(--container-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .server-status-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .server-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--offline-color);
+            display: inline-block;
+        }
+
+        .server-status-dot.online {
+            background-color: var(--online-color);
+            box-shadow: 0 0 8px var(--online-color);
+        }
+
+        .server-status-dot.offline {
+            background-color: var(--offline-color);
+            box-shadow: 0 0 8px var(--offline-color);
+        }
+
+        .server-status-text {
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <!-- ── SCREEN 1: LOGIN ── -->
+        <div id="login-screen" class="screen active">
+            <div class="login-card">
+                <div class="logo-container">
+                    <div class="logo-icon">🔐</div>
+                    <h2>HybridP2P Messenger</h2>
+                    <p>Browser-Side Zero-Knowledge Encryption client</p>
+                </div>
+                
+                <div id="loading-keys-section" class="hidden" style="margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--accent-hover);">
+                        <div class="spinner"></div>
+                        <span id="key-gen-status-text" style="font-size: 13px;">Generating secure 4096-bit RSA keys...</span>
+                    </div>
+                </div>
+
+                <div id="login-form">
+                    <div class="input-group">
+                        <label for="username-input">Enter Username</label>
+                        <input type="text" id="username-input" class="input-control" placeholder="example: alice" autofocus>
+                    </div>
+                    
+                    <div style="text-align: left; margin-bottom: 20px;">
+                        <div style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="import-key-checkbox" style="cursor: pointer; accent-color: var(--accent-color);">
+                            <label for="import-key-checkbox" style="cursor: pointer; font-size: 13px; color: var(--text-muted); margin-bottom: 0; text-transform: none; letter-spacing: normal;">Import existing Private Key (.pem)</label>
+                        </div>
+                    </div>
+                    
+                    <div id="import-key-section" class="input-group hidden">
+                        <label for="private-key-input">Private Key PEM</label>
+                        <textarea id="private-key-input" class="input-control" rows="5" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="font-family: monospace; font-size: 11px; resize: vertical;"></textarea>
+                    </div>
+
+                    <button id="login-btn" class="btn">
+                        <span>Sign In</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── SCREEN 2: MAIN MESSENGER ── -->
+        <div id="chat-screen" class="screen">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="user-profile">
+                        <span id="my-username" class="user-name">-</span>
+                        <span id="my-fingerprint" class="user-sub">Key fingerprint</span>
+                    </div>
+                    <div class="sidebar-actions">
+                        <button id="show-key-btn" class="action-icon-btn" title="View/Backup Private Key">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m-9 4a4 4 0 110-8 4 4 0 110 8zm0 0v8a1 1 0 001 1h3m-4-1a1 1 0 01-1-1v-3m-6 4a1 1 0 11-2 0 1 1 0 012 0z"></path></svg>
+                        </button>
+                        <button id="add-chat-btn" class="action-icon-btn" title="New Chat / Group">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+                        <button id="logout-btn" class="action-icon-btn" title="Sign Out">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Global Search -->
+                <div class="search-wrapper">
+                    <div class="search-box">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <input type="text" id="global-search-input" placeholder="Search chats and message texts...">
+                    </div>
+                </div>
+
+                <!-- Chat Tile Listings -->
+                <div id="inbox-list" class="inbox-list">
+                    <!-- Dynamic -->
+                </div>
+
+                <!-- Sidebar Server Status Footer -->
+                <div class="sidebar-footer" id="sidebar-server-footer">
+                    <div class="server-status-container">
+                        <span class="server-status-dot offline" id="server-status-dot"></span>
+                        <span class="server-status-text" id="server-status-text">Server Connecting...</span>
+                    </div>
+                    <button id="reconnect-server-btn" class="action-icon-btn" title="Reconnect to Server" style="padding: 4px;">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.5"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Pane -->
+            <div id="chat-window" class="chat-window">
+                <!-- Empty state -->
+                <div id="empty-chat-state" class="empty-chat-state">
+                    <div class="empty-chat-icon">💬</div>
+                    <h3>Start Messaging Securely</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); max-width: 320px; text-align: center;">All cryptographic keys are generated in your browser. Sunucu mesaj içeriklerinizi göremez.</p>
+                </div>
+
+                <!-- Active Chat Window -->
+                <div id="active-chat" class="hidden" style="display: flex; flex-direction: column; height: 100%; width: 100%;">
+                    <!-- Header -->
+                    <div class="chat-header">
+                        <div class="chat-header-info">
+                            <div id="chat-avatar" class="avatar">U</div>
+                            <div class="chat-header-meta">
+                                <span id="chat-partner-name" class="chat-header-title">Partner</span>
+                                <span id="chat-partner-status" class="chat-header-status">
+                                    <span class="status-dot"></span> <span id="status-label">Offline</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="chat-header-actions">
+                            <!-- Ephemeral mode toggle -->
+                            <button id="ephemeral-btn" class="action-icon-btn" title="Ephemeral Mode (Don't save chat history)">
+                                <svg id="ephemeral-icon-svg" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                            </button>
+                            <!-- View Once toggle -->
+                            <button id="view-once-btn" class="action-icon-btn" title="Send next message as View-Once">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                <span id="view-once-active-dot" class="view-once-btn-badge hidden">1x</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Chat Area -->
+                    <div id="chat-body" class="chat-body">
+                        <!-- Messages dynamic -->
+                    </div>
+
+                    <!-- Input Panel -->
+                    <div class="chat-input-panel">
+                        <input type="text" id="message-input" class="input-message-box" placeholder="Type your secure message...">
+                        <button id="send-btn" class="btn" style="width: auto; padding: 10px 18px; border-radius: 24px;">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Start New Chat -->
+    <div id="new-chat-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">New Chat</span>
+                <button id="modal-close-btn" class="action-icon-btn">✕</button>
+            </div>
+            <div class="input-group" style="margin-bottom: 0;">
+                <label for="new-username-input">Enter Username</label>
+                <input type="text" id="new-username-input" class="input-control" placeholder="bob">
+            </div>
+            <div class="modal-footer">
+                <button id="new-chat-cancel-btn" class="btn" style="background-color: var(--border-color); width: auto;">Cancel</button>
+                <button id="new-chat-confirm-btn" class="btn" style="width: auto; padding: 10px 20px;">Start Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Backup Private Key -->
+    <div id="backup-key-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Backup Private Key</span>
+                <button id="backup-key-close-btn" class="action-icon-btn">✕</button>
+            </div>
+            <p style="font-size: 12px; color: #ef4444; font-weight: 500;">WARNING: Keep this private key secret! Anyone with access to this key can read your messages and impersonate you.</p>
+            <div class="input-group" style="margin-bottom: 0;">
+                <label for="backup-key-textarea">Your Private Key PEM</label>
+                <textarea id="backup-key-textarea" class="input-control" rows="8" readonly style="font-family: monospace; font-size: 10px; resize: none; background-color: #09090b; color: var(--text-color); border-color: var(--border-color);"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="backup-key-copy-btn" class="btn" style="width: auto; padding: 10px 20px;">Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Web Crypto Implementation Scripts -->
+    <script>
+        // Set dynamic API URL based on document origin
+        const BASE_HOST = window.location.host; // e.g. "127.0.0.1:8000" or ngrok URL
+        const API_URL = `${window.location.protocol}//${BASE_HOST}`;
+        const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${BASE_HOST}`;
+
+        // Application State
+        const state = {
+            username: "",
+            privateKeyPem: "",
+            publicKeyPem: "",
+            recipient: null,
+            recipientPubKey: null,
+            isGroup: false,
+            ephemeral: false,
+            viewOnceNext: false,
+            ws: null,
+            chats: {}, // chat_id -> { partner, ephemeral, messages: [] }
+            onlineStatus: {} // username -> online/offline
+        };
+
+        // ── Helper functions for cryptography ──
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            let bytes = new Uint8Array(buffer);
+            let len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        function base64ToArrayBuffer(base64) {
+            let binary_string = window.atob(base64);
+            let len = binary_string.length;
+            let bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function formatPublicKeyPem(base64) {
+            let pem = "-----BEGIN PUBLIC KEY-----\n";
+            for (let i = 0; i < base64.length; i += 64) {
+                pem += base64.substring(i, i + 64) + "\n";
+            }
+            pem += "-----END PUBLIC KEY-----";
+            return pem;
+        }
+
+        function formatPrivateKeyPem(base64) {
+            let pem = "-----BEGIN PRIVATE KEY-----\n";
+            for (let i = 0; i < base64.length; i += 64) {
+                pem += base64.substring(i, i + 64) + "\n";
+            }
+            pem += "-----END PRIVATE KEY-----";
+            return pem;
+        }
+
+        async function sha256(text) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(text);
+            const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function getFingerprintJS(publicKeyPem) {
+            const normalizedPem = publicKeyPem.replace(/\r\n/g, "\n");
+            const encoder = new TextEncoder();
+            const pemBytes = encoder.encode(normalizedPem);
+            const hashBuffer = await window.crypto.subtle.digest("SHA-256", pemBytes);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const sha256Hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+            const groups = [];
+            for (let i = 0; i < sha256Hex.length; i += 4) {
+                groups.push(sha256Hex.substring(i, i + 4));
+            }
+            return groups.join(" ");
+        }
+
+        // ── WebCrypto RSA-4096 Key Generation ──
+        async function generateKeyPair() {
+            const keyPair = await window.crypto.subtle.generateKey(
+                {
+                    name: "RSA-OAEP",
+                    modulusLength: 4096,
+                    publicExponent: new Uint8Array([1, 0, 1]), // 65537
+                    hash: "SHA-256"
+                },
+                true,
+                ["encrypt", "decrypt"]
+            );
+            
+            // Export private key to pkcs8 PEM
+            const privateKeyBuffer = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+            const privateKeyBase64 = arrayBufferToBase64(privateKeyBuffer);
+            const privateKeyPem = formatPrivateKeyPem(privateKeyBase64);
+            
+            // Export public key to spki PEM
+            const publicKeyBuffer = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
+            const publicKeyBase64 = arrayBufferToBase64(publicKeyBuffer);
+            const publicKeyPem = formatPublicKeyPem(publicKeyBase64);
+            
+            return {
+                privateKey: privateKeyPem,
+                publicKey: publicKeyPem
+            };
+        }
+
+        async function derivePublicKeyFromPrivateKey(privateKeyPem) {
+            try {
+                const cleanPem = privateKeyPem
+                    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+                    .replace(/-----END PRIVATE KEY-----/, '')
+                    .replace(/\s+/g, '');
+                const derBuffer = base64ToArrayBuffer(cleanPem);
+                
+                // 1. Import private key as RSA-OAEP
+                const privateKey = await window.crypto.subtle.importKey(
+                    "pkcs8",
+                    derBuffer,
+                    {
+                        name: "RSA-OAEP",
+                        hash: "SHA-256"
+                    },
+                    true, // must be extractable
+                    ["decrypt"]
+                );
+                
+                // 2. Export to JWK
+                const jwk = await window.crypto.subtle.exportKey("jwk", privateKey);
+                
+                // 3. Create public JWK
+                const publicJwk = {
+                    kty: jwk.kty,
+                    n: jwk.n,
+                    e: jwk.e,
+                    ext: true
+                };
+                
+                // 4. Import public JWK
+                const publicKey = await window.crypto.subtle.importKey(
+                    "jwk",
+                    publicJwk,
+                    {
+                        name: "RSA-OAEP",
+                        hash: "SHA-256"
+                    },
+                    true,
+                    ["encrypt"]
+                );
+                
+                // 5. Export to spki public key
+                const publicKeyBuffer = await window.crypto.subtle.exportKey("spki", publicKey);
+                const publicKeyBase64 = arrayBufferToBase64(publicKeyBuffer);
+                return formatPublicKeyPem(publicKeyBase64);
+            } catch (err) {
+                console.error("Private key parsing or public key derivation failed:", err);
+                throw new Error("Invalid private key format or import error.");
+            }
+        }
+
+        // ── RSA-OAEP + AES-256-GCM Hybrid Encryption ──
+        async function importPublicKeyPem(pem) {
+            const cleanPem = pem
+                .replace(/-----BEGIN PUBLIC KEY-----/, '')
+                .replace(/-----END PUBLIC KEY-----/, '')
+                .replace(/\s+/g, '');
+            const derBuffer = base64ToArrayBuffer(cleanPem);
+            return await window.crypto.subtle.importKey(
+                "spki",
+                derBuffer,
+                {
+                    name: "RSA-OAEP",
+                    hash: "SHA-256"
+                },
+                true,
+                ["encrypt"]
+            );
+        }
+
+        async function encryptMessageJS(plaintext, recipientPublicKeyPem) {
+            // 1. Generate 256-bit AES-GCM Key
+            const aesKey = await window.crypto.subtle.generateKey(
+                {
+                    name: "AES-GCM",
+                    length: 256
+                },
+                true,
+                ["encrypt", "decrypt"]
+            );
+            
+            const aesKeyRaw = await window.crypto.subtle.exportKey("raw", aesKey);
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            
+            // 2. Encrypt plaintext with AES
+            const encoder = new TextEncoder();
+            const plaintextBytes = encoder.encode(plaintext);
+            const ciphertextBuffer = await window.crypto.subtle.encrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv
+                },
+                aesKey,
+                plaintextBytes
+            );
+            
+            // 3. Encrypt AES Key with RSA Public Key
+            const rsaPublicKey = await importPublicKeyPem(recipientPublicKeyPem);
+            const encryptedAesKeyBuffer = await window.crypto.subtle.encrypt(
+                {
+                    name: "RSA-OAEP"
+                },
+                rsaPublicKey,
+                aesKeyRaw
+            );
+            
+            // 4. Base64-encode JSON packet
+            const packet = {
+                "encrypted_aes_key": arrayBufferToBase64(encryptedAesKeyBuffer),
+                "nonce": arrayBufferToBase64(iv),
+                "ciphertext": arrayBufferToBase64(ciphertextBuffer)
+            };
+            
+            const packetJson = JSON.stringify(packet);
+            const packetJsonBytes = encoder.encode(packetJson);
+            return arrayBufferToBase64(packetJsonBytes);
+        }
+
+        // ── RSA-OAEP + AES-256-GCM Hybrid Decryption ──
+        async function decryptMessageJS(encryptedPacketBase64, privateKeyPem) {
+            const encoder = new TextDecoder();
+            
+            // 1. Unpack JSON packet
+            const packetJsonBytes = base64ToArrayBuffer(encryptedPacketBase64);
+            const packetJson = encoder.decode(packetJsonBytes);
+            const packet = JSON.parse(packetJson);
+            
+            const encryptedAesKey = base64ToArrayBuffer(packet.encrypted_aes_key);
+            const nonce = base64ToArrayBuffer(packet.nonce);
+            const ciphertext = base64ToArrayBuffer(packet.ciphertext);
+            
+            // 2. Import Private Key for RSA-OAEP
+            const cleanPem = privateKeyPem
+                .replace(/-----BEGIN PRIVATE KEY-----/, '')
+                .replace(/-----END PRIVATE KEY-----/, '')
+                .replace(/\s+/g, '');
+            const derBuffer = base64ToArrayBuffer(cleanPem);
+            
+            const rsaPrivateKey = await window.crypto.subtle.importKey(
+                "pkcs8",
+                derBuffer,
+                {
+                    name: "RSA-OAEP",
+                    hash: "SHA-256"
+                },
+                true,
+                ["decrypt"]
+            );
+            
+            // 3. Decrypt AES Key using RSA
+            const aesKeyRaw = await window.crypto.subtle.decrypt(
+                {
+                    name: "RSA-OAEP"
+                },
+                rsaPrivateKey,
+                encryptedAesKey
+            );
+            
+            // 4. Import AES Key
+            const aesKey = await window.crypto.subtle.importKey(
+                "raw",
+                aesKeyRaw,
+                {
+                    name: "AES-GCM"
+                },
+                false,
+                ["decrypt"]
+            );
+            
+            // 5. Decrypt message using AES-GCM
+            const plaintextBuffer = await window.crypto.subtle.decrypt(
+                {
+                    name: "AES-GCM",
+                    iv: nonce
+                },
+                aesKey,
+                ciphertext
+            );
+            
+            return encoder.decode(plaintextBuffer);
+        }
+
+        // ── RSA-PSS challenge/request signing ──
+        async function signDataJS(privateKeyPem, dataBytes) {
+            const cleanPem = privateKeyPem
+                .replace(/-----BEGIN PRIVATE KEY-----/, '')
+                .replace(/-----END PRIVATE KEY-----/, '')
+                .replace(/\s+/g, '');
+            const derBuffer = base64ToArrayBuffer(cleanPem);
+            
+            const key = await window.crypto.subtle.importKey(
+                "pkcs8",
+                derBuffer,
+                {
+                    name: "RSA-PSS",
+                    hash: "SHA-256"
+                },
+                false,
+                ["sign"]
+            );
+            
+            const signatureBuffer = await window.crypto.subtle.sign(
+                {
+                    name: "RSA-PSS",
+                    saltLength: 478 // salt length matches python MAX_LENGTH for RSA-4096
+                },
+                key,
+                dataBytes
+            );
+            
+            return arrayBufferToBase64(signatureBuffer);
+        }
+
+        async function makeAuthHeadersJS(username, privateKeyPem, method, path, bodyText = "") {
+            const timestamp = new Date().toISOString();
+            const bodyHash = await sha256(bodyText);
+            const dataToSignText = [username, timestamp, method.toUpperCase(), path, bodyHash].join("\n");
+            
+            const encoder = new TextEncoder();
+            const sigB64 = await signDataJS(privateKeyPem, encoder.encode(dataToSignText));
+            
+            return {
+                "X-Username": username,
+                "X-Timestamp": timestamp,
+                "X-Signature": sigB64
+            };
+        }
+
+        async function signRegistration(username, timestamp, publicKeyPem, privateKeyPem) {
+            const dataToSign = `${username}:${timestamp}:${publicKeyPem}`;
+            const encoder = new TextEncoder();
+            return await signDataJS(privateKeyPem, encoder.encode(dataToSign));
+        }
+
+        // ── Database / LocalStorage State Management ──
+        function saveChatToLocalStorage(partner, msgObj) {
+            if (!state.chats[partner]) {
+                state.chats[partner] = {
+                    partner: partner,
+                    ephemeral: false,
+                    messages: []
+                };
+            }
+            if (msgObj) {
+                // Prevent duplicate messages
+                const exists = state.chats[partner].messages.some(m => m.timestamp === msgObj.timestamp && m.content === msgObj.content);
+                if (!exists) {
+                    state.chats[partner].messages.push(msgObj);
+                }
+            }
+            localStorage.setItem(`chats_${state.username}`, JSON.stringify(state.chats));
+        }
+
+        function loadChatsFromLocalStorage() {
+            const raw = localStorage.getItem(`chats_${state.username}`);
+            if (raw) {
+                state.chats = JSON.parse(raw);
+            } else {
+                state.chats = {};
+            }
+        }
+
+        // ── UI Interactions ──
+        const loginScreen = document.getElementById("login-screen");
+        const chatScreen = document.getElementById("chat-screen");
+        const loginBtn = document.getElementById("login-btn");
+        const loadingKeysSection = document.getElementById("loading-keys-section");
+        const loginForm = document.getElementById("login-form");
+        const usernameInput = document.getElementById("username-input");
+        const inboxList = document.getElementById("inbox-list");
+        const globalSearch = document.getElementById("global-search-input");
+        
+        const emptyChatState = document.getElementById("empty-chat-state");
+        const activeChat = document.getElementById("active-chat");
+        const chatPartnerName = document.getElementById("chat-partner-name");
+        const chatPartnerStatus = document.getElementById("chat-partner-status");
+        const statusLabel = document.getElementById("status-label");
+        const chatBody = document.getElementById("chat-body");
+        const messageInput = document.getElementById("message-input");
+        const sendBtn = document.getElementById("send-btn");
+        
+        const ephemeralBtn = document.getElementById("ephemeral-btn");
+        const viewOnceBtn = document.getElementById("view-once-btn");
+        const viewOnceBadge = document.getElementById("view-once-active-dot");
+
+        const newChatModal = document.getElementById("new-chat-modal");
+        const addChatBtn = document.getElementById("add-chat-btn");
+        const modalCloseBtn = document.getElementById("modal-close-btn");
+        const newChatCancelBtn = document.getElementById("new-chat-cancel-btn");
+        const newChatConfirmBtn = document.getElementById("new-chat-confirm-btn");
+        const newUsernameInput = document.getElementById("new-username-input");
+
+        // Open Modal
+        addChatBtn.addEventListener("click", () => {
+            newChatModal.classList.add("active");
+            newUsernameInput.focus();
+        });
+
+        // Close Modal
+        const closeModal = () => {
+            newChatModal.classList.remove("active");
+            newUsernameInput.value = "";
+        };
+        modalCloseBtn.addEventListener("click", closeModal);
+        newChatCancelBtn.addEventListener("click", closeModal);
+
+        newChatConfirmBtn.addEventListener("click", async () => {
+            const partner = newUsernameInput.value.trim().toLowerCase();
+            if (!partner) return;
+            if (partner === state.username) {
+                alert("You cannot add yourself!");
+                return;
+            }
+            
+            // Try fetching partner public key from server
+            try {
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", `/api/public_key/${partner}`);
+                const res = await fetch(`${API_URL}/api/public_key/${partner}`, { headers });
+                
+                if (res.status === 200) {
+                    const data = await res.json();
+                    saveChatToLocalStorage(partner, null);
+                    closeModal();
+                    selectChat(partner, data.public_key);
+                } else {
+                    alert(`Kullanıcı '${partner}' bulunamadı veya sunucu hatası.`);
+                }
+            } catch (err) {
+                alert("Bağlantı hatası: " + err);
+            }
+        });
+
+        // Initialize Keys on Page Load
+        window.addEventListener("load", async () => {
+            const savedPriv = localStorage.getItem("private_key");
+            const savedPub = localStorage.getItem("public_key");
+            
+            if (savedPriv && savedPub) {
+                state.privateKeyPem = savedPriv;
+                state.publicKeyPem = savedPub;
+            } else {
+                loginForm.classList.add("hidden");
+                loadingKeysSection.classList.remove("hidden");
+                
+                // Generate 4096-bit RSA Keys in background
+                const keys = await generateKeyPair();
+                
+                localStorage.setItem("private_key", keys.privateKey);
+                localStorage.setItem("public_key", keys.publicKey);
+                
+                state.privateKeyPem = keys.privateKey;
+                state.publicKeyPem = keys.publicKey;
+                
+                loadingKeysSection.classList.add("hidden");
+                loginForm.classList.remove("hidden");
+            }
+        });
+
+        // Sign In
+        const importKeyCheckbox = document.getElementById("import-key-checkbox");
+        const importKeySection = document.getElementById("import-key-section");
+        const privateKeyInput = document.getElementById("private-key-input");
+
+        importKeyCheckbox.addEventListener("change", () => {
+            if (importKeyCheckbox.checked) {
+                importKeySection.classList.remove("hidden");
+                privateKeyInput.focus();
+            } else {
+                importKeySection.classList.add("hidden");
+            }
+        });
+
+        loginBtn.addEventListener("click", async () => {
+            const username = usernameInput.value.trim().toLowerCase();
+            if (!username) return;
+            
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = `<div class="spinner"></div> Signing In...`;
+            
+            try {
+                // Handle Private Key import if requested
+                if (importKeyCheckbox.checked) {
+                    const importedPem = privateKeyInput.value.trim();
+                    if (!importedPem) {
+                        alert("Lütfen özel anahtarınızı (Private Key PEM) yapıştırın.");
+                        loginBtn.disabled = false;
+                        loginBtn.innerText = "Sign In";
+                        return;
+                    }
+                    try {
+                        const pubKeyPem = await derivePublicKeyFromPrivateKey(importedPem);
+                        state.privateKeyPem = importedPem;
+                        state.publicKeyPem = pubKeyPem;
+                        localStorage.setItem("private_key", importedPem);
+                        localStorage.setItem("public_key", pubKeyPem);
+                    } catch (e) {
+                        alert("İçeri aktarma hatası: Geçersiz Özel Anahtar (Private Key PEM) formatı.");
+                        loginBtn.disabled = false;
+                        loginBtn.innerText = "Sign In";
+                        return;
+                    }
+                }
+                const timestamp = new Date().toISOString();
+                const sigB64 = await signRegistration(username, timestamp, state.publicKeyPem, state.privateKeyPem);
+                
+                const registerRes = await fetch(`${API_URL}/api/register`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: username,
+                        public_key: state.publicKeyPem,
+                        timestamp: timestamp,
+                        signature: sigB64
+                    })
+                });
+                
+                if (registerRes.status === 200) {
+                    state.username = username;
+                    document.getElementById("my-username").innerText = username;
+                    
+                    const fp = await getFingerprintJS(state.publicKeyPem);
+                    document.getElementById("my-fingerprint").innerText = fp;
+                    document.getElementById("my-fingerprint").title = fp;
+                    
+                    loadChatsFromLocalStorage();
+                    loginScreen.classList.remove("active");
+                    chatScreen.classList.add("active");
+                    
+                    await fetchOfflineMessages();
+                    renderInbox();
+                    connectWebSocket();
+                } else {
+                    const errText = await registerRes.text();
+                    alert("Giriş başarısız: " + errText);
+                }
+            } catch (err) {
+                alert("Bağlantı hatası: " + err);
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerText = "Sign In";
+            }
+        });
+
+        // Logout
+        document.getElementById("logout-btn").addEventListener("click", () => {
+            if (state.ws) state.ws.close();
+            localStorage.removeItem("private_key");
+            localStorage.removeItem("public_key");
+            window.location.reload();
+        });
+
+        // Backup Key Modal Listeners
+        const backupKeyModal = document.getElementById("backup-key-modal");
+        const showKeyBtn = document.getElementById("show-key-btn");
+        const backupKeyCloseBtn = document.getElementById("backup-key-close-btn");
+        const backupKeyTextarea = document.getElementById("backup-key-textarea");
+        const backupKeyCopyBtn = document.getElementById("backup-key-copy-btn");
+
+        showKeyBtn.addEventListener("click", () => {
+            backupKeyTextarea.value = state.privateKeyPem;
+            backupKeyModal.classList.add("active");
+        });
+
+        backupKeyCloseBtn.addEventListener("click", () => {
+            backupKeyModal.classList.remove("active");
+        });
+
+        backupKeyCopyBtn.addEventListener("click", () => {
+            backupKeyTextarea.select();
+            document.execCommand("copy");
+            backupKeyCopyBtn.innerText = "Copied!";
+            setTimeout(() => {
+                backupKeyCopyBtn.innerText = "Copy to Clipboard";
+            }, 2000);
+        });
+
+        // Reconnect Server Button listener
+        document.getElementById("reconnect-server-btn").addEventListener("click", () => {
+            if (state.username) {
+                if (state.ws) {
+                    try {
+                        state.ws.close();
+                    } catch (e) {}
+                }
+                connectWebSocket();
+            }
+        });
+
+        // Fetch Offline Messages
+        async function fetchOfflineMessages() {
+            try {
+                const path = `/api/fetch_messages/${state.username}`;
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                const res = await fetch(`${API_URL}${path}`, { headers });
+                
+                if (res.status === 200) {
+                    const data = await res.json();
+                    for (let msg of data.messages) {
+                        try {
+                            const plaintext = await decryptMessageJS(msg.encrypted_payload, state.privateKeyPem);
+                            const msgObj = {
+                                sender: msg.sender,
+                                content: plaintext,
+                                timestamp: msg.timestamp,
+                                view_once: msg.view_once,
+                                encrypted_payload: msg.encrypted_payload,
+                                read: false
+                            };
+                            saveChatToLocalStorage(msg.sender, msgObj);
+                        } catch (decryptErr) {
+                            console.error("Çevrimdışı mesaj çözülemedi:", decryptErr);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Çevrimdışı mesajlar çekilemedi:", err);
+            }
+        }
+
+        // Render Inbox / Chat Tile List
+        function renderInbox(query = "") {
+            inboxList.innerHTML = "";
+            const queryClean = query.trim().toLowerCase();
+            
+            const chatEntries = Object.values(state.chats);
+            
+            if (chatEntries.length === 0) {
+                inboxList.innerHTML = `
+                    <div class="empty-inbox">
+                        <div class="empty-inbox-icon">💬</div>
+                        <span>No chats yet</span>
+                        <span style="font-size:10px;">Click '+' button to start a new chat.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Filter chats if search query is active
+            let filteredChats = chatEntries;
+            let filteredMsgs = [];
+            
+            if (queryClean) {
+                filteredChats = chatEntries.filter(c => c.partner.includes(queryClean));
+                
+                // Global Message text search
+                for (let c of chatEntries) {
+                    const matches = c.messages.filter(m => m.content.toLowerCase().includes(queryClean) && !m.view_once);
+                    for (let m of matches) {
+                        filteredMsgs.push({ partner: c.partner, msg: m });
+                    }
+                }
+            }
+
+            // Render matching Chats section
+            if (queryClean && filteredChats.length > 0) {
+                const header = document.createElement("div");
+                header.className = "list-section-header";
+                header.innerText = "CHATS";
+                inboxList.appendChild(header);
+            }
+
+            filteredChats.forEach(c => {
+                const lastMsgObj = c.messages[c.messages.length - 1];
+                let snippet = lastMsgObj ? lastMsgObj.content : "No messages yet";
+                if (lastMsgObj && lastMsgObj.view_once) snippet = "👁 View-once message";
+                
+                if (snippet.length > 30) snippet = snippet.substring(0, 27) + "...";
+                
+                const timeStr = lastMsgObj ? formatTime(lastMsgObj.timestamp) : "";
+                
+                // Calculate unread count
+                const unreadCount = c.messages.filter(m => m.sender !== state.username && !m.read).length;
+                
+                const activeClass = state.recipient === c.partner ? "active" : "";
+                const tile = document.createElement("div");
+                tile.className = `chat-tile ${activeClass}`;
+                
+                tile.innerHTML = `
+                    <div class="avatar">${c.partner.substring(0, 2).toUpperCase()}</div>
+                    <div class="chat-tile-content">
+                        <div class="chat-tile-header">
+                            <span class="chat-tile-name">${c.partner}</span>
+                            <span class="chat-tile-time ${unreadCount > 0 ? 'unread' : ''}">${timeStr}</span>
+                        </div>
+                        <div class="chat-tile-footer">
+                            <span class="chat-tile-lastmsg">${snippet}</span>
+                            ${unreadCount > 0 ? `<span class="badge">${unreadCount}</span>` : ""}
+                        </div>
+                    </div>
+                `;
+                
+                tile.addEventListener("click", async () => {
+                    // Fetch partner public key first
+                    try {
+                        const path = `/api/public_key/${c.partner}`;
+                        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                        const res = await fetch(`${API_URL}${path}`, { headers });
+                        if (res.status === 200) {
+                            const data = await res.json();
+                            selectChat(c.partner, data.public_key);
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                });
+                
+                inboxList.appendChild(tile);
+            });
+
+            // Render matching Messages section
+            if (queryClean && filteredMsgs.length > 0) {
+                const header = document.createElement("div");
+                header.className = "list-section-header";
+                header.innerText = "MESSAGES";
+                inboxList.appendChild(header);
+
+                filteredMsgs.forEach(item => {
+                    let snippet = item.msg.content;
+                    if (snippet.length > 35) snippet = snippet.substring(0, 32) + "...";
+                    const timeStr = formatTime(item.msg.timestamp);
+
+                    const tile = document.createElement("div");
+                    tile.className = "chat-tile";
+                    tile.innerHTML = `
+                        <div class="avatar" style="width:32px; height:32px; font-size:12px;">${item.partner.substring(0, 2).toUpperCase()}</div>
+                        <div class="chat-tile-content">
+                            <div class="chat-tile-header">
+                                <span class="chat-tile-name" style="font-size:13px;">${item.partner}</span>
+                                <span class="chat-tile-time">${timeStr}</span>
+                            </div>
+                            <span class="chat-tile-lastmsg" style="font-size:11px;">${item.msg.sender === state.username ? 'Me' : item.msg.sender}: ${snippet}</span>
+                        </div>
+                    `;
+
+                    tile.addEventListener("click", async () => {
+                        try {
+                            const path = `/api/public_key/${item.partner}`;
+                            const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                            const res = await fetch(`${API_URL}${path}`, { headers });
+                            if (res.status === 200) {
+                                const data = await res.json();
+                                globalSearch.value = "";
+                                selectChat(item.partner, data.public_key);
+                            }
+                        } catch (err) {
+                            console.error(err);
+                        }
+                    });
+
+                    inboxList.appendChild(tile);
+                });
+            }
+        }
+
+        // Global search input change listener
+        globalSearch.addEventListener("input", (e) => {
+            renderInbox(e.target.value);
+        });
+
+        // Select active chat session
+        function selectChat(partner, publicKeyPem) {
+            state.recipient = partner;
+            state.recipientPubKey = publicKeyPem;
+            
+            // Mark all messages in this chat as read
+            if (state.chats[partner]) {
+                state.chats[partner].messages.forEach(m => m.read = true);
+                localStorage.setItem(`chats_${state.username}`, JSON.stringify(state.chats));
+            }
+            
+            emptyChatState.classList.add("hidden");
+            activeChat.classList.remove("hidden");
+            
+            chatPartnerName.innerText = partner;
+            document.getElementById("chat-avatar").innerText = partner.substring(0, 2).toUpperCase();
+            
+            renderMessages();
+            renderInbox();
+            
+            // Set online indicator dynamically
+            queryUserPresence(partner);
+        }
+
+        async function queryUserPresence(partner) {
+            try {
+                const path = `/api/status/${partner}`;
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                const res = await fetch(`${API_URL}${path}`, { headers });
+                if (res.status === 200) {
+                    const data = await res.json();
+                    setPresenceUI(partner, data.online);
+                }
+            } catch (err) {
+                console.error("Durum sorgulanamadı:", err);
+            }
+        }
+
+        function setPresenceUI(partner, isOnline) {
+            if (state.recipient !== partner) return;
+            const dot = chatPartnerStatus.querySelector(".status-dot");
+            
+            dot.className = "status-dot";
+            if (isOnline) {
+                dot.classList.add("online");
+                statusLabel.innerText = "Online";
+            } else {
+                dot.classList.add("offline");
+                statusLabel.innerText = "Offline";
+            }
+        }
+
+        // Format ISO timestamp to HH:MM
+        function formatTime(isoStr) {
+            try {
+                const date = new Date(isoStr);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                return "";
+            }
+        }
+
+        // Render message balloons in chat window
+        function renderMessages() {
+            chatBody.innerHTML = "";
+            const chatObj = state.chats[state.recipient];
+            if (!chatObj) return;
+            
+            chatObj.messages.forEach((m, idx) => {
+                const container = document.createElement("div");
+                const isMe = m.sender === state.username;
+                container.className = `msg-container ${isMe ? 'me' : 'other'}`;
+                
+                let textNodeHtml = "";
+                
+                if (m.view_once) {
+                    if (m.opened) {
+                        textNodeHtml = `<span class="view-once-placeholder" style="color:var(--text-muted); cursor:default;">👁 Opened view-once message</span>`;
+                    } else {
+                        textNodeHtml = `
+                            <div class="view-once-placeholder" onclick="openViewOnceMessage(this, '${state.recipient}', ${idx})">
+                                🛡️ <span>View Once Message (Tap to decrypt)</span>
+                            </div>
+                        `;
+                    }
+                } else {
+                    textNodeHtml = `<span class="msg-text">${escapeHtml(m.content)}</span>`;
+                }
+
+                container.innerHTML = `
+                    <div class="msg-bubble ${m.opened ? 'view-once-decrypted' : ''}">
+                        ${state.isGroup && !isMe ? `<span class="msg-sender">${m.sender}</span>` : ""}
+                        ${textNodeHtml}
+                        <div class="msg-meta">
+                            <span class="msg-time">${formatTime(m.timestamp)}</span>
+                        </div>
+                    </div>
+                `;
+                chatBody.appendChild(container);
+            });
+            
+            // Scroll to bottom
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Self-destruct view-once message handler
+        async function openViewOnceMessage(element, partner, msgIndex) {
+            const chatObj = state.chats[partner];
+            if (!chatObj) return;
+            const msg = chatObj.messages[msgIndex];
+            if (!msg || msg.opened) return;
+
+            try {
+                // Decrypt view-once content
+                const plaintext = await decryptMessageJS(msg.encrypted_payload, state.privateKeyPem);
+                
+                // Show message
+                const bubble = element.closest(".msg-bubble");
+                bubble.classList.add("view-once-decrypted");
+                element.outerHTML = `<span class="msg-text" style="color:#ef4444; font-weight:500;">⏱️ 10s countdown: ${escapeHtml(plaintext)}</span>`;
+                
+                msg.opened = true;
+                msg.content = "[Opened view-once message]"; // Overwrite in memory
+                
+                // Trigger 10-second visual self-destruct countdown
+                setTimeout(() => {
+                    bubble.innerHTML = `<span class="view-once-placeholder" style="color:var(--text-muted); cursor:default;">👁 Opened view-once message</span>`;
+                    localStorage.setItem(`chats_${state.username}`, JSON.stringify(state.chats));
+                }, 10000);
+                
+            } catch (err) {
+                alert("Mesaj çözülemedi: " + err);
+            }
+        }
+
+        // Toggle View-Once button
+        viewOnceBtn.addEventListener("click", () => {
+            state.viewOnceNext = !state.viewOnceNext;
+            if (state.viewOnceNext) {
+                viewOnceBtn.classList.add("view-once-active");
+                viewOnceBtn.style.color = "#ef4444";
+                viewOnceBadge.classList.remove("hidden");
+            } else {
+                viewOnceBtn.classList.remove("view-once-active");
+                viewOnceBtn.style.color = "";
+                viewOnceBadge.classList.add("hidden");
+            }
+        });
+
+        // Send message
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !state.recipient) return;
+            
+            messageInput.value = "";
+            const isViewOnce = state.viewOnceNext;
+            
+            // Turn off view-once indicator if active
+            if (isViewOnce) {
+                state.viewOnceNext = false;
+                viewOnceBtn.classList.remove("view-once-active");
+                viewOnceBtn.style.color = "";
+                viewOnceBadge.classList.add("hidden");
+            }
+
+            try {
+                // Encrypt payload using recipient public key
+                const encryptedPayload = await encryptMessageJS(text, state.recipientPubKey);
+                
+                const timestamp = new Date().toISOString();
+                
+                // Save locally
+                const msgObj = {
+                    sender: state.username,
+                    content: text,
+                    timestamp: timestamp,
+                    view_once: isViewOnce,
+                    read: true
+                };
+                
+                saveChatToLocalStorage(state.recipient, msgObj);
+                renderMessages();
+                renderInbox();
+                
+                // Send to Server via WebSocket
+                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                    state.ws.send(JSON.stringify({
+                        "type": "message",
+                        "sender": state.username,
+                        "recipient": state.recipient,
+                        "encrypted_payload": encryptedPayload,
+                        "view_once": isViewOnce,
+                        "timestamp": timestamp
+                    }));
+                } else {
+                    // Fallback to REST send API
+                    const path = "/api/send_ws_fallback";
+                    const payload = {
+                        "type": "message",
+                        "sender": state.username,
+                        "recipient": state.recipient,
+                        "encrypted_payload": encryptedPayload,
+                        "view_once": isViewOnce,
+                        "timestamp": timestamp
+                    };
+                    const bodyText = JSON.stringify({ payload: JSON.stringify(payload) });
+                    const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+                    headers["Content-Type"] = "application/json";
+                    
+                    await fetch(`${API_URL}${path}`, {
+                        method: "POST",
+                        headers: headers,
+                        body: bodyText
+                    });
+                }
+            } catch (err) {
+                console.error("Mesaj gönderilemedi:", err);
+                alert("Mesaj gönderilemedi: " + err);
+            }
+        }
+
+        sendBtn.addEventListener("click", sendMessage);
+        messageInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // ── WebSocket Loop ──
+        function connectWebSocket() {
+            const wsUrl = `${WS_URL}/ws/${state.username}`;
+            console.log("WebSocket bağlantısı kuruluyor...", wsUrl);
+            
+            const dot = document.getElementById("server-status-dot");
+            const txt = document.getElementById("server-status-text");
+            if (dot && txt) {
+                dot.className = "server-status-dot offline";
+                txt.innerText = "Connecting...";
+            }
+            
+            const ws = new WebSocket(wsUrl);
+            state.ws = ws;
+            
+            ws.onmessage = async (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // 1. Challenge Response Authentication
+                    if (data.type === "challenge") {
+                        const challenge = data.challenge;
+                        const encoder = new TextEncoder();
+                        const sigB64 = await signDataJS(state.privateKeyPem, encoder.encode(challenge));
+                        ws.send(JSON.stringify({
+                            "type": "auth",
+                            "signature": sigB64
+                        }));
+                    }
+                    
+                    // 2. Auth Success
+                    else if (data.type === "auth_result" && data.status === "success") {
+                        console.log("WebSocket başarıyla doğrulandı ve bağlandı!");
+                        const dot = document.getElementById("server-status-dot");
+                        const txt = document.getElementById("server-status-text");
+                        if (dot && txt) {
+                            dot.className = "server-status-dot online";
+                            txt.innerText = "Connected";
+                        }
+                    }
+                    
+                    // 3. E2E Chat Message received
+                    else if (data.type === "message") {
+                        const sender = data.sender;
+                        try {
+                            const plaintext = await decryptMessageJS(data.encrypted_payload, state.privateKeyPem);
+                            const isActive = (state.recipient === sender);
+                            
+                            const msgObj = {
+                                sender: sender,
+                                content: plaintext,
+                                timestamp: data.timestamp || new Date().toISOString(),
+                                view_once: !!data.view_once,
+                                encrypted_payload: data.encrypted_payload,
+                                read: isActive // read if chat is currently open
+                            };
+                            
+                            saveChatToLocalStorage(sender, msgObj);
+                            
+                            if (isActive) {
+                                renderMessages();
+                            }
+                            renderInbox();
+                        } catch (decryptErr) {
+                            console.error("Gelen mesaj çözülemedi:", decryptErr);
+                        }
+                    }
+                    
+                    // 4. Delivery Status Ack
+                    else if (data.type === "delivery_ack") {
+                        console.log("Delivery ack:", data);
+                    }
+                } catch (e) {
+                    console.error("WS mesaj işleme hatası:", e);
+                }
+            };
+
+            ws.onclose = (event) => {
+                console.log("WebSocket bağlantısı kesildi. Reconnecting in 3s...");
+                const dot = document.getElementById("server-status-dot");
+                const txt = document.getElementById("server-status-text");
+                if (dot && txt) {
+                    dot.className = "server-status-dot offline";
+                    txt.innerText = "Disconnected";
+                }
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket Hatası:", err);
+                const dot = document.getElementById("server-status-dot");
+                const txt = document.getElementById("server-status-text");
+                if (dot && txt) {
+                    dot.className = "server-status-dot offline";
+                    txt.innerText = "Error";
+                }
+            };
+        }
+
+        // Periodic check of active chat partner presence (every 5 seconds)
+        setInterval(() => {
+            if (state.username && state.recipient) {
+                queryUserPresence(state.recipient);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

@@ -688,7 +688,7 @@ def main(page: ft.Page):
         if save and state["recipient"] and state["store"] and not view_once:
             state["store"].save_message(
                 partner=state["recipient"], sender=sender,
-                content=text, is_mine=is_mine,
+                content=text, is_mine=is_mine, is_read=1
             )
         try: page.update()
         except: pass
@@ -726,6 +726,7 @@ def main(page: ft.Page):
                 state["store"].save_message(
                     partner=sender, sender=sender,
                     content=plaintext, is_mine=False, timestamp=timestamp,
+                    is_read=0
                 )
             log_status(f"'{sender}' adlisindan yeni mesaj var!")
         load_inbox_chats()
@@ -969,12 +970,12 @@ def main(page: ft.Page):
                                 enc = data.get("encrypted_payload", "")
                                 ts = data.get("timestamp", "")
                                 sig_b64 = data.get("signature", "")
-
+                                is_active = (state["recipient"] == group_id)
+                                
                                 # Grup Taklit Koruması (İmza Doğrulama)
                                 from crypto_utils import verify_signature
                                 verified = False
                                 if sig_b64:
-                                    pub_key = None
                                     local_contact = state["store"].get_contact(sender)
                                     if local_contact:
                                         pub_key = pem_string_to_public_key(local_contact["public_key"])
@@ -1008,7 +1009,8 @@ def main(page: ft.Page):
                                             sender=sender,
                                             content=pt,
                                             is_mine=False,
-                                            timestamp=ts
+                                            timestamp=ts,
+                                            is_read=(1 if is_active else 0)
                                         )
                                         if state["recipient"] == group_id:
                                             add_message_to_chat(
@@ -1341,6 +1343,9 @@ def main(page: ft.Page):
             recipient_field.border_color = "#22c55e"
             ephemeral_btn.disabled = False
 
+            if state["store"]:
+                state["store"].mark_as_read(rec)
+
             ephemeral = state["store"].is_ephemeral(rec)
             state["ephemeral"] = ephemeral
             _update_ephemeral_ui()
@@ -1354,8 +1359,6 @@ def main(page: ft.Page):
         def close_warning_dialog(dialog, accept, rec=None, new_pem=None):
             dialog.open = False
             page.update()
-            try: page.overlay.remove(dialog)
-            except: pass
             if accept and rec and new_pem:
                 try:
                     new_pub_key = pem_string_to_public_key(new_pem)
@@ -1371,8 +1374,6 @@ def main(page: ft.Page):
         def close_tofu_dialog(dialog, accept, rec=None, pem=None, pub=None):
             dialog.open = False
             page.update()
-            try: page.overlay.remove(dialog)
-            except: pass
             if accept and rec and pem and pub:
                 try:
                     fingerprint = get_public_key_fingerprint(pub)
@@ -1426,6 +1427,9 @@ def main(page: ft.Page):
             state["recipient"] = recipient
             state["is_group"] = True
             
+            if state["store"]:
+                state["store"].mark_as_read(recipient)
+            
             chat_info = state["store"].get_chat_info(recipient)
             gname = chat_info.get("partner", recipient)
             
@@ -1464,13 +1468,15 @@ def main(page: ft.Page):
                             color="#ffffff"
                         ),
                         actions=[
-                            ft.TextButton("Reject (Safe)", on_click=lambda e: close_warning_dialog(dialog, accept=False)),
-                            ft.TextButton("Accept New Key", on_click=lambda e: close_warning_dialog(dialog, accept=True, rec=recipient, new_pem=server_pub_pem))
+                            ft.TextButton("Reject (Safe)"),
+                            ft.TextButton("Accept New Key")
                         ],
                         actions_alignment=ft.MainAxisAlignment.END,
                         bgcolor="#18181b"
                     )
-                    page.overlay.append(dialog)
+                    dialog.actions[0].on_click = lambda e: close_warning_dialog(dialog, accept=False)
+                    dialog.actions[1].on_click = lambda e: close_warning_dialog(dialog, accept=True, rec=recipient, new_pem=server_pub_pem)
+                    page.dialog = dialog
                     dialog.open = True
                     page.update()
                     return
@@ -1507,13 +1513,15 @@ def main(page: ft.Page):
                         spacing=8
                     ),
                     actions=[
-                        ft.TextButton("Cancel (Safe)", on_click=lambda e: close_tofu_dialog(dialog, accept=False)),
-                        ft.TextButton("Approve Key & Connect", on_click=lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key))
+                        ft.TextButton("Cancel (Safe)"),
+                        ft.TextButton("Approve Key & Connect")
                     ],
                     actions_alignment=ft.MainAxisAlignment.END,
                     bgcolor="#18181b"
                 )
-                page.overlay.append(dialog)
+                dialog.actions[0].on_click = lambda e: close_tofu_dialog(dialog, accept=False)
+                dialog.actions[1].on_click = lambda e: close_tofu_dialog(dialog, accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key)
+                page.dialog = dialog
                 dialog.open = True
                 page.update()
                 return
@@ -1769,78 +1777,258 @@ def main(page: ft.Page):
     )
     page.floating_action_button = fab
 
-    def load_inbox_chats():
+    def load_inbox_chats(query: str = None):
         if not state["store"]: return
         inbox_list.controls.clear()
-        chats = state["store"].get_all_chats()
         
-        if not chats:
-            inbox_list.controls.append(
-                ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Icon(ft.Icons.CHAT_BUBBLE_OUTLINE, size=48, color="#3f3f46"),
-                            ft.Text("No chats yet.", size=14, color="#9e9e9e"),
-                            ft.Text("Start a new chat by clicking the '+' button.", size=11, color="#666666"),
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=6,
-                    ),
-                    padding=40,
-                    alignment=ft.Alignment(0, 0),
+        if not query:
+            chats = state["store"].get_all_chats()
+            if not chats:
+                inbox_list.controls.append(
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Icon(ft.Icons.CHAT_BUBBLE_OUTLINE, size=48, color="#3f3f46"),
+                                ft.Text("No chats yet.", size=14, color="#9e9e9e"),
+                                ft.Text("Start a new chat by clicking the '+' button.", size=11, color="#666666"),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=6,
+                        ),
+                        padding=40,
+                        alignment=ft.Alignment(0, 0),
+                    )
                 )
-            )
+            else:
+                for c in chats:
+                    partner = c["partner"]
+                    chat_id = c["chat_id"]
+                    is_group = bool(c.get("is_group", 0))
+                    last_msg = c.get("last_message") or ""
+                    last_time = _fmt_time(c.get("last_time")) if c.get("last_time") else ""
+                    unread_count = c.get("unread_count", 0)
+                    
+                    if len(last_msg) > 35:
+                        last_msg = last_msg[:32] + "..."
+                    
+                    avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
+                    avatar_color = "#8b5cf6" if is_group else "#007acc"
+                    
+                    def on_chat_tile_click(e, p=partner, ig=is_group):
+                        recipient_field.value = p
+                        on_connect_recipient(None)
+                    
+                    row2_controls = [
+                        ft.Text(last_msg or "No messages yet", size=12, color="#9e9e9e", max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
+                    ]
+                    if unread_count > 0:
+                        row2_controls.append(
+                            ft.Container(
+                                content=ft.Text(
+                                    str(unread_count),
+                                    size=10,
+                                    color="#ffffff",
+                                    weight=ft.FontWeight.BOLD,
+                                ),
+                                bgcolor="#8b5cf6",
+                                border_radius=10,
+                                padding=ft.Padding(6, 2, 6, 2),
+                                alignment=ft.Alignment(0, 0),
+                            )
+                        )
+                    
+                    inbox_list.controls.append(
+                        ft.Container(
+                            content=ft.Row(
+                                controls=[
+                                    ft.CircleAvatar(
+                                        content=ft.Icon(avatar_icon, color="#ffffff", size=18),
+                                        bgcolor=avatar_color,
+                                        radius=20,
+                                    ),
+                                    ft.Column(
+                                        controls=[
+                                            ft.Row(
+                                                controls=[
+                                                    ft.Text(partner, weight=ft.FontWeight.BOLD, size=14, color="#ffffff"),
+                                                    ft.Text(last_time, size=10, color="#22c55e" if unread_count > 0 else "#888888"),
+                                                ],
+                                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                            ),
+                                            ft.Row(
+                                                controls=row2_controls,
+                                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                            ),
+                                        ],
+                                        spacing=2,
+                                        expand=True,
+                                    ),
+                                ],
+                                spacing=12,
+                            ),
+                            padding=ft.Padding(12, 10, 12, 10),
+                            border_radius=8,
+                            ink=True,
+                            on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click(e, p, ig),
+                            bgcolor="#18181b",
+                        )
+                    )
         else:
-            for c in chats:
-                partner = c["partner"]
-                chat_id = c["chat_id"]
-                is_group = bool(c.get("is_group", 0))
-                last_msg = c.get("last_message") or ""
-                last_time = _fmt_time(c.get("last_time")) if c.get("last_time") else ""
-                
-                if len(last_msg) > 35:
-                    last_msg = last_msg[:32] + "..."
-                
-                avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
-                avatar_color = "#8b5cf6" if is_group else "#007acc"
-                
-                def on_chat_tile_click(e, p=partner, ig=is_group):
+            results = state["store"].search_chats_and_messages(query)
+            matching_chats = results["chats"]
+            matching_msgs = results["messages"]
+            
+            if not matching_chats and not matching_msgs:
+                inbox_list.controls.append(
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Icon(ft.Icons.SEARCH_OFF, size=48, color="#3f3f46"),
+                                ft.Text("No results found", size=14, color="#9e9e9e"),
+                                ft.Text("Try checking the spelling or searching for another keyword.", size=11, color="#666666"),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=6,
+                        ),
+                        padding=40,
+                        alignment=ft.Alignment(0, 0),
+                    )
+                )
+            else:
+                def on_chat_tile_click_search(e, p, ig):
                     recipient_field.value = p
                     on_connect_recipient(None)
                 
-                inbox_list.controls.append(
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.CircleAvatar(
-                                    content=ft.Icon(avatar_icon, color="#ffffff", size=18),
-                                    bgcolor=avatar_color,
-                                    radius=20,
-                                ),
-                                ft.Column(
-                                    controls=[
-                                        ft.Row(
-                                            controls=[
-                                                ft.Text(partner, weight=ft.FontWeight.BOLD, size=14, color="#ffffff"),
-                                                ft.Text(last_time, size=10, color="#888888"),
-                                            ],
-                                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                        ),
-                                        ft.Text(last_msg or "No messages yet", size=12, color="#9e9e9e", max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                                    ],
-                                    spacing=2,
-                                    expand=True,
-                                ),
-                            ],
-                            spacing=12,
-                        ),
-                        padding=ft.Padding(12, 10, 12, 10),
-                        border_radius=8,
-                        ink=True,
-                        on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click(e, p, ig),
-                        bgcolor="#18181b",
+                if matching_chats:
+                    inbox_list.controls.append(
+                        ft.Container(
+                            content=ft.Text("CHATS", size=11, weight=ft.FontWeight.BOLD, color="#8b5cf6"),
+                            padding=ft.Padding(12, 8, 12, 4)
+                        )
                     )
-                )
+                    for c in matching_chats:
+                        partner = c["partner"]
+                        is_group = bool(c.get("is_group", 0))
+                        last_msg = c.get("last_message") or ""
+                        last_time = _fmt_time(c.get("last_time")) if c.get("last_time") else ""
+                        unread_count = c.get("unread_count", 0)
+                        
+                        if len(last_msg) > 35:
+                            last_msg = last_msg[:32] + "..."
+                            
+                        avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
+                        avatar_color = "#8b5cf6" if is_group else "#007acc"
+                        
+                        row2_controls = [
+                            ft.Text(last_msg or "No messages yet", size=12, color="#9e9e9e", max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
+                        ]
+                        if unread_count > 0:
+                            row2_controls.append(
+                                ft.Container(
+                                    content=ft.Text(
+                                        str(unread_count),
+                                        size=10,
+                                        color="#ffffff",
+                                        weight=ft.FontWeight.BOLD,
+                                    ),
+                                    bgcolor="#8b5cf6",
+                                    border_radius=10,
+                                    padding=ft.Padding(6, 2, 6, 2),
+                                    alignment=ft.Alignment(0, 0),
+                                )
+                            )
+                            
+                        inbox_list.controls.append(
+                            ft.Container(
+                                content=ft.Row(
+                                    controls=[
+                                        ft.CircleAvatar(
+                                            content=ft.Icon(avatar_icon, color="#ffffff", size=18),
+                                            bgcolor=avatar_color,
+                                            radius=20,
+                                        ),
+                                        ft.Column(
+                                            controls=[
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Text(partner, weight=ft.FontWeight.BOLD, size=14, color="#ffffff"),
+                                                        ft.Text(last_time, size=10, color="#22c55e" if unread_count > 0 else "#888888"),
+                                                    ],
+                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                                ),
+                                                ft.Row(
+                                                    controls=row2_controls,
+                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                                ),
+                                            ],
+                                            spacing=2,
+                                            expand=True,
+                                        ),
+                                    ],
+                                    spacing=12,
+                                ),
+                                padding=ft.Padding(12, 10, 12, 10),
+                                border_radius=8,
+                                ink=True,
+                                on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click_search(e, p, ig),
+                                bgcolor="#18181b",
+                            )
+                        )
+                        
+                if matching_msgs:
+                    inbox_list.controls.append(
+                        ft.Container(
+                            content=ft.Text("MESSAGES", size=11, weight=ft.FontWeight.BOLD, color="#8b5cf6"),
+                            padding=ft.Padding(12, 12, 12, 4)
+                        )
+                    )
+                    for m in matching_msgs:
+                        partner = m["partner"]
+                        sender = m["sender"]
+                        content = m["content"]
+                        msg_time = _fmt_time(m["timestamp"])
+                        is_group = bool(m["is_group"])
+                        
+                        snippet = f"{sender}: {content}"
+                        if len(snippet) > 45:
+                            snippet = snippet[:42] + "..."
+                            
+                        avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
+                        avatar_color = "#8b5cf6" if is_group else "#007acc"
+                        
+                        inbox_list.controls.append(
+                            ft.Container(
+                                content=ft.Row(
+                                    controls=[
+                                        ft.CircleAvatar(
+                                            content=ft.Icon(avatar_icon, color="#ffffff", size=16),
+                                            bgcolor=avatar_color,
+                                            radius=16,
+                                        ),
+                                        ft.Column(
+                                            controls=[
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Text(partner, weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
+                                                        ft.Text(msg_time, size=9, color="#888888"),
+                                                    ],
+                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                                ),
+                                                ft.Text(snippet, size=11, color="#9e9e9e", max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                            ],
+                                            spacing=2,
+                                            expand=True,
+                                        ),
+                                    ],
+                                    spacing=10,
+                                ),
+                                padding=ft.Padding(12, 8, 12, 8),
+                                border_radius=6,
+                                ink=True,
+                                on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click_search(e, p, ig),
+                                bgcolor="#141416",
+                            )
+                        )
         try: page.update()
         except: pass
 
@@ -2190,7 +2378,24 @@ def main(page: ft.Page):
         
         threading.Thread(target=load_groups_async, daemon=True).start()
 
+    def on_search_change(e):
+        query = search_field.value.strip()
+        load_inbox_chats(query)
+
+    search_field = ft.TextField(
+        hint_text="Search chats and messages...",
+        prefix_icon=ft.Icons.SEARCH,
+        border_color="#27272a",
+        focused_border_color="#8b5cf6",
+        cursor_color="#8b5cf6",
+        height=38,
+        text_size=13,
+        content_padding=ft.Padding(10, 0, 10, 0),
+        on_change=on_search_change,
+    )
+
     def refresh_inbox_and_messages():
+        search_field.value = ""
         fetch_offline_messages()
         load_inbox_chats()
 
@@ -2226,6 +2431,14 @@ def main(page: ft.Page):
                     ),
                     bgcolor="#18181b",
                     padding=ft.Padding(16, 10, 16, 10),
+                    border=ft.Border(bottom=ft.BorderSide(1, "#27272a")),
+                ),
+                
+                # Search Bar
+                ft.Container(
+                    content=search_field,
+                    padding=ft.Padding(12, 6, 12, 6),
+                    bgcolor="#18181b",
                     border=ft.Border(bottom=ft.BorderSide(1, "#27272a")),
                 ),
                 
@@ -2387,6 +2600,9 @@ def main(page: ft.Page):
         page.update()
 
     def show_inbox_screen():
+        state["recipient"] = None
+        state["is_group"] = False
+        search_field.value = ""
         fab.visible = True
         load_inbox_chats()
         page.controls.clear()

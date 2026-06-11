@@ -2171,20 +2171,22 @@ def main(page: ft.Page):
     )
     
     def update_recipient_status_ui(online):
-        if state.get("is_group", False) or not state["recipient"]:
-            recipient_status_row.visible = False
-        else:
-            recipient_status_row.visible = True
-            if online:
-                recipient_status_dot.bgcolor = "#22c55e"
-                recipient_status_label.value = "Online"
-                recipient_status_label.color = "#22c55e"
+        def _update():
+            if state.get("is_group", False) or not state["recipient"]:
+                recipient_status_row.visible = False
             else:
-                recipient_status_dot.bgcolor = "#ef4444"
-                recipient_status_label.value = "Offline"
-                recipient_status_label.color = "#ef4444"
-        try: page.update()
-        except: pass
+                recipient_status_row.visible = True
+                if online:
+                    recipient_status_dot.bgcolor = "#22c55e"
+                    recipient_status_label.value = "Online"
+                    recipient_status_label.color = "#22c55e"
+                else:
+                    recipient_status_dot.bgcolor = "#ef4444"
+                    recipient_status_label.value = "Offline"
+                    recipient_status_label.color = "#ef4444"
+            try: page.update()
+            except: pass
+        run_on_ui(_update)
 
     def refresh_recipient_status():
         if not state["recipient"] or state.get("is_group", False):
@@ -2591,7 +2593,6 @@ def main(page: ft.Page):
                         "encrypted_payload": enc_payload
                     })
                 log_status(f"'{name}' grubunun anahtari yenilendi ve dagitildi.")
-                page.update()
                 
             threading.Thread(target=do_rekey, daemon=True).start()
             close_dialog(None)
@@ -2601,18 +2602,19 @@ def main(page: ft.Page):
                 try:
                     resp = signed_delete(f"/api/groups/{group_id}/members/{state['username']}", timeout=5)
                     if resp.status_code == 200:
-                        log_status(f"'{name}' grubundan ciktiniz.")
-                        if state["recipient"] == group_id:
-                            state["recipient"] = None
-                            state["is_group"] = False
-                            recipient_field.value = ""
-                            recipient_field.read_only = False
-                            recipient_field.border_color = "#8b5cf6"
-                            chat_list.controls.clear()
-                        load_inbox_chats()
+                        def _success():
+                            log_status(f"'{name}' grubundan ciktiniz.")
+                            if state["recipient"] == group_id:
+                                state["recipient"] = None
+                                state["is_group"] = False
+                                recipient_field.value = ""
+                                recipient_field.read_only = False
+                                recipient_field.border_color = "#8b5cf6"
+                                chat_list.controls.clear()
+                            load_inbox_chats()
+                        run_on_ui(_success)
                 except Exception as ex:
                     log_status(f"Gruptan cikma hatasi: {ex}")
-                page.update()
                 
             threading.Thread(target=do_leave, daemon=True).start()
             close_dialog(None)
@@ -2660,22 +2662,21 @@ def main(page: ft.Page):
                                     "encrypted_payload": enc_key
                                 })
                                 
-                        state["recipient"] = group_id
-                        state["is_group"] = True
-                        
-                        recipient_field.value = name
-                        recipient_field.read_only = True
-                        recipient_field.border_color = "#22c55e"
-                        ephemeral_btn.disabled = True
-                        
-                        load_history_to_chat()
-                        log_status(f"'{name}' grubu olusturuldu.")
-                        show_chat_screen()
+                        def _success():
+                            state["recipient"] = group_id
+                            state["is_group"] = True
+                            recipient_field.value = name
+                            recipient_field.read_only = True
+                            recipient_field.border_color = "#22c55e"
+                            ephemeral_btn.disabled = True
+                            load_history_to_chat()
+                            log_status(f"'{name}' grubu olusturuldu.")
+                            show_chat_screen()
+                        run_on_ui(_success)
                     else:
                         log_status(f"Grup olusturma hatasi: {resp.text}")
                 except Exception as ex:
                     log_status(f"Grup olusturma hatasi: {ex}")
-                page.update()
                 
             threading.Thread(target=do_create, daemon=True).start()
             close_dialog(None)

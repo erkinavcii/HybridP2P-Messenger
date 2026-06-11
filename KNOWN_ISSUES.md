@@ -24,9 +24,9 @@ Flet, Python ve Flutter arasında bir WebSocket köprüsü kurarak çalışır. 
   - [x] `do_download` (Dosya indirme thread'i)
   - [x] `do_rest` (API istekleri thread'i)
   - [x] `do_file_upload_and_send` (Dosya yükleme thread'i)
-  - [ ] `do_rekey` (Anahtar yenileme thread'i)
-  - [ ] `do_create` (Grup oluşturma thread'i)
-  - [ ] `check_recipient_status_loop` (Kullanıcı durum kontrolü)
+  - [x] `do_rekey` (Anahtar yenileme thread'i)
+  - [x] `do_create` (Grup oluşturma thread'i)
+  - [x] `check_recipient_status_loop` (Kullanıcı durum kontrolü)
 
 ### Çözüm Önerileri ve Strateji
 

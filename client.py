@@ -960,31 +960,35 @@ def main(page: ft.Page):
 
     def _on_incoming_message(sender: str, plaintext: str, timestamp: str = "",
                               view_once: bool = False, encrypted_payload: str = ""):
-        if state["recipient"] and sender == state["recipient"]:
-            add_message_to_chat(sender, plaintext, is_mine=False,
-                                 time_str=timestamp, save=True,
-                                 view_once=view_once,
-                                 encrypted_payload=encrypted_payload)
-            send_read_receipt(sender, timestamp)
-        else:
-            if state["store"] and not view_once:
-                state["store"].save_message(
-                    partner=sender, sender=sender,
-                    content=plaintext, is_mine=False, timestamp=timestamp,
-                    is_read=0
-                )
-            log_status(f"'{sender}' adlisindan yeni mesaj var!")
-        load_inbox_chats()
+        def _update():
+            if state["recipient"] and sender == state["recipient"]:
+                add_message_to_chat(sender, plaintext, is_mine=False,
+                                     time_str=timestamp, save=True,
+                                     view_once=view_once,
+                                     encrypted_payload=encrypted_payload)
+                send_read_receipt(sender, timestamp)
+            else:
+                if state["store"] and not view_once:
+                    state["store"].save_message(
+                        partner=sender, sender=sender,
+                        content=plaintext, is_mine=False, timestamp=timestamp,
+                        is_read=0
+                    )
+                log_status(f"'{sender}' adlisindan yeni mesaj var!")
+            load_inbox_chats()
+        run_on_ui(_update)
 
     def _on_incoming_file(sender: str, file_uuid: str, original_name: str,
                            file_type: str, timestamp: str, view_once: bool):
-        if state["recipient"] and sender == state["recipient"]:
-            add_file_to_chat(sender, file_uuid, original_name,
-                              file_type, is_mine=False, time_str=timestamp,
-                              view_once=view_once)
-        else:
-            log_status(f"'{sender}' adlisindan dosya var! ({original_name})")
-        load_inbox_chats()
+        def _update():
+            if state["recipient"] and sender == state["recipient"]:
+                add_file_to_chat(sender, file_uuid, original_name,
+                                  file_type, is_mine=False, time_str=timestamp,
+                                  view_once=view_once)
+            else:
+                log_status(f"'{sender}' adlisindan dosya var! ({original_name})")
+            load_inbox_chats()
+        run_on_ui(_update)
 
     def load_history_to_chat():
         if not state["recipient"] or not state["store"]: return
@@ -1166,7 +1170,7 @@ def main(page: ft.Page):
                     state["ws"] = ws
                     log_status("Connection established.")
                     update_connection_status(True)
-                    page.update()
+                    run_on_ui(page.update)
                     async for raw in ws:
                         try:
                             data = json.loads(raw)
@@ -2214,16 +2218,18 @@ def main(page: ft.Page):
     threading.Thread(target=check_recipient_status_loop, daemon=True, name="status-checker").start()
 
     def update_connection_status(is_connected: bool):
-        if is_connected:
-            status_dot.bgcolor = "#3b82f6"  # Blue
-            status_label.value = "Server: Online"
-            status_label.color = "#60a5fa"
-        else:
-            status_dot.bgcolor = "#ef4444"  # Red
-            status_label.value = "Server: Offline"
-            status_label.color = "#ef4444"
-        try: page.update()
-        except: pass
+        def _update():
+            if is_connected:
+                status_dot.bgcolor = "#3b82f6"  # Blue
+                status_label.value = "Server: Online"
+                status_label.color = "#60a5fa"
+            else:
+                status_dot.bgcolor = "#ef4444"  # Red
+                status_label.value = "Server: Offline"
+                status_label.color = "#ef4444"
+            try: page.update()
+            except: pass
+        run_on_ui(_update)
 
     chat_title_text = ft.Text("No active chat", size=16, weight=ft.FontWeight.BOLD, color="#ffffff")
     inbox_list = ft.ListView(expand=True, spacing=4, padding=8)

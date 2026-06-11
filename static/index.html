@@ -919,11 +919,41 @@
                     </div>
 
                     <!-- Input Panel -->
-                    <div class="chat-input-panel">
-                        <input type="text" id="message-input" class="input-message-box" placeholder="Type your secure message...">
-                        <button id="send-btn" class="btn" style="width: auto; padding: 10px 18px; border-radius: 24px;">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                        </button>
+                    <div class="chat-input-panel" style="flex-direction: column; align-items: stretch; gap: 8px;">
+                        <!-- Staged File Preview -->
+                        <div id="staged-file-container" class="hidden" style="display: flex; align-items: center; justify-content: space-between; background-color: var(--border-color); padding: 8px 12px; border-radius: 8px; font-size: 13px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 16px;">📎</span>
+                                <span id="staged-file-name" style="font-weight: 500; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">filename.jpg</span>
+                                <span id="staged-file-size" style="color: var(--text-muted); font-size: 11px;">(0 KB)</span>
+                            </div>
+                            <button id="cancel-staged-btn" class="action-icon-btn" style="color: var(--offline-color); padding: 2px;">✕</button>
+                        </div>
+                        
+                        <!-- Uploading Progress Bar -->
+                        <div id="upload-progress-container" class="hidden" style="width: 100%;">
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--accent-hover);">
+                                <span id="upload-status-text">Encrypting and uploading...</span>
+                                <span id="upload-percentage-text">0%</span>
+                            </div>
+                            <div style="width: 100%; height: 4px; background-color: #27272a; border-radius: 2px; overflow: hidden;">
+                                <div id="upload-progress-bar" style="width: 0%; height: 100%; background-color: var(--accent-color); transition: width 0.2s;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Controls Row -->
+                        <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                            <input type="file" id="file-input" class="hidden">
+                            <button id="attach-btn" class="action-icon-btn" style="padding: 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: #09090b; border: 1px solid var(--border-color);" title="Attach file (Max 10MB)">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                                </svg>
+                            </button>
+                            <input type="text" id="message-input" class="input-message-box" placeholder="Type your secure message...">
+                            <button id="send-btn" class="btn" style="width: auto; padding: 10px 18px; border-radius: 24px;">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1001,6 +1031,7 @@
             isGroup: false,
             ephemeral: false,
             viewOnceNext: false,
+            staged_file: null,
             ws: null,
             chats: {}, // chat_id -> { partner, ephemeral, messages: [] }
             onlineStatus: {} // username -> online/offline
@@ -1280,6 +1311,116 @@
             return encoder.decode(plaintextBuffer);
         }
 
+        async function encryptBytesJS(arrayBuffer, recipientPublicKeyPem) {
+            // 1. Generate 256-bit AES-GCM Key
+            const aesKey = await window.crypto.subtle.generateKey(
+                {
+                    name: "AES-GCM",
+                    length: 256
+                },
+                true,
+                ["encrypt", "decrypt"]
+            );
+            
+            const aesKeyRaw = await window.crypto.subtle.exportKey("raw", aesKey);
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            
+            // 2. Encrypt bytes with AES
+            const ciphertextBuffer = await window.crypto.subtle.encrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv
+                },
+                aesKey,
+                arrayBuffer
+            );
+            
+            // 3. Encrypt AES Key with RSA Public Key
+            const rsaPublicKey = await importPublicKeyPem(recipientPublicKeyPem);
+            const encryptedAesKeyBuffer = await window.crypto.subtle.encrypt(
+                {
+                    name: "RSA-OAEP"
+                },
+                rsaPublicKey,
+                aesKeyRaw
+            );
+            
+            // 4. Base64-encode JSON packet
+            const packet = {
+                "encrypted_aes_key": arrayBufferToBase64(encryptedAesKeyBuffer),
+                "nonce": arrayBufferToBase64(iv),
+                "ciphertext": arrayBufferToBase64(ciphertextBuffer)
+            };
+            
+            const packetJson = JSON.stringify(packet);
+            const encoder = new TextEncoder();
+            const packetJsonBytes = encoder.encode(packetJson);
+            return arrayBufferToBase64(packetJsonBytes);
+        }
+
+        async function decryptBytesJS(encryptedPacketBase64, privateKeyPem) {
+            const encoder = new TextDecoder();
+            
+            // 1. Unpack JSON packet
+            const packetJsonBytes = base64ToArrayBuffer(encryptedPacketBase64);
+            const packetJson = encoder.decode(packetJsonBytes);
+            const packet = JSON.parse(packetJson);
+            
+            const encryptedAesKey = base64ToArrayBuffer(packet.encrypted_aes_key);
+            const nonce = base64ToArrayBuffer(packet.nonce);
+            const ciphertext = base64ToArrayBuffer(packet.ciphertext);
+            
+            // 2. Import Private Key for RSA-OAEP
+            const cleanPem = privateKeyPem
+                .replace(/-----BEGIN PRIVATE KEY-----/, '')
+                .replace(/-----END PRIVATE KEY-----/, '')
+                .replace(/\s+/g, '');
+            const derBuffer = base64ToArrayBuffer(cleanPem);
+            
+            const rsaPrivateKey = await window.crypto.subtle.importKey(
+                "pkcs8",
+                derBuffer,
+                {
+                    name: "RSA-OAEP",
+                    hash: "SHA-256"
+                },
+                true,
+                ["decrypt"]
+            );
+            
+            // 3. Decrypt AES Key using RSA
+            const aesKeyRaw = await window.crypto.subtle.decrypt(
+                {
+                    name: "RSA-OAEP"
+                },
+                rsaPrivateKey,
+                encryptedAesKey
+            );
+            
+            // 4. Import AES Key
+            const aesKey = await window.crypto.subtle.importKey(
+                "raw",
+                aesKeyRaw,
+                {
+                    name: "AES-GCM"
+                },
+                false,
+                ["decrypt"]
+            );
+            
+            // 5. Decrypt message using AES-GCM
+            const decryptedBuffer = await window.crypto.subtle.decrypt(
+                {
+                    name: "AES-GCM",
+                    iv: nonce
+                },
+                aesKey,
+                ciphertext
+            );
+            
+            return decryptedBuffer;
+        }
+
         // ── RSA-PSS challenge/request signing ──
         async function signDataJS(privateKeyPem, dataBytes) {
             const cleanPem = privateKeyPem
@@ -1421,6 +1562,18 @@
         const messageInput = document.getElementById("message-input");
         const sendBtn = document.getElementById("send-btn");
         
+        // File elements
+        const fileInput = document.getElementById("file-input");
+        const attachBtn = document.getElementById("attach-btn");
+        const stagedFileContainer = document.getElementById("staged-file-container");
+        const stagedFileName = document.getElementById("staged-file-name");
+        const stagedFileSize = document.getElementById("staged-file-size");
+        const cancelStagedBtn = document.getElementById("cancel-staged-btn");
+        const uploadProgressContainer = document.getElementById("upload-progress-container");
+        const uploadProgressBar = document.getElementById("upload-progress-bar");
+        const uploadStatusText = document.getElementById("upload-status-text");
+        const uploadPercentageText = document.getElementById("upload-percentage-text");
+        
         const ephemeralBtn = document.getElementById("ephemeral-btn");
         const viewOnceBtn = document.getElementById("view-once-btn");
         const viewOnceBadge = document.getElementById("view-once-active-dot");
@@ -1511,6 +1664,65 @@
                 importKeySection.classList.add("hidden");
             }
         });
+
+        // File transfer event listeners
+        attachBtn.addEventListener("click", () => {
+            if (!state.recipient) {
+                alert("Lütfen önce bir sohbet seçin!");
+                return;
+            }
+            fileInput.click();
+        });
+
+        fileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.size > 10 * 1024 * 1024) {
+                alert("Dosya boyutu çok büyük! Maksimum limit 10 MB'tır.");
+                fileInput.value = "";
+                return;
+            }
+
+            state.staged_file = file;
+            stagedFileName.innerText = file.name;
+            stagedFileSize.innerText = `(${formatBytes(file.size)})`;
+            stagedFileContainer.classList.remove("hidden");
+            messageInput.focus();
+        });
+
+        cancelStagedBtn.addEventListener("click", () => {
+            state.staged_file = null;
+            fileInput.value = "";
+            stagedFileContainer.classList.add("hidden");
+        });
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function guessFileType(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+            const videoExts = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'];
+            const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'];
+            
+            if (imageExts.includes(ext)) return 'image';
+            if (videoExts.includes(ext)) return 'video';
+            if (audioExts.includes(ext)) return 'audio';
+            return 'document';
+        }
+
+        function getFileIconEmoji(fileType) {
+            if (fileType === "image") return "🖼️";
+            if (fileType === "video") return "🎥";
+            if (fileType === "audio") return "🎵";
+            return "📄";
+        }
 
         loginBtn.addEventListener("click", async () => {
             const username = usernameInput.value.trim().toLowerCase();
@@ -1910,7 +2122,56 @@
                 
                 let textNodeHtml = "";
                 
-                if (m.view_once) {
+                if (m.is_file) {
+                    const isImage = m.file_type === "image";
+                    const isViewOnce = m.view_once;
+                    const icon = getFileIconEmoji(m.file_type);
+                    
+                    let actionBtnHtml = "";
+                    if (isViewOnce) {
+                        if (m.opened) {
+                            actionBtnHtml = `<span style="font-size: 11px; color: var(--text-muted);">Opened</span>`;
+                        } else {
+                            actionBtnHtml = `
+                                <button class="action-icon-btn" onclick="downloadAndDecryptFile('${state.recipient}', ${idx})" style="color: #ef4444;" title="View Once file">
+                                    👁️
+                                </button>`;
+                        }
+                    } else {
+                        actionBtnHtml = `
+                            <button class="action-icon-btn" onclick="downloadAndDecryptFile('${state.recipient}', ${idx})" style="color: var(--accent-hover);" title="Download & Decrypt">
+                                📥
+                            </button>`;
+                    }
+                    
+                    let imgDisplayHtml = "";
+                    if (m.decrypted_data_url) {
+                        imgDisplayHtml = `
+                            <div style="margin-top: 8px; max-width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);">
+                                <img src="${m.decrypted_data_url}" style="max-width: 100%; max-height: 200px; display: block; margin: 0 auto;" />
+                            </div>
+                        `;
+                    }
+                    
+                    let statusLabelHtml = m.status_label || (isViewOnce ? "View-Once File" : "Encrypted File");
+                    
+                    textNodeHtml = `
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            ${isViewOnce ? `<div style="display: flex; align-items: center; gap: 4px; font-size: 10px; color: #ef4444; font-weight: bold;">🛡️ View-once file</div>` : ""}
+                            <div style="display: flex; align-items: center; gap: 10px; background-color: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); min-width: 220px;">
+                                <span style="font-size: 24px;">${icon}</span>
+                                <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
+                                    <span style="font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ffffff;" title="${escapeHtml(m.original_name)}">${escapeHtml(m.original_name)}</span>
+                                    <span id="file-status-${idx}" style="font-size: 10px; color: var(--text-muted);">${statusLabelHtml}</span>
+                                </div>
+                                <div id="file-action-${idx}">
+                                    ${actionBtnHtml}
+                                </div>
+                            </div>
+                            ${imgDisplayHtml}
+                        </div>
+                    `;
+                } else if (m.view_once) {
                     if (m.opened) {
                         textNodeHtml = `<span class="view-once-placeholder" style="color:var(--text-muted); cursor:default;">👁 Opened view-once message</span>`;
                     } else {
@@ -1985,6 +2246,144 @@
                 
             } catch (err) {
                 alert("Mesaj çözülemedi: " + err);
+            }
+        }
+
+        // Download, Decrypt, and save/render E2EE file
+        async function downloadAndDecryptFile(partner, msgIndex) {
+            const chatObj = state.chats[partner];
+            if (!chatObj) return;
+            const m = chatObj.messages[msgIndex];
+            if (!m || m.opened) return;
+
+            const fileStatus = document.getElementById(`file-status-${msgIndex}`);
+            const fileAction = document.getElementById(`file-action-${msgIndex}`);
+
+            if (fileStatus) fileStatus.innerText = "Downloading...";
+            if (fileAction) fileAction.innerHTML = `<div class="spinner" style="width: 14px; height: 14px; border-width: 1.5px;"></div>`;
+
+            try {
+                const path = `/api/download_file/${m.file_uuid}`;
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                const res = await fetch(`${API_URL}${path}`, { headers });
+                
+                if (res.status !== 200) {
+                    const errText = await res.text();
+                    throw new Error(errText || "Download failed.");
+                }
+
+                const data = await res.json();
+                
+                if (fileStatus) fileStatus.innerText = "Decrypting...";
+                const decryptedBuffer = await decryptBytesJS(data.encrypted_data, state.privateKeyPem);
+                
+                if (m.view_once) {
+                    m.opened = true;
+                    m.content = "[Opened view-once file]";
+                    
+                    if (m.file_type === "image") {
+                        const b64 = arrayBufferToBase64(decryptedBuffer);
+                        const ext = m.original_name.split('.').pop() || "png";
+                        const dataUrl = `data:image/${ext};base64,${b64}`;
+                        
+                        const modal = document.getElementById("view-once-modal");
+                        const contentSpan = document.getElementById("view-once-modal-content");
+                        const closeBtn = document.getElementById("view-once-modal-close-btn");
+                        
+                        contentSpan.innerHTML = `
+                            <div style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
+                                <span style="font-weight: 500; font-size: 13px; color: var(--text-muted);">${escapeHtml(m.original_name)}</span>
+                                <img src="${dataUrl}" style="max-width: 100%; max-height: 350px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" />
+                            </div>
+                        `;
+                        modal.classList.add("active");
+                        
+                        const handleClose = () => {
+                            modal.classList.remove("active");
+                            contentSpan.innerHTML = "";
+                            closeBtn.removeEventListener("click", handleClose);
+                            
+                            chatObj.messages.splice(msgIndex, 1);
+                            persistChats();
+                            renderMessages();
+                        };
+                        closeBtn.addEventListener("click", handleClose);
+                    } else {
+                        const blob = new Blob([decryptedBuffer], { type: "application/octet-stream" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = m.original_name;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        
+                        const modal = document.getElementById("view-once-modal");
+                        const contentSpan = document.getElementById("view-once-modal-content");
+                        const closeBtn = document.getElementById("view-once-modal-close-btn");
+                        
+                        contentSpan.innerHTML = `
+                            <div style="text-align: center; color: #ffffff;">
+                                <span style="font-size: 24px; display: block; margin-bottom: 8px;">📥</span>
+                                <span style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">File Downloaded</span>
+                                <span style="font-size: 12px; color: var(--text-muted);">${escapeHtml(m.original_name)}</span>
+                            </div>
+                        `;
+                        modal.classList.add("active");
+                        
+                        const handleClose = () => {
+                            modal.classList.remove("active");
+                            contentSpan.innerHTML = "";
+                            closeBtn.removeEventListener("click", handleClose);
+                            
+                            chatObj.messages.splice(msgIndex, 1);
+                            persistChats();
+                            renderMessages();
+                        };
+                        closeBtn.addEventListener("click", handleClose);
+                    }
+                } else {
+                    if (m.file_type === "image") {
+                        const b64 = arrayBufferToBase64(decryptedBuffer);
+                        const ext = m.original_name.split('.').pop() || "png";
+                        const dataUrl = `data:image/${ext};base64,${b64}`;
+                        
+                        m.decrypted_data_url = dataUrl;
+                        m.status_label = "Decrypted";
+                    } else {
+                        const blob = new Blob([decryptedBuffer], { type: "application/octet-stream" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = m.original_name;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        
+                        m.status_label = "Downloaded";
+                    }
+                    m.opened = true;
+                    persistChats();
+                    renderMessages();
+                }
+            } catch (err) {
+                console.error(err);
+                if (fileStatus) fileStatus.innerText = "Error: " + err.message;
+                if (fileAction) {
+                    if (m.view_once) {
+                        fileAction.innerHTML = `
+                            <button class="action-icon-btn" onclick="downloadAndDecryptFile('${partner}', ${msgIndex})" style="color: #ef4444;" title="Retry">
+                                👁️
+                            </button>`;
+                    } else {
+                        fileAction.innerHTML = `
+                            <button class="action-icon-btn" onclick="downloadAndDecryptFile('${partner}', ${msgIndex})" style="color: var(--accent-hover);" title="Retry">
+                                📥
+                            </button>`;
+                    }
+                }
             }
         }
 
@@ -2086,10 +2485,15 @@
             }
         }
 
-        // Send message
+        // Send message (Handles staged file upload + text sending)
         async function sendMessage() {
             const text = messageInput.value.trim();
-            if (!text || !state.recipient) return;
+            const staged = state.staged_file;
+            if (!text && !staged) return;
+            if (!state.recipient) {
+                alert("Lütfen önce bir sohbet seçin!");
+                return;
+            }
             
             messageInput.value = "";
             const isViewOnce = state.viewOnceNext;
@@ -2099,42 +2503,149 @@
                 state.viewOnceNext = false;
                 viewOnceBtn.classList.remove("view-once-active");
                 viewOnceBtn.style.color = "";
-                viewOnceBadge.classList.add("hidden");
+                const viewOnceBadge = document.getElementById("view-once-active-dot");
+                if (viewOnceBadge) viewOnceBadge.classList.add("hidden");
             }
 
-            try {
-                // Encrypt payload using recipient public key
-                const encryptedPayload = await encryptMessageJS(text, state.recipientPubKey);
+            // If a file is staged, upload & send it
+            if (staged) {
+                state.staged_file = null;
+                stagedFileContainer.classList.add("hidden");
+                fileInput.value = "";
                 
-                const timestamp = new Date().toISOString();
-                
-                // Save locally
-                const msgObj = {
-                    sender: state.username,
-                    content: text,
-                    timestamp: timestamp,
-                    view_once: isViewOnce,
-                    read: true
+                uploadProgressContainer.classList.remove("hidden");
+                uploadStatusText.innerText = "Dosya okunuyor...";
+                uploadProgressBar.style.width = "10%";
+                uploadPercentageText.innerText = "10%";
+
+                const fileReader = new FileReader();
+                fileReader.onload = async function() {
+                    try {
+                        const arrayBuffer = fileReader.result;
+                        
+                        uploadStatusText.innerText = "Dosya şifreleniyor (E2EE)...";
+                        uploadProgressBar.style.width = "30%";
+                        uploadPercentageText.innerText = "30%";
+                        
+                        const encryptedB64 = await encryptBytesJS(arrayBuffer, state.recipientPubKey);
+                        
+                        uploadStatusText.innerText = "Sunucuya yükleniyor...";
+                        uploadProgressBar.style.width = "60%";
+                        uploadPercentageText.innerText = "60%";
+                        
+                        const path = "/api/upload_file";
+                        const fileType = guessFileType(staged.name);
+                        
+                        const uploadPayload = {
+                            sender: state.username,
+                            recipient: state.recipient,
+                            encrypted_data: encryptedB64,
+                            original_name: staged.name,
+                            file_type: fileType
+                        };
+                        
+                        const bodyText = JSON.stringify(uploadPayload);
+                        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+                        headers["Content-Type"] = "application/json";
+                        
+                        const resp = await fetch(`${API_URL}${path}`, {
+                            method: "POST",
+                            headers: headers,
+                            body: bodyText
+                        });
+                        
+                        if (resp.status !== 200) {
+                            const errText = await resp.text();
+                            throw new Error("Yükleme başarısız: " + errText);
+                        }
+                        
+                        const uploadData = await resp.json();
+                        const fileUuid = uploadData.uuid;
+                        
+                        uploadProgressBar.style.width = "90%";
+                        uploadPercentageText.innerText = "90%";
+                        
+                        const timestamp = new Date().toISOString();
+                        
+                        const msgObj = {
+                            sender: state.username,
+                            is_file: true,
+                            file_uuid: fileUuid,
+                            original_name: staged.name,
+                            file_type: fileType,
+                            view_once: isViewOnce,
+                            timestamp: timestamp,
+                            read: true
+                        };
+                        
+                        saveChatToLocalStorage(state.recipient, msgObj);
+                        renderMessages();
+                        renderInbox();
+                        
+                        const fileMsgPayload = {
+                            type: "file_message",
+                            sender: state.username,
+                            recipient: state.recipient,
+                            file_uuid: fileUuid,
+                            original_name: staged.name,
+                            file_type: fileType,
+                            view_once: isViewOnce,
+                            timestamp: timestamp
+                        };
+                        
+                        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                            state.ws.send(JSON.stringify(fileMsgPayload));
+                        } else {
+                            const fallbackPath = "/api/send_ws_fallback";
+                            const fallbackBody = JSON.stringify({ payload: JSON.stringify(fileMsgPayload) });
+                            const fallbackHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", fallbackPath, fallbackBody);
+                            fallbackHeaders["Content-Type"] = "application/json";
+                            await fetch(`${API_URL}${fallbackPath}`, {
+                                method: "POST",
+                                headers: fallbackHeaders,
+                                body: fallbackBody
+                            });
+                        }
+                        
+                        uploadProgressBar.style.width = "100%";
+                        uploadPercentageText.innerText = "100%";
+                        uploadStatusText.innerText = "Tamamlandı!";
+                        setTimeout(() => {
+                            uploadProgressContainer.classList.add("hidden");
+                            uploadProgressBar.style.width = "0%";
+                        }, 1000);
+                        
+                    } catch (err) {
+                        alert("Dosya gönderilemedi: " + err.message);
+                        uploadProgressContainer.classList.add("hidden");
+                    }
                 };
-                
-                saveChatToLocalStorage(state.recipient, msgObj);
-                renderMessages();
-                renderInbox();
-                
-                // Send to Server via WebSocket
-                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                    state.ws.send(JSON.stringify({
-                        "type": "message",
-                        "sender": state.username,
-                        "recipient": state.recipient,
-                        "encrypted_payload": encryptedPayload,
-                        "view_once": isViewOnce,
-                        "timestamp": timestamp
-                    }));
-                } else {
-                    // Fallback to REST send API
-                    const path = "/api/send_ws_fallback";
-                    const payload = {
+                fileReader.onerror = function() {
+                    alert("Dosya okuma hatası.");
+                    uploadProgressContainer.classList.add("hidden");
+                };
+                fileReader.readAsArrayBuffer(staged);
+            }
+
+            // If there is text message, send it
+            if (text) {
+                try {
+                    const encryptedPayload = await encryptMessageJS(text, state.recipientPubKey);
+                    const timestamp = new Date().toISOString();
+                    
+                    const msgObj = {
+                        sender: state.username,
+                        content: text,
+                        timestamp: timestamp,
+                        view_once: isViewOnce,
+                        read: true
+                    };
+                    
+                    saveChatToLocalStorage(state.recipient, msgObj);
+                    renderMessages();
+                    renderInbox();
+                    
+                    const textMsgPayload = {
                         "type": "message",
                         "sender": state.username,
                         "recipient": state.recipient,
@@ -2142,19 +2653,24 @@
                         "view_once": isViewOnce,
                         "timestamp": timestamp
                     };
-                    const bodyText = JSON.stringify({ payload: JSON.stringify(payload) });
-                    const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
-                    headers["Content-Type"] = "application/json";
                     
-                    await fetch(`${API_URL}${path}`, {
-                        method: "POST",
-                        headers: headers,
-                        body: bodyText
-                    });
+                    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                        state.ws.send(JSON.stringify(textMsgPayload));
+                    } else {
+                        const path = "/api/send_ws_fallback";
+                        const bodyText = JSON.stringify({ payload: JSON.stringify(textMsgPayload) });
+                        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+                        headers["Content-Type"] = "application/json";
+                        await fetch(`${API_URL}${path}`, {
+                            method: "POST",
+                            headers: headers,
+                            body: bodyText
+                        });
+                    }
+                } catch (err) {
+                    console.error("Mesaj gönderilemedi:", err);
+                    alert("Mesaj gönderilemedi: " + err);
                 }
-            } catch (err) {
-                console.error("Mesaj gönderilemedi:", err);
-                alert("Mesaj gönderilemedi: " + err);
             }
         }
 
@@ -2242,6 +2758,40 @@
                         } catch (decryptErr) {
                             console.error("Gelen mesaj çözülemedi:", decryptErr);
                         }
+                    }
+                    
+                    // E2E Chat File Message received
+                    else if (data.type === "file_message") {
+                        const sender = data.sender;
+                        const isActive = (state.recipient === sender);
+                        
+                        const msgObj = {
+                            sender: sender,
+                            is_file: true,
+                            file_uuid: data.file_uuid,
+                            original_name: data.original_name,
+                            file_type: data.file_type,
+                            view_once: !!data.view_once,
+                            timestamp: data.timestamp || new Date().toISOString(),
+                            content: "[File: " + data.original_name + "]",
+                            read: isActive
+                        };
+                        
+                        if (!state.chats[sender]) {
+                            state.chats[sender] = { partner: sender, ephemeral: false, messages: [] };
+                        }
+                        
+                        const exists = state.chats[sender].messages.some(
+                            m => m.is_file && m.file_uuid === data.file_uuid
+                        );
+                        if (!exists) state.chats[sender].messages.push(msgObj);
+                        persistChats();
+                        
+                        if (isActive) {
+                            renderMessages();
+                            sendReadReceipt(sender, msgObj.timestamp);
+                        }
+                        renderInbox();
                     }
 
                     // 4. Ephemeral toggle received from partner

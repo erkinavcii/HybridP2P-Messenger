@@ -18,7 +18,7 @@
 
 | # | Sorun | Açıklama |
 |---|-------|----------|
-| 4 | **Web'de dosya/resim gönderimi yok** | Desktop client dosya gönderebilir, web client yalnızca metin gönderir. `file_message` WS tipi web'de handle edilmiyor. |
+| 4 | **Web'de dosya/resim gönderimi** | ✅ Tamamlandı — RSA-OAEP + AES-GCM şifreli dosya/resim transferleri, inline resimler ve one-time view-once indirmeleri web istemcisinde çalışıyor. |
 | 5 | **Web'de grup desteği yok** | Desktop'ta grup oluşturma/mesajlaşma var, web client'ta grup UI'ı ve `group_message` / `group_key_dist` WS handler'ları yok. |
 | 6 | **Web'de arama (search) yok** | Desktop'ta inbox search var, web'de yalnızca basit chat listesi render ediliyor, filtreleme/mesaj içi arama yok. |
 | 7 | **Web'de view-once mesaj alımı** | Gelen view-once mesajlar web'de görünüyor ama decrypt + self-destruct akışı kısmen var — countdown ve mesaj silme güvenilir değil (sayfa yenilenince mesaj localStorage'da kalıyor). |
@@ -46,7 +46,7 @@
 | TOFU key verification | ✅ | ✅ (web otomatik kabul) |
 | Ephemeral mode toggle | ✅ | ✅ (yeni düzeltildi) |
 | View-once mesaj gönderme | ✅ | ✅ |
-| Dosya/resim gönderimi | ✅ | ❌ |
+| Dosya/resim gönderimi | ✅ | ✅ |
 | Grup sohbeti | ✅ | ❌ |
 | Online/Offline durumu | ✅ | ✅ |
 | Chat inbox listesi | ✅ | ✅ |

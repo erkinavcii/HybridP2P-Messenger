@@ -143,6 +143,7 @@
 - [ ] **NAT Traversal (STUN/TURN)**: Farklı ağlardaki cihazlar arası doğrudan bağlantı
 - [ ] **Çoklu Sunucu (Federation)**: Farklı sunuculardaki kullanıcılar arası mesajlaşma (Matrix protokolü gibi)
 - [ ] **Tor/Onion Routing**: Anonim bağlantı desteği
+- [ ] **Tamamen Sunucusuz P2P Modu**: Manuel SDP (QR Kod/Metin) ve BitTorrent DHT sinyalleşme ile sıfır sunucu iletişimi
 
 ### 📱 Platform Desteği
 - [ ] **Android APK Derleme**: Flet ile Android paketleme

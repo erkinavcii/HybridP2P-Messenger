@@ -788,3 +788,51 @@ graph TD
 > [!TIP]
 > `aiortc` Python kütüphanesi Opus ve VP8 codec'lerini doğrudan destekler. Bu sayede masaüstü istemcisi hiçbir ek native bağımlılık olmadan (ffmpeg vb.) sesli arama yapabilir. Ancak video için performans sınırlamaları olabilir — ilk fazda sadece sesli arama ile başlayıp video desteğini ikinci iterasyonda eklemek mantıklıdır.
 
+---
+
+## Bölüm E: Tamamen Sunucusuz / Pure P2P Modu Planı (Sıfır Sunucu & NAT/STUN İletişimi)
+
+### Hedef
+Kullanıcıların herhangi bir merkezi sinyal veya röle sunucusuna (`server.py`) ihtiyaç duymadan, tamamen doğrudan (peer-to-peer) şifreli mesajlaşma, dosya paylaşımı ve sesli/görüntülü arama yapabilmesini sağlamak. Güvenlik ve gizlilik seviyesini maksimuma çıkarmak, log kaydı ve sunucu bağımlılığını tamamen sıfırlamak.
+
+---
+
+### 1. Sinyalleşme ve NAT Aşımı Stratejisi
+
+Eşlerin (peers) birbirlerini bulup doğrudan WebRTC bağlantısı kurabilmesi için SDP (Offer/Answer) takası yapması gerekir. Sunucusuz modda bu takas şu yöntemlerle sağlanır:
+
+#### Yöntem A: Manuel Sinyalleşme (SDP Kopyala-Yapıştır / QR Kod)
+Hiçbir ağ veya sunucu trafiği gerektirmeyen en güvenli yöntemdir.
+
+* **Arayan/Gönderen (Caller/Alice):**
+  1. Arayüzden "Sunucusuz Bağlantı Başlat" seçeneğini seçer.
+  2. İstemci yerel olarak bir SDP Offer (Teklif) ve ICE adaylarını içeren bir JSON metni oluşturur.
+  3. Bu metin arayüzde kopyalanabilir bir metin kutusunda ve büyük bir **QR Kod** olarak gösterilir.
+* **Aranan/Alıcı (Callee/Bob):**
+  1. Bob, Alice'in QR kodunu kamerasıyla taratır veya metni panosuna kopyalayıp uygulamadaki "SDP Teklifi Yapıştır" alanına girer.
+  2. Bob'un istemcisi bir SDP Answer (Cevap) metni ve kendi ICE adaylarını üretir.
+  3. Bob bu cevabı QR kod veya metin olarak Alice'e geri ulaştırır.
+* **Bağlantı Kurulumu:**
+  1. Alice bu cevabı uygulamaya girdiğinde, iki taraf da doğrudan Google STUN sunucuları (`stun.l.google.com:19302`) üzerinden birbirinin dış IP ve portunu öğrenir.
+  2. WebRTC P2P tüneli doğrudan kurulur. Artık veri, ses ve video tamamen P2P olarak akar.
+
+#### Yöntem B: Dağıtık ve Merkeziyetsiz Ağlar (BitTorrent DHT)
+Kullanıcıların fiziki olarak kod taşımak istemediği durumlarda, merkeziyetsiz bir buluşma (rendezvous) noktası kullanılır.
+
+- [ ] **DHT Buluşma Noktası (Distributed Hash Table):**
+  * Eşler, aralarında anlaştıkları gizli bir oda ismi/parolası belirler (örneğin: `hybridp2p_room_secret`).
+  * Bu isim kriptografik olarak hash'lenir (SHA-256) ve BitTorrent/Mainline DHT ağında bir "infohash" olarak yayınlanır.
+  * İki istemci de DHT ağı üzerinden bu infohash değerini arayarak birbirinin dış IP/Port bilgilerini bulur ve otomatik olarak WebRTC SDP takasını gerçekleştirir.
+
+---
+
+### 2. Yapılacak İşler Listesi (Checklist)
+
+- [ ] **Arayüz Tasarımı:** `client.py` içerisine "P2P Bağlantı Modu" sekmesi/paneli ekle.
+- [ ] **SDP / ICE Paketleme:** Yerel SDP ve toplanan ICE adaylarını tek bir sıkıştırılmış JSON dizesi haline getirip base64 formatına çeviren serialize modülü yaz.
+- [ ] **QR Kod Modülü:** Base64 kodlu SDP verisini göstermek için arayüze dinamik QR kod üreteci (`qrcode` kütüphanesi) entegre et. QR kod taramak için ise kamerayı açıp çözümleyen bir tarayıcı modülü ekle.
+- [ ] **Manuel Giriş Alanları:** QR kod kamerası olmayan masaüstü kullanıcıları için SDP yapıştırma textbox'ları ekle.
+- [ ] **DHT Entegrasyonu:** Python tarafında hafif bir DHT kütüphanesi (örn. `bittorrent-dht` veya `kademlia` türevi) kullanarak eş bulma ve sinyalleşme mekanizmasını prototiple.
+- [ ] **STUN Entegrasyonu:** Pure P2P modunda sadece ücretsiz ve güvenilir genel STUN sunucularını (Google, Cloudflare) kullanacak şekilde WebRTC yapılandırmasını kısıtla.
+
+

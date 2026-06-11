@@ -28,21 +28,41 @@ import aiosqlite
 import uuid as uuid_lib
 import base64
 import hashlib
+import time
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
+
+from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from crypto_utils import verify_signature, pem_string_to_public_key
 
+# Env yükle
+load_dotenv()
+
+HOST = os.getenv("HYBRIDP2P_HOST", "0.0.0.0")
+PORT = int(os.getenv("HYBRIDP2P_PORT", "8000"))
+DB_PATH = os.getenv("HYBRIDP2P_DB_PATH", "relay_server.db")
+MAX_FILE_SIZE = int(os.getenv("HYBRIDP2P_MAX_FILE_SIZE", "10485760")) # default 10MB
+
+cors_origins_raw = os.getenv("HYBRIDP2P_CORS_ORIGINS", "*")
+CORS_ORIGINS = [orig.strip() for orig in cors_origins_raw.split(",")] if cors_origins_raw else ["*"]
+
+allowed_hosts_raw = os.getenv("HYBRIDP2P_ALLOWED_HOSTS", "*")
+ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_raw.split(",")] if allowed_hosts_raw else ["*"]
+
+START_TIME = time.time()
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║                      VERİTABANI KATMANI                          ║
 # ╚═══════════════════════════════════════════════════════════════════╝
-
-DB_PATH = "relay_server.db"
 
 
 async def init_database():
@@ -154,10 +174,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — Farklı kökenlerden gelen isteklere izin ver (geliştirme için)
+# Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Trusted Host Middleware
+if ALLOWED_HOSTS and ALLOWED_HOSTS != ["*"]:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
+
+# CORS — Dinamik cors origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -223,7 +252,8 @@ class WsFallbackRequest(BaseModel):
 # ╚═══════════════════════════════════════════════════════════════════╝
 
 @app.post("/api/register")
-async def register_user(req: UserRegisterRequest):
+@limiter.limit("20/minute")
+async def register_user(request: Request, req: UserRegisterRequest):
     """
     Yeni kullanıcı kaydeder veya mevcut kullanıcının public key'ini günceller.
 
@@ -398,6 +428,30 @@ async def list_users(
         }
 
 
+@app.get("/health")
+@limiter.limit("30/minute")
+async def health_check(request: Request):
+    """
+    Sunucu sağlık durumu, uptime, db durumu ve bağlantı istatistiklerini döner.
+    """
+    uptime_seconds = int(time.time() - START_TIME)
+    db_ok = False
+    try:
+        async with db_session() as db:
+            await db.execute("SELECT 1")
+            db_ok = True
+    except Exception as e:
+        print(f"[Health Check] DB error: {e}")
+        
+    return {
+        "status": "healthy" if db_ok else "unhealthy",
+        "uptime_seconds": uptime_seconds,
+        "database": "connected" if db_ok else "disconnected",
+        "active_connections": len(manager.active_connections),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║               REST API — CHAT AYARLARI (EPHEMERAL)               ║
 # ╚═══════════════════════════════════════════════════════════════════╝
@@ -502,6 +556,7 @@ async def rest_ephemeral_toggle(
 # ╚═══════════════════════════════════════════════════════════════════╝
 
 @app.post("/api/upload_file")
+@limiter.limit("20/minute")
 async def upload_file(
     request: Request,
     req: FileUploadRequest,
@@ -512,19 +567,17 @@ async def upload_file(
     """
     Sifrelenmis dosyayi alir, UUID ile veritabanina kaydeder.
     Sunucu dosya icerigini gormez — sadece sifrelenmis blob saklar (Zero-Knowledge).
-    Dosya max 10MB olmali.
     """
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     if x_username != req.sender:
         raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
         
-    # Enforce 10 MB limit on the decoded file size
-    # Base64 size formula: (len * 3) / 4
     estimated_size = (len(req.encrypted_data) * 3) // 4
-    if estimated_size > 10 * 1024 * 1024:
+    if estimated_size > MAX_FILE_SIZE:
+        max_mb = MAX_FILE_SIZE / (1024 * 1024)
         raise HTTPException(
             status_code=413, 
-            detail="Dosya boyutu çok büyük! Maksimum limit 10 MB'tır."
+            detail=f"Dosya boyutu çok büyük! Maksimum limit {max_mb:.1f} MB'tır."
         )
 
     file_uuid = str(uuid_lib.uuid4())
@@ -584,6 +637,7 @@ async def download_file(
 # ╚═══════════════════════════════════════════════════════════════════╝
 
 @app.post("/api/send_offline")
+@limiter.limit("60/minute")
 async def send_offline_message(
     request: Request,
     req: SendMessageRequest,
@@ -635,6 +689,7 @@ async def send_offline_message(
 
 
 @app.post("/api/send_ws_fallback")
+@limiter.limit("60/minute")
 async def send_ws_fallback(
     request: Request,
     req: WsFallbackRequest,
@@ -1748,14 +1803,14 @@ if __name__ == "__main__":
 
     print("=" * 60)
     print("  HybridP2P Messenger - Relay Server")
-    print("  REST API: http://127.0.0.1:8000/docs")
-    print("  WebSocket: ws://127.0.0.1:8000/ws/{username}")
+    print(f"  REST API: http://{HOST if HOST != '0.0.0.0' else '127.0.0.1'}:{PORT}/docs")
+    print(f"  WebSocket: ws://{HOST if HOST != '0.0.0.0' else '127.0.0.1'}:{PORT}/ws/{{username}}")
     print("=" * 60)
 
     uvicorn.run(
         "server:app",
-        host="0.0.0.0",       # Tüm arayüzlerden erişilebilir
-        port=8000,
+        host=HOST,
+        port=PORT,
         reload=True,           # Geliştirme modunda otomatik yeniden yükleme
         log_level="info",
     )

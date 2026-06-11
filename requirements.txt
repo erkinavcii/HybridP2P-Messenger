@@ -22,3 +22,5 @@ sounddevice>=0.5.2
 av>=16.0.1
 opencv-python>=4.12.0
 numpy>=1.26.0
+slowapi>=0.1.9
+python-dotenv>=1.0.1

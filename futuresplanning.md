@@ -96,13 +96,13 @@ Kullanıcılar herhangi bir tarayıcıdan `https://mesaj.example.com` adresine g
 
 #### 1.1 — server.py Değişiklikleri
 
-| Değişiklik | Açıklama |
-|------------|----------|
-| `CORS origins` | `*` yerine explicit domain listesi veya environment variable |
-| `ALLOWED_HOSTS` | Sadece bilinen domain'leri kabul et |
-| **Rate limiting** | `slowapi` veya custom middleware — kayıt, mesaj gönderme, anahtar sorgulama endpoint'lerine limit |
-| **HTTPS-only cookie flag** | Session/token varsa Secure + SameSite=Strict |
-| **Health endpoint** | `GET /health` → uptime, DB durumu, aktif bağlantı sayısı |
+| Değişiklik | Açıklama | Durum |
+|------------|----------|-------|
+| `CORS origins` | `*` yerine explicit domain listesi veya environment variable | ✅ Tamamlandı |
+| `ALLOWED_HOSTS` | Sadece bilinen domain'leri kabul et | ✅ Tamamlandı |
+| **Rate limiting** | `slowapi` veya custom middleware — kayıt, mesaj gönderme, anahtar sorgulama endpoint'lerine limit | ✅ Tamamlandı |
+| **HTTPS-only cookie flag** | Session/token varsa Secure + SameSite=Strict | ➖ Uygulanamaz (İmza tabanlı auth) |
+| **Health endpoint** | `GET /health` → uptime, DB durumu, aktif bağlantı sayısı | ✅ Tamamlandı |
 
 #### 1.2 — Statik Dosya Stratejisi
 
@@ -175,12 +175,12 @@ Tarayıcıda private key güvenliği masaüstünden çok farklı. Strateji:
 **Mevcut Durum:** Web client zaten `window.crypto.subtle` kullanarak RSA-OAEP key pair üretiyor ve PEM'e çevirip localStorage'da saklıyor. Bu iyi bir başlangıç.
 
 **Geliştirilecek:**
-1. `IndexedDB` kullan (localStorage XSS'e daha açık)
-2. Key export'u kullanıcının belirlediği parola ile AES-256-GCM encrypt et
-3. Giriş ekranında "Import Key" butonu → şifreli PEM dosyasını yükle + parola gir
-4. Logout'ta `sessionStorage`'daki session bilgisini temizle ama `IndexedDB`'deki encrypted key'i koru
+1. `IndexedDB` kullan (localStorage XSS'e daha açık) ✅ (Tamamlandı)
+2. Key export'u kullanıcının belirlediği parola ile AES-256-GCM encrypt et ✅ (Tamamlandı)
+3. Giriş ekranında "Import Key" butonu → şifreli PEM dosyasını yükle + parola gir ✅ (Tamamlandı)
+4. Logout'ta `sessionStorage`'daki session bilgisini temizle ama `IndexedDB`'deki encrypted key'i koru ✅ (Tamamlandı)
 
-#### 2.2 — CSP (Content Security Policy)
+#### 2.2 — CSP (Content Security Policy) ✅ (Tamamlandı)
 
 ```html
 <meta http-equiv="Content-Security-Policy" 
@@ -191,7 +191,7 @@ Tarayıcıda private key güvenliği masaüstünden çok farklı. Strateji:
                font-src https://fonts.gstatic.com;">
 ```
 
-#### 2.3 — Session Yönetimi
+#### 2.3 — Session Yönetimi ✅ (Tamamlandı)
 
 ```
 Login → Kullanıcı adı girer
@@ -275,7 +275,7 @@ HYBRIDP2P_CORS_ORIGINS=https://mesaj.example.com
 HYBRIDP2P_MAX_FILE_SIZE=52428800  # 50MB
 ```
 
-#### 4.3 — server.py'ye ENV Desteği Ekleme
+#### 4.3 — server.py'ye ENV Desteği Ekleme ✅ (Tamamlandı)
 
 ```python
 import os

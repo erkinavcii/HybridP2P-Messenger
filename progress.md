@@ -104,10 +104,10 @@
 ### 🔐 Güvenlik İyileştirmeleri
 - [ ] **Signal Protokolü (Double Ratchet)**: Her mesajda yeni anahtar türetme → tam Forward Secrecy. Bir anahtar ele geçirilse bile geçmiş/gelecek mesajlar korunur
 - [ ] **Anahtar Doğrulama (Key Verification)**: QR kod veya güvenlik numarası ile karşı tarafın anahtarını yüz yüze doğrulama (MITM koruması)
-- [ ] **Private Key Şifreleme**: Yerel private key'i kullanıcı parolası ile AES şifreleme (cihaz çalınsa bile anahtar güvende)
+- [x] **Private Key Şifreleme**: Yerel private key'i kullanıcı parolası ile AES şifreleme (cihaz çalınsa bile anahtar güvende) (IndexedDB + Parola korumalı E2EE yedek) ✅
 - [ ] **Mesaj İmzalama (Digital Signature)**: RSA-PSS ile her mesaja dijital imza → gönderici kimlik doğrulama
 - [ ] **Anahtar Yenileme (Key Rotation)**: Belirli aralıklarla otomatik yeni anahtar çifti üretme ve dağıtma
-- [ ] **Sunucu Tarafı Rate Limiting**: Brute-force ve spam saldırılarına karşı istek sınırlama
+- [x] **Sunucu Tarafı Rate Limiting**: Brute-force ve spam saldırılarına karşı istek sınırlama ✅
 
 ### 💬 Mesajlaşma Özellikleri
 - [x] **Tek Gorunumlu Mesaj (View-Once)** — per-mesaj toggle, 10s countdown, hic kaydedilmez ✅
@@ -156,7 +156,7 @@
 - [ ] **Admin Paneli**: Sunucu durumunu, kullanıcı sayısını ve mesaj istatistiklerini gösteren web arayüzü
 - [ ] **Loglama**: Yapılandırılmış log çıktısı (JSON format, log seviyeleri)
 - [ ] **Metrikler**: Prometheus/Grafana ile sunucu performans izleme
-- [ ] **Sağlık Kontrolü (Health Check)**: `/health` endpoint'i (uptime, DB durumu)
+- [x] **Sağlık Kontrolü (Health Check)**: `/health` endpoint'i (uptime, DB durumu) ✅
 
 ---
 

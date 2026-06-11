@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HybridP2P E2EE Web Messenger</title>
+    <meta http-equiv="Content-Security-Policy" 
+          content="default-src 'self'; 
+                   connect-src 'self' ws: wss: http: https:; 
+                   script-src 'self' 'unsafe-inline'; 
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; 
+                   font-src 'self' https://fonts.gstatic.com;
+                   media-src 'self' blob:;
+                   img-src 'self' data: blob:;">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -949,6 +957,15 @@
             padding: 0;
         }
         .call-btn:hover { background: rgba(139,92,246,0.15); color: var(--accent-hover); border-color: var(--accent-color); }
+        .tab-btn {
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .tab-btn.active {
+            color: #ffffff !important;
+            border-bottom-color: var(--accent-color) !important;
+        }
     </style>
 </head>
 <body>
@@ -984,8 +1001,23 @@
                     </div>
                     
                     <div id="import-key-section" class="input-group hidden">
+                        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
+                            <label for="import-key-file" style="font-size: 12px; font-weight: bold; text-transform: uppercase;">Or Upload Backup File (.txt / .pem)</label>
+                            <input type="file" id="import-key-file" accept=".pem,.txt" style="font-size: 12px; color: var(--text-muted); background: #09090b; padding: 6px; border: 1px dashed var(--border-color); border-radius: 4px; cursor: pointer;">
+                        </div>
+                        
                         <label for="private-key-input">Private Key PEM</label>
-                        <textarea id="private-key-input" class="input-control" rows="5" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="font-family: monospace; font-size: 11px; resize: vertical;"></textarea>
+                        <textarea id="private-key-input" class="input-control" rows="4" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="font-family: monospace; font-size: 11px; resize: vertical; margin-bottom: 8px;"></textarea>
+                        
+                        <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
+                            <input type="checkbox" id="decrypt-key-checkbox" style="cursor: pointer; accent-color: var(--accent-color);">
+                            <label for="decrypt-key-checkbox" style="cursor: pointer; font-size: 13px; color: var(--text-muted); margin-bottom: 0; text-transform: none;">This key is password-encrypted</label>
+                        </div>
+                        
+                        <div id="decrypt-password-section" class="hidden" style="margin-bottom: 8px;">
+                            <label for="decrypt-password-input">Decryption Password</label>
+                            <input type="password" id="decrypt-password-input" class="input-control" placeholder="Enter password to decrypt key">
+                        </div>
                     </div>
 
                     <button id="login-btn" class="btn">
@@ -1203,12 +1235,19 @@
                 <button id="backup-key-close-btn" class="action-icon-btn">✕</button>
             </div>
             <p style="font-size: 12px; color: #ef4444; font-weight: 500;">WARNING: Keep this private key secret! Anyone with access to this key can read your messages and impersonate you.</p>
-            <div class="input-group" style="margin-bottom: 0;">
+            <div class="input-group" style="margin-bottom: 12px;">
                 <label for="backup-key-textarea">Your Private Key PEM</label>
-                <textarea id="backup-key-textarea" class="input-control" rows="8" readonly style="font-family: monospace; font-size: 10px; resize: none; background-color: #09090b; color: var(--text-color); border-color: var(--border-color);"></textarea>
+                <textarea id="backup-key-textarea" class="input-control" rows="6" readonly style="font-family: monospace; font-size: 10px; resize: none; background-color: #09090b; color: var(--text-color); border-color: var(--border-color);"></textarea>
+            </div>
+            <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-bottom: 12px; text-align: left;">
+                <label style="font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 6px; display: block;">🔒 Encrypt Backup with Password (Highly Recommended)</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="password" id="backup-password-input" class="input-control" placeholder="Choose a password for backup" style="margin-bottom: 0; background-color: #09090b; border: 1px solid var(--border-color); color: white; border-radius: 4px; padding: 10px;">
+                    <button id="backup-key-encrypt-download-btn" class="btn" style="width: auto; padding: 10px 16px; font-size: 13px; white-space: nowrap; background-color: var(--accent-color);">Encrypt & Download</button>
+                </div>
             </div>
             <div class="modal-footer">
-                <button id="backup-key-copy-btn" class="btn" style="width: auto; padding: 10px 20px;">Copy to Clipboard</button>
+                <button id="backup-key-copy-btn" class="btn" style="background-color: var(--border-color); width: auto; padding: 10px 20px;">Copy PEM</button>
             </div>
         </div>
     </div>
@@ -1237,6 +1276,115 @@
         const BASE_HOST = window.location.host; // e.g. "127.0.0.1:8000" or ngrok URL
         const API_URL = `${window.location.protocol}//${BASE_HOST}`;
         const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${BASE_HOST}`;
+
+        // ── IndexedDB Helpers ──
+        const dbName = "hybridp2p_db";
+        const dbVersion = 1;
+
+        function getDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(dbName, dbVersion);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains("keys")) {
+                        db.createObjectStore("keys");
+                    }
+                    if (!db.objectStoreNames.contains("chats")) {
+                        db.createObjectStore("chats");
+                    }
+                };
+                request.onsuccess = (e) => resolve(e.target.result);
+                request.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        async function dbGet(storeName, key) {
+            const db = await getDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, "readonly");
+                const store = transaction.objectStore(storeName);
+                const request = store.get(key);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function dbSet(storeName, key, value) {
+            const db = await getDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, "readwrite");
+                const store = transaction.objectStore(storeName);
+                const request = store.put(value, key);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function dbDel(storeName, key) {
+            const db = await getDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, "readwrite");
+                const store = transaction.objectStore(storeName);
+                const request = store.delete(key);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // ── PBKDF2 + AES-GCM Key Encryption ──
+        async function deriveKeyFromPassword(password, salt) {
+            const encoder = new TextEncoder();
+            const passwordBytes = encoder.encode(password);
+            const baseKey = await window.crypto.subtle.importKey(
+                "raw",
+                passwordBytes,
+                { name: "PBKDF2" },
+                false,
+                ["deriveBits", "deriveKey"]
+            );
+            return await window.crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: salt,
+                    iterations: 100000,
+                    hash: "SHA-256"
+                },
+                baseKey,
+                { name: "AES-GCM", length: 256 },
+                true,
+                ["encrypt", "decrypt"]
+            );
+        }
+
+        async function encryptPrivateKey(privateKeyPem, password) {
+            const encoder = new TextEncoder();
+            const salt = window.crypto.getRandomValues(new Uint8Array(16));
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            const aesKey = await deriveKeyFromPassword(password, salt);
+            const privateKeyBytes = encoder.encode(privateKeyPem);
+            const ciphertext = await window.crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv },
+                aesKey,
+                privateKeyBytes
+            );
+            return arrayBufferToBase64(salt) + ":" + arrayBufferToBase64(iv) + ":" + arrayBufferToBase64(ciphertext);
+        }
+
+        async function decryptPrivateKey(encryptedDataStr, password) {
+            const parts = encryptedDataStr.split(":");
+            if (parts.length !== 3) throw new Error("Invalid encrypted key format");
+            const salt = base64ToArrayBuffer(parts[0]);
+            const iv = base64ToArrayBuffer(parts[1]);
+            const ciphertext = base64ToArrayBuffer(parts[2]);
+            const aesKey = await deriveKeyFromPassword(password, salt);
+            const decryptedBytes = await window.crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: iv },
+                aesKey,
+                ciphertext
+            );
+            const decoder = new TextDecoder();
+            return decoder.decode(decryptedBytes);
+        }
 
         // Application State
         const state = {
@@ -1705,8 +1853,8 @@
             return await signDataJS(privateKeyPem, encoder.encode(dataToSign));
         }
 
-        // ── Database / LocalStorage State Management ──
-        function persistChats() {
+        // ── Database / IndexedDB State Management ──
+        async function persistChats() {
             if (!state.username) return;
             const chatsClone = {};
             for (const [k, v] of Object.entries(state.chats)) {
@@ -1716,10 +1864,10 @@
                     messages: v.ephemeral ? [] : v.messages
                 };
             }
-            localStorage.setItem(`chats_${state.username}`, JSON.stringify(chatsClone));
+            await dbSet("chats", `chats_${state.username}`, JSON.stringify(chatsClone));
         }
 
-        function saveChatToLocalStorage(partner, msgObj) {
+        async function saveChatToLocalStorage(partner, msgObj) {
             if (!state.chats[partner]) {
                 state.chats[partner] = {
                     partner: partner,
@@ -1734,7 +1882,7 @@
                     state.chats[partner].messages.push(msgObj);
                 }
             }
-            persistChats();
+            await persistChats();
         }
 
         // Sync ephemeral state from server
@@ -1759,15 +1907,15 @@
                         }
                         state.chats[partner].ephemeral = setting.ephemeral;
                     }
-                    persistChats();
+                    await persistChats();
                 }
             } catch (err) {
                 console.error("Chat settings sync failed:", err);
             }
         }
 
-        function loadChatsFromLocalStorage() {
-            const raw = localStorage.getItem(`chats_${state.username}`);
+        async function loadChatsFromLocalStorage() {
+            const raw = await dbGet("chats", `chats_${state.username}`);
             if (raw) {
                 state.chats = JSON.parse(raw);
             } else {
@@ -1846,7 +1994,7 @@
                 
                 if (res.status === 200) {
                     const data = await res.json();
-                    saveChatToLocalStorage(partner, null);
+                    await saveChatToLocalStorage(partner, null);
                     closeModal();
                     selectChat(partner, data.public_key);
                 } else {
@@ -1859,12 +2007,48 @@
 
         // Initialize Keys on Page Load
         window.addEventListener("load", async () => {
-            const savedPriv = localStorage.getItem("private_key");
-            const savedPub = localStorage.getItem("public_key");
+            const savedPriv = await dbGet("keys", "private_key");
+            const savedPub = await dbGet("keys", "public_key");
             
             if (savedPriv && savedPub) {
                 state.privateKeyPem = savedPriv;
                 state.publicKeyPem = savedPub;
+                
+                // Auto-login if session exists in sessionStorage
+                const sessionUser = sessionStorage.getItem("session_username");
+                if (sessionUser) {
+                    state.username = sessionUser;
+                    document.getElementById("my-username").innerText = sessionUser;
+                    
+                    const fp = await getFingerprintJS(state.publicKeyPem);
+                    document.getElementById("my-fingerprint").innerText = fp;
+                    document.getElementById("my-fingerprint").title = fp;
+                    
+                    await loadChatsFromLocalStorage();
+                    loginScreen.classList.remove("active");
+                    chatScreen.classList.add("active");
+                    
+                    const privKeyDisplay = document.getElementById("my-private-key-display");
+                    if (privKeyDisplay) {
+                        privKeyDisplay.addEventListener("click", () => {
+                            navigator.clipboard.writeText(state.privateKeyPem).then(() => {
+                                privKeyDisplay.innerText = "COPIED!";
+                                privKeyDisplay.style.color = "var(--online-color)";
+                                setTimeout(() => {
+                                    privKeyDisplay.innerText = "••••••••••••••••••••";
+                                    privKeyDisplay.style.color = "var(--accent-hover)";
+                                }, 2000);
+                            }).catch(err => {
+                                console.error("Copy failed:", err);
+                            });
+                        });
+                    }
+
+                    await fetchOfflineMessages();
+                    await syncChatSettingsFromServer();
+                    renderInbox();
+                    connectWebSocket();
+                }
             } else {
                 loginForm.classList.add("hidden");
                 loadingKeysSection.classList.remove("hidden");
@@ -1872,8 +2056,8 @@
                 // Generate 4096-bit RSA Keys in background
                 const keys = await generateKeyPair();
                 
-                localStorage.setItem("private_key", keys.privateKey);
-                localStorage.setItem("public_key", keys.publicKey);
+                await dbSet("keys", "private_key", keys.privateKey);
+                await dbSet("keys", "public_key", keys.publicKey);
                 
                 state.privateKeyPem = keys.privateKey;
                 state.publicKeyPem = keys.publicKey;
@@ -1888,6 +2072,11 @@
         const importKeySection = document.getElementById("import-key-section");
         const privateKeyInput = document.getElementById("private-key-input");
 
+        const decryptKeyCheckbox = document.getElementById("decrypt-key-checkbox");
+        const decryptPasswordSection = document.getElementById("decrypt-password-section");
+        const decryptPasswordInput = document.getElementById("decrypt-password-input");
+        const importKeyFile = document.getElementById("import-key-file");
+
         importKeyCheckbox.addEventListener("change", () => {
             if (importKeyCheckbox.checked) {
                 importKeySection.classList.remove("hidden");
@@ -1895,6 +2084,33 @@
             } else {
                 importKeySection.classList.add("hidden");
             }
+        });
+
+        decryptKeyCheckbox.addEventListener("change", () => {
+            if (decryptKeyCheckbox.checked) {
+                decryptPasswordSection.classList.remove("hidden");
+                decryptPasswordInput.focus();
+            } else {
+                decryptPasswordSection.classList.add("hidden");
+            }
+        });
+
+        importKeyFile.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                privateKeyInput.value = evt.target.result.trim();
+                if (evt.target.result.split(":").length === 3) {
+                    decryptKeyCheckbox.checked = true;
+                    decryptPasswordSection.classList.remove("hidden");
+                    decryptPasswordInput.focus();
+                } else {
+                    decryptKeyCheckbox.checked = false;
+                    decryptPasswordSection.classList.add("hidden");
+                }
+            };
+            reader.readAsText(file);
         });
 
         // File transfer event listeners
@@ -1966,19 +2182,38 @@
             try {
                 // Handle Private Key import if requested
                 if (importKeyCheckbox.checked) {
-                    const importedPem = privateKeyInput.value.trim();
+                    let importedPem = privateKeyInput.value.trim();
                     if (!importedPem) {
-                        alert("Lütfen özel anahtarınızı (Private Key PEM) yapıştırın.");
+                        alert("Lütfen özel anahtarınızı (Private Key PEM) yapıştırın veya dosya yükleyin.");
                         loginBtn.disabled = false;
                         loginBtn.innerText = "Sign In";
                         return;
                     }
+                    
+                    if (decryptKeyCheckbox.checked) {
+                        const password = decryptPasswordInput.value;
+                        if (!password) {
+                            alert("Şifreli anahtarı çözmek için lütfen parola girin.");
+                            loginBtn.disabled = false;
+                            loginBtn.innerText = "Sign In";
+                            return;
+                        }
+                        try {
+                            importedPem = await decryptPrivateKey(importedPem, password);
+                        } catch (decryptErr) {
+                            alert("Şifre çözme başarısız! Parola yanlış veya dosya bozuk olabilir.");
+                            loginBtn.disabled = false;
+                            loginBtn.innerText = "Sign In";
+                            return;
+                        }
+                    }
+
                     try {
                         const pubKeyPem = await derivePublicKeyFromPrivateKey(importedPem);
                         state.privateKeyPem = importedPem;
                         state.publicKeyPem = pubKeyPem;
-                        localStorage.setItem("private_key", importedPem);
-                        localStorage.setItem("public_key", pubKeyPem);
+                        await dbSet("keys", "private_key", importedPem);
+                        await dbSet("keys", "public_key", pubKeyPem);
                     } catch (e) {
                         alert("İçeri aktarma hatası: Geçersiz Özel Anahtar (Private Key PEM) formatı.");
                         loginBtn.disabled = false;
@@ -2002,13 +2237,14 @@
                 
                 if (registerRes.status === 200) {
                     state.username = username;
+                    sessionStorage.setItem("session_username", username);
                     document.getElementById("my-username").innerText = username;
                     
                     const fp = await getFingerprintJS(state.publicKeyPem);
                     document.getElementById("my-fingerprint").innerText = fp;
                     document.getElementById("my-fingerprint").title = fp;
                     
-                    loadChatsFromLocalStorage();
+                    await loadChatsFromLocalStorage();
                     loginScreen.classList.remove("active");
                     chatScreen.classList.add("active");
                     
@@ -2048,8 +2284,8 @@
         // Logout
         document.getElementById("logout-btn").addEventListener("click", () => {
             if (state.ws) state.ws.close();
-            localStorage.removeItem("private_key");
-            localStorage.removeItem("public_key");
+            sessionStorage.removeItem("session_username");
+            // IndexedDB'deki key'leri koruyoruz ki yedeksiz kullanıcı anahtarsız kalmasın.
             window.location.reload();
         });
 
@@ -2074,8 +2310,42 @@
             document.execCommand("copy");
             backupKeyCopyBtn.innerText = "Copied!";
             setTimeout(() => {
-                backupKeyCopyBtn.innerText = "Copy to Clipboard";
+                backupKeyCopyBtn.innerText = "Copy PEM";
             }, 2000);
+        });
+
+        const backupKeyEncryptDownloadBtn = document.getElementById("backup-key-encrypt-download-btn");
+        const backupPasswordInput = document.getElementById("backup-password-input");
+
+        backupKeyEncryptDownloadBtn.addEventListener("click", async () => {
+            const password = backupPasswordInput.value;
+            if (!password) {
+                alert("Lütfen yedek dosyasını şifrelemek için bir parola girin.");
+                return;
+            }
+            try {
+                backupKeyEncryptDownloadBtn.disabled = true;
+                backupKeyEncryptDownloadBtn.innerText = "Encrypting...";
+                
+                const encryptedKey = await encryptPrivateKey(state.privateKeyPem, password);
+                
+                const blob = new Blob([encryptedKey], {type: 'text/plain'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hybridp2p_backup_${state.username || 'user'}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                backupPasswordInput.value = "";
+                backupKeyEncryptDownloadBtn.disabled = false;
+                backupKeyEncryptDownloadBtn.innerText = "Encrypt & Download";
+                alert("Şifreli yedek dosyası başarıyla indirildi.");
+            } catch (err) {
+                alert("Şifreleme hatası: " + err.message);
+                backupKeyEncryptDownloadBtn.disabled = false;
+                backupKeyEncryptDownloadBtn.innerText = "Encrypt & Download";
+            }
         });
 
         // Reconnect Server Button listener
@@ -2110,7 +2380,7 @@
                                 encrypted_payload: msg.encrypted_payload,
                                 read: false
                             };
-                            saveChatToLocalStorage(msg.sender, msgObj);
+                            await saveChatToLocalStorage(msg.sender, msgObj);
                         } catch (decryptErr) {
                             console.error("Çevrimdışı mesaj çözülemedi:", decryptErr);
                         }
@@ -2810,7 +3080,7 @@
                             read: true
                         };
                         
-                        saveChatToLocalStorage(state.recipient, msgObj);
+                        await saveChatToLocalStorage(state.recipient, msgObj);
                         renderMessages();
                         renderInbox();
                         
@@ -2873,7 +3143,7 @@
                         read: true
                     };
                     
-                    saveChatToLocalStorage(state.recipient, msgObj);
+                    await saveChatToLocalStorage(state.recipient, msgObj);
                     renderMessages();
                     renderInbox();
                     
@@ -2980,7 +3250,7 @@
                                 m => m.timestamp === msgObj.timestamp && m.content === msgObj.content
                             );
                             if (!exists) state.chats[sender].messages.push(msgObj);
-                            persistChats();
+                            await persistChats();
 
                             if (isActive) {
                                 renderMessages();
@@ -3017,7 +3287,7 @@
                             m => m.is_file && m.file_uuid === data.file_uuid
                         );
                         if (!exists) state.chats[sender].messages.push(msgObj);
-                        persistChats();
+                        await persistChats();
                         
                         if (isActive) {
                             renderMessages();
@@ -3034,7 +3304,7 @@
                             state.chats[sender] = { partner: sender, ephemeral: false, messages: [] };
                         }
                         state.chats[sender].ephemeral = newEphemeral;
-                        persistChats();
+                        await persistChats();
                         // If this is the active chat, sync button + show system msg
                         if (state.recipient === sender) {
                             state.ephemeral = newEphemeral;
@@ -3069,7 +3339,7 @@
                                     m.read = true;
                                 }
                             });
-                            persistChats();
+                            await persistChats();
                             if (state.recipient === sender) {
                                 renderMessages();
                             }

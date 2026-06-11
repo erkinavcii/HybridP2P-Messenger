@@ -888,6 +888,53 @@ async def fetch_offline_messages(
 
 
 # ╔═══════════════════════════════════════════════════════════════════╗
+# ║                REST API — VoIP ICE SUNUCU AYARLARI                ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+
+# Kendi VPS'inizde coturn kuruluysa bu ortam değişkenlerini ayarlayın.
+# Örnek: TURN_HOST=turn.example.com TURN_USERNAME=relay TURN_CREDENTIAL=gizlisifre
+# Ayarlanmazsa sadece Google'ın ücretsiz STUN sunucuları döner.
+_TURN_HOST       = os.getenv("TURN_HOST", "")
+_TURN_USERNAME   = os.getenv("TURN_USERNAME", "")
+_TURN_CREDENTIAL = os.getenv("TURN_CREDENTIAL", "")
+
+
+@app.get("/api/ice_servers")
+async def get_ice_servers():
+    """
+    WebRTC ICE yapılandırmasını döndürür.
+
+    İstemciler RTCPeerConnection açmadan önce bu endpoint'i çağırır.
+    Sunucu asla medya verisine dokunmaz — bu endpoint yalnızca
+    P2P bağlantı kurabilmek için gerekli STUN/TURN adreslerini sağlar.
+
+    STUN sunucuları: Google'ın ücretsiz genel STUN sunucuları.
+    TURN sunucusu  : Opsiyonel, kendi VPS'iniz. TURN_HOST env değişkeniyle
+                     ayarlanmadıysa dönen listede TURN sunucusu bulunmaz.
+    """
+    ice_servers = [
+        # Google'ın ücretsiz STUN sunucuları (herhangi bir kayıt veya ücret gerekmez)
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+        {"urls": "stun:stun2.l.google.com:19302"},
+    ]
+
+    # Kendi coturn sunucunuz yapılandırılmışsa ekle
+    if _TURN_HOST:
+        ice_servers.append({
+            "urls": [
+                f"turn:{_TURN_HOST}:3478?transport=udp",
+                f"turn:{_TURN_HOST}:3478?transport=tcp",
+                f"turns:{_TURN_HOST}:5349",  # TLS üzerinden TURN
+            ],
+            "username": _TURN_USERNAME,
+            "credential": _TURN_CREDENTIAL,
+        })
+
+    return {"ice_servers": ice_servers}
+
+
+# ╔═══════════════════════════════════════════════════════════════════╗
 # ║                  REST API — GRUP YÖNETİMİ                         ║
 # ╚═══════════════════════════════════════════════════════════════════╝
 
@@ -1083,11 +1130,18 @@ class ConnectionManager:
     Her kullanıcı bağlandığında username → WebSocket eşlemesi yapılır.
     Mesaj geldiğinde alıcı bağlıysa doğrudan iletilir,
     bağlı değilse çevrimdışı kuyruğa (SQLite) yazılır.
+
+    VoIP için ek state:
+      active_calls  : { username -> call_id }  — şu an bir aramadaki kullanıcılar
+      call_timers   : { call_id -> asyncio.Task } — 30s timeout görevleri
     """
 
     def __init__(self):
         # Aktif bağlantılar: {username: WebSocket}
         self.active_connections: dict[str, WebSocket] = {}
+        # VoIP: arayan/aranan haritası (bellek içi, DB'ye yazılmaz)
+        self.active_calls: dict[str, str] = {}       # username -> call_id
+        self.call_timers: dict[str, asyncio.Task] = {}  # call_id -> timeout task
 
     async def connect(self, username: str, websocket: WebSocket):
         """Yeni WebSocket bağlantısını kabul eder ve kayıt altına alır."""
@@ -1096,13 +1150,40 @@ class ConnectionManager:
         print(f"[WS] '{username}' connected. Active connections: {len(self.active_connections)}")
 
     def disconnect(self, username: str):
-        """Bağlantıyı kapatır ve listeden çıkarır."""
+        """Bağlantıyı kapatır ve listeden çıkarır. Devam eden aramayı da temizler."""
         self.active_connections.pop(username, None)
+        # Kullanıcı bir aramanın içindeyse, call_id'yi temizle
+        call_id = self.active_calls.pop(username, None)
+        if call_id:
+            # Timeout task varsa iptal et
+            task = self.call_timers.pop(call_id, None)
+            if task and not task.done():
+                task.cancel()
         print(f"[WS] '{username}' disconnected. Active connections: {len(self.active_connections)}")
 
     def is_online(self, username: str) -> bool:
         """Kullanıcının şu anda bağlı olup olmadığını kontrol eder."""
         return username in self.active_connections
+
+    def is_in_call(self, username: str) -> bool:
+        """Kullanıcının şu anda bir aramada olup olmadığını kontrol eder."""
+        return username in self.active_calls
+
+    def start_call(self, caller: str, callee: str, call_id: str):
+        """Aramayı başlat — her iki tarafı active_calls'a ekle."""
+        self.active_calls[caller] = call_id
+        self.active_calls[callee] = call_id
+
+    def end_call(self, call_id: str):
+        """Aramayı sonlandır — her iki tarafı active_calls'tan çıkar."""
+        # call_id üzerinden her iki kullanıcıyı bul ve sil
+        to_remove = [u for u, cid in self.active_calls.items() if cid == call_id]
+        for u in to_remove:
+            self.active_calls.pop(u, None)
+        # Timeout task varsa iptal et
+        task = self.call_timers.pop(call_id, None)
+        if task and not task.done():
+            task.cancel()
 
     async def send_to_user(self, username: str, message: dict):
         """Belirli bir kullanıcıya JSON mesaj gönderir."""
@@ -1416,6 +1497,158 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             elif msg_type == "ping":
                 # Bağlantı canlılık kontrolü
                 await manager.send_to_user(username, {"type": "pong"})
+
+            # ═══════════════════════════════════════════════════════════
+            #  VoIP SİNYAL RELAY (Faz 1)
+            #  Sunucu SDP/ICE içeriğini okumaz veya saklamaz.
+            #  Sadece paketleri alıcıya yönlendirir (pure relay).
+            # ═══════════════════════════════════════════════════════════
+
+            elif msg_type == "call_offer":
+                recipient  = message.get("recipient", "")
+                call_id    = message.get("call_id", str(uuid_lib.uuid4()))
+                call_type  = message.get("call_type", "audio")  # "audio" | "video"
+                sdp_offer  = message.get("sdp_offer", "")
+                ts         = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
+
+                # Aranan kişi çevrimdışı mı?
+                if not manager.is_online(recipient):
+                    await manager.send_to_user(username, {
+                        "type": "call_reject",
+                        "call_id": call_id,
+                        "reason": "unavailable",
+                        "timestamp": ts,
+                    })
+
+                # Arayan zaten bir aramada mı?
+                elif manager.is_in_call(username):
+                    await manager.send_to_user(username, {
+                        "type": "call_reject",
+                        "call_id": call_id,
+                        "reason": "busy_caller",
+                        "timestamp": ts,
+                    })
+
+                # Aranan zaten bir aramada mı?
+                elif manager.is_in_call(recipient):
+                    await manager.send_to_user(username, {
+                        "type": "call_reject",
+                        "call_id": call_id,
+                        "reason": "busy",
+                        "timestamp": ts,
+                    })
+
+                else:
+                    # Her iki tarafı da active_calls'a ekle
+                    manager.start_call(username, recipient, call_id)
+
+                    # Aramayı karşı tarafa ilet
+                    await manager.send_to_user(recipient, {
+                        "type": "call_offer",
+                        "caller": username,
+                        "call_id": call_id,
+                        "call_type": call_type,
+                        "sdp_offer": sdp_offer,
+                        "timestamp": ts,
+                    })
+
+                    # 30 saniyelik cevap bekleme zamanlayıcısı
+                    async def _call_timeout(cid: str, caller: str, callee: str):
+                        await asyncio.sleep(30)
+                        # Hâlâ aktif mi?
+                        if cid in manager.call_timers:
+                            manager.end_call(cid)
+                            timeout_ts = datetime.now(timezone.utc).isoformat()
+                            await manager.send_to_user(caller, {
+                                "type": "call_reject",
+                                "call_id": cid,
+                                "reason": "timeout",
+                                "timestamp": timeout_ts,
+                            })
+                            await manager.send_to_user(callee, {
+                                "type": "call_reject",
+                                "call_id": cid,
+                                "reason": "timeout",
+                                "timestamp": timeout_ts,
+                            })
+                            print(f"[VoIP] Call {cid} timed out (no answer in 30s).")
+
+                    task = asyncio.create_task(_call_timeout(call_id, username, recipient))
+                    manager.call_timers[call_id] = task
+                    print(f"[VoIP] call_offer relayed: {username} → {recipient} (call_id={call_id}, type={call_type})")
+
+            elif msg_type == "call_answer":
+                recipient  = message.get("recipient", "")  # = arayan (caller)
+                call_id    = message.get("call_id", "")
+                sdp_answer = message.get("sdp_answer", "")
+                ts         = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
+
+                # Timeout zamanlayıcısını iptal et — cevap geldi
+                task = manager.call_timers.pop(call_id, None)
+                if task and not task.done():
+                    task.cancel()
+
+                # SDP cevabını arayana ilet
+                await manager.send_to_user(recipient, {
+                    "type": "call_answer",
+                    "callee": username,
+                    "call_id": call_id,
+                    "sdp_answer": sdp_answer,
+                    "timestamp": ts,
+                })
+                print(f"[VoIP] call_answer relayed: {username} → {recipient} (call_id={call_id})")
+
+            elif msg_type == "call_reject":
+                recipient = message.get("recipient", "")
+                call_id   = message.get("call_id", "")
+                reason    = message.get("reason", "rejected")
+                ts        = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
+
+                # Aramayı sonlandır
+                manager.end_call(call_id)
+
+                await manager.send_to_user(recipient, {
+                    "type": "call_reject",
+                    "call_id": call_id,
+                    "reason": reason,
+                    "timestamp": ts,
+                })
+                print(f"[VoIP] call_reject relayed: {username} → {recipient} (reason={reason})")
+
+            elif msg_type == "call_end":
+                recipient        = message.get("recipient", "")
+                call_id          = message.get("call_id", "")
+                duration_seconds = message.get("duration_seconds", 0)
+                ts               = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
+
+                # Aramayı sonlandır
+                manager.end_call(call_id)
+
+                await manager.send_to_user(recipient, {
+                    "type": "call_end",
+                    "call_id": call_id,
+                    "duration_seconds": duration_seconds,
+                    "timestamp": ts,
+                })
+                print(f"[VoIP] call_end relayed: {username} → {recipient} (duration={duration_seconds}s)")
+
+            elif msg_type == "ice_candidate":
+                # ICE candidate değişimi — NAT traversal için
+                # Sunucu sadece relay eder, içeriği okumaz
+                recipient       = message.get("recipient", "")
+                call_id         = message.get("call_id", "")
+                candidate       = message.get("candidate", "")
+                sdp_mid         = message.get("sdp_mid", "")
+                sdp_mline_index = message.get("sdp_mline_index", 0)
+
+                await manager.send_to_user(recipient, {
+                    "type": "ice_candidate",
+                    "sender": username,
+                    "call_id": call_id,
+                    "candidate": candidate,
+                    "sdp_mid": sdp_mid,
+                    "sdp_mline_index": sdp_mline_index,
+                })
 
     except WebSocketDisconnect:
         manager.disconnect(username)

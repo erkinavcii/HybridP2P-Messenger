@@ -277,10 +277,11 @@ Sesli aramanın performansı ve güvenliği için aşağıdaki mimari kurulacakt
    * Bu değişim, mevcut E2EE sinyalleşme kanalımız (WebSocket/REST) üzerinden güvenli bir şekilde aktarılır ve tarafların kalıcı RSA anahtarları ile imzalanır.
    * Taraflar ortak bir simetrik ses anahtarı (AES-256) türetir. Ses paketleri asimetrik (RSA) değil, simetrik (AES) olarak şifrelenir.
 
-2. **Peer-to-Peer Ses Akışı (WebRTC & NAT Traversal)**:
-   * Gerçek zamanlı ses için UDP protokolü tercih edilir. Gecikmeyi önlemek için P2P bağlantı esastır.
-   * **STUN/TURN**: Güvenlik duvarlarını aşmak (NAT traversal / UDP hole punching) için STUN sunucuları kullanılacaktır. P2P kurulamayan çok kısıtlı ağlarda TURN sunucusu üzerinden şifreli röle yapılır (sunucu veriyi çözemez, sadece iletir).
-   * İstemcide Python WebRTC implementasyonu için `aiortc` kütüphanesi veya `PyAudio` (Ses yakalama) + `opuslib` (Ses sıkıştırma) + `cryptography` ile özel UDP socket motoru entegre edilebilir.
+2. **Peer-to-Peer Ses & Görüntü Akışı (WebRTC & NAT Traversal - STUN/TURN)**:
+   * Gerçek zamanlı ses/video için UDP protokolü tercih edilir. Gecikmeyi önlemek için doğrudan P2P bağlantı hedeflenir.
+   * **STUN-First**: Ücretsiz STUN sunucuları (Google/Cloudflare) kullanılarak %85-90 oranında doğrudan P2P bağlantı kurulur. Sunucuya medya yükü binmez ve sıfır maliyetle çalışır.
+   * **TURN Fallback (Alternatif)**: P2P kurulamayan sıkı güvenlik duvarı/simetrik NAT arkasındaki durumlarda, opsiyonel/yedek olarak coturn veya ücretsiz Metered TURN gibi bir TURN röle sunucusu üzerinden şifreli aktarım yapılır. Sunucu veriyi çözemez, sadece paketleri iletir.
+   * İstemcide Python WebRTC implementasyonu için `aiortc` kütüphanesi veya `PyAudio` + `cryptography` ile özel UDP socket motoru entegre edilebilir.
 
 3. **Sinyalleşme Protokolü**:
    * Arama istekleri (OFFER/ANSWER) ve ağ adres adayları (ICE Candidates), röle sunucumuz (`server.py`) üzerindeki WebSocket kanalı aracılığıyla takas edilir.
@@ -288,7 +289,8 @@ Sesli aramanın performansı ve güvenliği için aşağıdaki mimari kurulacakt
 ### Bağımlılıklar
 - Sinyalleşme için WebSocket sunucu altyapısı ✅
 - `aiortc` veya `PyAudio` + `opuslib` + `cryptography`
-- Genel STUN/TURN sunucu adresleri (örneğin Google public STUN sunucuları)
+- Genel STUN sunucu adresleri (örneğin Google public STUN sunucuları)
+- (Alternatif / Opsiyonel) TURN sunucu yapılandırması (STUN başarısız olursa devreye girecek şekilde)
 
 ---
 

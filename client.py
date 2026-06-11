@@ -23,6 +23,22 @@ from datetime import datetime, timezone
 
 import requests
 import flet as ft
+import time
+import uuid as uuid_lib
+import av
+import sounddevice as sd
+import cv2
+import numpy as np
+from aiortc import (
+    RTCPeerConnection,
+    RTCSessionDescription,
+    RTCIceCandidate,
+    RTCConfiguration,
+    RTCIceServer,
+    MediaStreamTrack,
+    VideoStreamTrack
+)
+from av import VideoFrame
 
 from crypto_utils import (
     generate_rsa_keypair,
@@ -87,6 +103,173 @@ def _guess_file_type(filename: str) -> str:
     return "document"
 
 
+# ── VoIP WebRTC Track Yardımcı Sınıfları ─────────────────────────────
+
+class MicrophoneTrack(MediaStreamTrack):
+    kind = "audio"
+
+    def __init__(self):
+        super().__init__()
+        self.loop = asyncio.get_running_loop()
+        self.queue = asyncio.Queue()
+        self.sample_rate = 48000
+        self.channels = 1
+        self.frame_size = 960
+        self.enabled = True
+        
+        def callback(indata, frames, time_info, status):
+            if status:
+                print(f"[MicTrack] Status: {status}")
+            try:
+                self.loop.call_soon_threadsafe(self.queue.put_nowait, indata.copy())
+            except Exception as e:
+                pass
+            
+        self.stream = sd.InputStream(
+            samplerate=self.sample_rate,
+            channels=self.channels,
+            dtype='int16',
+            blocksize=self.frame_size,
+            callback=callback
+        )
+        self.stream.start()
+
+    async def recv(self):
+        if self.stream is None:
+            raise Exception("Track stopped")
+            
+        data = await self.queue.get()
+        if not self.enabled:
+            data = np.zeros_like(data)
+            
+        data_transposed = data.T
+        frame = av.AudioFrame.from_ndarray(data_transposed, format='s16', layout='mono')
+        frame.sample_rate = self.sample_rate
+        if not hasattr(self, "_pts"):
+            self._pts = 0
+        frame.pts = self._pts
+        frame.time_base = av.Fraction(1, self.sample_rate)
+        self._pts += self.frame_size
+        return frame
+
+    def stop(self):
+        if hasattr(self, "stream") and self.stream:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception as e:
+                print("Error stopping sd.InputStream:", e)
+            self.stream = None
+
+
+class AudioPlayer:
+    def __init__(self, track):
+        self.track = track
+        self.loop = asyncio.get_running_loop()
+        self.queue = asyncio.Queue()
+        self.sample_rate = 48000
+        self.channels = 1
+        self.frame_size = 960
+        self.running = True
+        self.play_task = None
+        
+        def callback(outdata, frames, time_info, status):
+            if status:
+                print(f"[AudioPlayer] Status: {status}")
+            try:
+                if not self.queue.empty():
+                    data = self.queue.get_nowait()
+                    outdata[:] = data
+                else:
+                    outdata.fill(0)
+            except Exception as e:
+                outdata.fill(0)
+                
+        self.stream = sd.OutputStream(
+            samplerate=self.sample_rate,
+            channels=self.channels,
+            dtype='int16',
+            blocksize=self.frame_size,
+            callback=callback
+        )
+        self.stream.start()
+
+    def start(self):
+        self.play_task = asyncio.create_task(self._run())
+
+    async def _run(self):
+        while self.running:
+            try:
+                frame = await self.track.recv()
+                data = frame.to_ndarray().T
+                await self.queue.put(data)
+            except Exception as e:
+                print("[AudioPlayer] Error receiving frame:", e)
+                break
+
+    def stop(self):
+        self.running = False
+        if self.play_task:
+            self.play_task.cancel()
+        if hasattr(self, "stream") and self.stream:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception as e:
+                print("Error stopping sd.OutputStream:", e)
+            self.stream = None
+
+
+class CameraTrack(VideoStreamTrack):
+    def __init__(self):
+        super().__init__()
+        self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_FPS, 15)
+        self.running = True
+        self.enabled = True
+        self.last_frame_time = 0
+        self.fps_interval = 1.0 / 15.0
+
+    async def recv(self):
+        now = time.time()
+        elapsed = now - self.last_frame_time
+        if elapsed < self.fps_interval:
+            await asyncio.sleep(self.fps_interval - elapsed)
+        
+        if not self.running or not self.cap:
+            raise Exception("Track stopped")
+            
+        ret, frame = self.cap.read()
+        self.last_frame_time = time.time()
+        
+        if not self.enabled:
+            img = np.zeros((480, 640, 3), dtype=np.uint8)
+        else:
+            if not ret:
+                img = np.zeros((480, 640, 3), dtype=np.uint8)
+            else:
+                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+        v_frame = VideoFrame.from_ndarray(img, format='rgb24')
+        if not hasattr(self, "_pts"):
+            self._pts = 0
+        v_frame.pts = self._pts
+        v_frame.time_base = av.Fraction(1, 90000)
+        self._pts += 6000
+        return v_frame
+
+    def stop(self):
+        self.running = False
+        if hasattr(self, "cap") and self.cap:
+            try:
+                self.cap.release()
+            except Exception as e:
+                print("Error releasing cv2.VideoCapture:", e)
+            self.cap = None
+
+
 def main(page: ft.Page):
 
     # ── Sayfa Ayarları ────────────────────────────────────────────────
@@ -112,6 +295,17 @@ def main(page: ft.Page):
         "view_once_mode":    False,   # per-mesaj view-once toggle
         "staged_file":       None,
         "logged_in":         False,
+        "active_pc":         None,
+        "active_call_id":    None,
+        "call_role":         None,
+        "call_type":         None,
+        "call_state":        None,
+        "call_partner":      None,
+        "local_audio_track": None,
+        "local_video_track": None,
+        "audio_player":      None,
+        "call_duration":     0,
+        "remote_sdp":        None,
     }
 
     # ╔═══════════════════════════════════════════════════════════════╗
@@ -1083,11 +1277,75 @@ def main(page: ft.Page):
                                 if state["recipient"] == sender:
                                     load_history_to_chat()
 
+                            elif t == "call_offer":
+                                caller = data.get("caller", "?")
+                                cid = data.get("call_id", "")
+                                ctype = data.get("call_type", "audio")
+                                sdp = data.get("sdp_offer", "")
+                                if state.get("active_call_id") is not None:
+                                    await ws.send(json.dumps({
+                                        "type": "call_reject",
+                                        "recipient": caller,
+                                        "call_id": cid,
+                                        "reason": "busy"
+                                    }))
+                                else:
+                                    state["active_call_id"] = cid
+                                    state["call_role"] = "callee"
+                                    state["call_partner"] = caller
+                                    state["call_type"] = ctype
+                                    state["call_state"] = "ringing"
+                                    state["remote_sdp"] = sdp
+                                    show_call_screen()
+
+                            elif t == "call_answer":
+                                callee = data.get("callee", "?")
+                                cid = data.get("call_id", "")
+                                sdp = data.get("sdp_answer", "")
+                                if state.get("active_call_id") == cid and state.get("call_role") == "caller":
+                                    pc = state.get("active_pc")
+                                    if pc:
+                                        try:
+                                            await pc.setRemoteDescription(RTCSessionDescription(
+                                                sdp=sdp,
+                                                type="answer"
+                                            ))
+                                        except Exception as ex:
+                                            print("Error setting remote answer description:", ex)
+                                            cleanup_call()
+
+                            elif t == "call_reject":
+                                cid = data.get("call_id", "")
+                                reason = data.get("reason", "rejected")
+                                if state.get("active_call_id") == cid:
+                                    log_status(f"Arama reddedildi ({reason})")
+                                    cleanup_call()
+
+                            elif t == "call_end":
+                                cid = data.get("call_id", "")
+                                if state.get("active_call_id") == cid:
+                                    log_status("Arama sonlandırıldı.")
+                                    cleanup_call()
+
+                            elif t == "ice_candidate":
+                                cid = data.get("call_id", "")
+                                if state.get("active_call_id") == cid:
+                                    pc = state.get("active_pc")
+                                    if pc:
+                                        try:
+                                            await pc.addIceCandidate(RTCIceCandidate(
+                                                sdpMid=data.get("sdp_mid"),
+                                                sdpMLineIndex=data.get("sdp_mline_index"),
+                                                candidate=data.get("candidate")
+                                            ))
+                                        except Exception as ex:
+                                            print("Error adding ice candidate:", ex)
+
                         except json.JSONDecodeError: pass
             except Exception as ex:
                 import websockets
                 if isinstance(ex, (websockets.exceptions.ConnectionClosed, ConnectionRefusedError, OSError)):
-                    print(f"[WS Connection Status] Baglanti kapandi/koptu: {ex}")
+                    print(f"[WS Connection Status] Baglanti kapandi/koptu (URL: {WS_URL}/ws/{state.get('username')}): {ex}")
                 else:
                     print(f"[WS Unexpected Error] Beklenmedik hata: {ex}")
                     import traceback
@@ -1103,7 +1361,21 @@ def main(page: ft.Page):
     def is_ws_connected() -> bool:
         ws = state.get("ws")
         loop = state.get("ws_loop")
-        return ws is not None and loop is not None and loop.is_running() and getattr(ws, "open", False)
+        ws_not_none = ws is not None
+        loop_not_none = loop is not None
+        loop_running = loop.is_running() if loop_not_none else False
+        
+        ws_open = False
+        if ws_not_none:
+            # websockets v14+ deprecated and removed the .open property.
+            # We check if ws.state is websockets.protocol.State.OPEN.
+            try:
+                from websockets.protocol import State
+                ws_open = (getattr(ws, "state", None) == State.OPEN)
+            except Exception:
+                ws_open = getattr(ws, "open", False)
+                
+        return ws_not_none and loop_not_none and loop_running and ws_open
 
     def _ws_send_raw(raw_json: str):
         ws = state.get("ws")
@@ -1222,6 +1494,18 @@ def main(page: ft.Page):
     ephemeral_btn = ft.IconButton(
         icon=ft.Icons.VISIBILITY, icon_color="#8b5cf6", icon_size=20,
         tooltip="Switch to Ephemeral Chat", on_click=toggle_ephemeral,
+    )
+
+    # VoIP call icon buttons
+    call_icon_btn = ft.IconButton(
+        icon=ft.Icons.CALL, icon_color="#8b5cf6", icon_size=20,
+        tooltip="Voice Call (E2EE)", on_click=lambda e: start_voip_call(video=False),
+        visible=False
+    )
+    video_call_icon_btn = ft.IconButton(
+        icon=ft.Icons.VIDEOCAM, icon_color="#8b5cf6", icon_size=20,
+        tooltip="Video Call (E2EE)", on_click=lambda e: start_voip_call(video=True),
+        visible=False
     )
 
     # View-once toggle (mesaj seviyesi — input yanında)
@@ -2899,6 +3183,8 @@ def main(page: ft.Page):
                             ),
                             ft.Container(expand=True),
                             ephemeral_btn,
+                            call_icon_btn,
+                            video_call_icon_btn,
                             ft.IconButton(
                                 icon=ft.Icons.COPY, icon_color="#8b5cf6",
                                 icon_size=20, tooltip="Copy Contact Card",
@@ -2961,6 +3247,503 @@ def main(page: ft.Page):
         expand=True,
     )
 
+    # ╔═══════════════════════════════════════════════════════════════╗
+    # ║                    VOIP (ARAMA) EKRANI & METOTLARI              ║
+    # ╚═══════════════════════════════════════════════════════════════╝
+
+    # VoIP Arayüz Elemanları
+    call_avatar = ft.CircleAvatar(
+        content=ft.Text("?", size=40, color="#ffffff"),
+        radius=60,
+        bgcolor="#8b5cf6",
+    )
+    call_name_text = ft.Text("Username", size=24, weight=ft.FontWeight.BOLD, color="#ffffff")
+    call_status_text = ft.Text("Calling...", size=14, color="#a1a1aa")
+    call_timer_text = ft.Text("00:00", size=14, color="#8b5cf6", visible=False)
+
+    transparent_placeholder = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+    local_video_preview = ft.Image(src=transparent_placeholder, width=100, height=140, fit="cover", border_radius=8, visible=False, right=10, bottom=10)
+    remote_video_view = ft.Image(src=transparent_placeholder, fit="contain", visible=False)
+
+    video_container = ft.Stack(
+        controls=[
+            remote_video_view,
+            local_video_preview
+        ],
+        expand=True,
+        visible=False
+    )
+
+    mic_btn = ft.IconButton(
+        icon=ft.Icons.MIC,
+        icon_color="#ffffff",
+        bgcolor="#27272a",
+        on_click=lambda e: toggle_call_mic(),
+        tooltip="Mute Microphone"
+    )
+    cam_btn = ft.IconButton(
+        icon=ft.Icons.VIDEOCAM,
+        icon_color="#ffffff",
+        bgcolor="#27272a",
+        on_click=lambda e: toggle_call_cam(),
+        tooltip="Toggle Video"
+    )
+    end_btn = ft.IconButton(
+        icon=ft.Icons.CALL_END,
+        icon_color="#ffffff",
+        bgcolor="#ef4444",
+        icon_size=28,
+        width=56,
+        height=56,
+        on_click=lambda e: hangup_call_clicked(),
+        tooltip="End Call"
+    )
+
+    accept_btn = ft.IconButton(
+        icon=ft.Icons.CALL,
+        icon_color="#ffffff",
+        bgcolor="#22c55e",
+        icon_size=28,
+        width=56,
+        height=56,
+        on_click=lambda e: accept_call_clicked(),
+        tooltip="Answer Call"
+    )
+    decline_btn = ft.IconButton(
+        icon=ft.Icons.CALL_END,
+        icon_color="#ffffff",
+        bgcolor="#ef4444",
+        icon_size=28,
+        width=56,
+        height=56,
+        on_click=lambda e: decline_call_clicked(),
+        tooltip="Decline Call"
+    )
+
+    caller_controls_row = ft.Row(
+        controls=[mic_btn, end_btn, cam_btn],
+        alignment=ft.MainAxisAlignment.CENTER,
+        spacing=20
+    )
+
+    callee_controls_row = ft.Row(
+        controls=[decline_btn, accept_btn],
+        alignment=ft.MainAxisAlignment.CENTER,
+        spacing=40
+    )
+
+    call_controls_container = ft.Container(
+        content=caller_controls_row,
+        padding=ft.Padding(0, 20, 0, 40)
+    )
+
+    call_view = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Container(height=40),
+                            ft.Row(
+                                controls=[call_avatar],
+                                alignment=ft.MainAxisAlignment.CENTER
+                            ),
+                            ft.Container(height=10),
+                            ft.Row(
+                                controls=[call_name_text],
+                                alignment=ft.MainAxisAlignment.CENTER
+                            ),
+                            ft.Row(
+                                controls=[call_status_text, call_timer_text],
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                spacing=10
+                            ),
+                            ft.Container(height=20),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    bgcolor="#18181b",
+                    border_radius=ft.BorderRadius(bottom_left=24, bottom_right=24, top_left=0, top_right=0),
+                    shadow=ft.BoxShadow(blur_radius=15, color="#000000aa")
+                ),
+                ft.Container(
+                    content=video_container,
+                    expand=True,
+                    alignment=ft.Alignment(0, 0),
+                ),
+                call_controls_container
+            ],
+            spacing=0,
+            expand=True
+        ),
+        bgcolor="#09090b",
+        expand=True
+    )
+
+    # VoIP İş Mantığı Metotları
+
+    def show_call_screen():
+        fab.visible = False
+        call_avatar.content.value = state["call_partner"][:1].upper() if state["call_partner"] else "?"
+        call_name_text.value = state["call_partner"]
+
+        # Reset button states
+        mic_btn.icon = ft.Icons.MIC
+        mic_btn.icon_color = "#ffffff"
+        mic_btn.bgcolor = "#27272a"
+        cam_btn.icon = ft.Icons.VIDEOCAM
+        cam_btn.icon_color = "#ffffff"
+        cam_btn.bgcolor = "#27272a"
+
+        if state["call_state"] == "ringing":
+            call_status_text.value = f"Incoming {state['call_type']} call..."
+            call_controls_container.content = callee_controls_row
+            video_container.visible = False
+            call_avatar.visible = True
+            call_timer_text.visible = False
+        elif state["call_state"] == "calling":
+            call_status_text.value = "Calling..."
+            call_controls_container.content = caller_controls_row
+            video_container.visible = state["call_type"] == "video"
+            call_avatar.visible = state["call_type"] == "audio"
+            call_timer_text.visible = False
+        elif state["call_state"] == "connected":
+            call_status_text.value = "Connected"
+            call_controls_container.content = caller_controls_row
+            video_container.visible = state["call_type"] == "video"
+            call_avatar.visible = state["call_type"] == "audio"
+            call_timer_text.visible = True
+
+        page.controls.clear()
+        page.add(call_view)
+        page.update()
+
+    def start_voip_call(video: bool):
+        if not is_ws_connected():
+            log_status("HATA: WebSocket bağlı değil, arama yapılamaz!")
+            return
+            
+        call_id = str(uuid_lib.uuid4())
+        state["active_call_id"] = call_id
+        state["call_role"] = "caller"
+        state["call_partner"] = state["recipient"]
+        state["call_type"] = "video" if video else "audio"
+        state["call_state"] = "calling"
+        
+        show_call_screen()
+        
+        async def _setup():
+            try:
+                try:
+                    r = signed_get("/api/ice_servers")
+                    if r.status_code == 200:
+                        ice_data = r.json().get("ice_servers", [])
+                    else:
+                        ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+                except Exception:
+                    ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+
+                config_servers = []
+                for s in ice_data:
+                    urls = s.get("urls")
+                    if isinstance(urls, str):
+                        urls = [urls]
+                    config_servers.append(RTCIceServer(
+                        urls=urls,
+                        username=s.get("username"),
+                        credential=s.get("credential")
+                    ))
+                
+                config = RTCConfiguration(iceServers=config_servers)
+                pc = RTCPeerConnection(configuration=config)
+                state["active_pc"] = pc
+                
+                local_audio = MicrophoneTrack()
+                state["local_audio_track"] = local_audio
+                pc.addTrack(local_audio)
+                
+                if video:
+                    local_video = CameraTrack()
+                    state["local_video_track"] = local_video
+                    pc.addTrack(local_video)
+                    start_local_video_rendering()
+                    
+                @pc.on("track")
+                def on_track(track):
+                    print(f"[VoIP] Remote track received: {track.kind}")
+                    if track.kind == "audio":
+                        player = AudioPlayer(track)
+                        state["audio_player"] = player
+                        player.start()
+                    elif track.kind == "video":
+                        start_remote_video_rendering(track)
+                        
+                @pc.on("iceconnectionstatechange")
+                async def on_iceconnectionstatechange():
+                    print(f"[VoIP] ICE connection state: {pc.iceConnectionState}")
+                    if pc.iceConnectionState in ["connected", "completed"]:
+                        if call_status_text.value != "Connected":
+                            state["call_state"] = "connected"
+                            call_status_text.value = "Connected"
+                            asyncio.create_task(_call_timer_loop())
+                            page.update()
+                    elif pc.iceConnectionState in ["failed", "closed"]:
+                        cleanup_call()
+                        
+                offer = await pc.createOffer()
+                await pc.setLocalDescription(offer)
+                
+                while pc.iceGatheringState != "complete":
+                    await asyncio.sleep(0.05)
+                    
+                send_ws_message_with_fallback({
+                    "type": "call_offer",
+                    "recipient": state["call_partner"],
+                    "call_id": state["active_call_id"],
+                    "call_type": state["call_type"],
+                    "sdp_offer": pc.localDescription.sdp
+                })
+                
+            except Exception as ex:
+                print(f"[VoIP] Setup error: {ex}")
+                import traceback
+                traceback.print_exc()
+                cleanup_call()
+                
+        asyncio.run_coroutine_threadsafe(_setup(), state["ws_loop"])
+
+    def accept_call_clicked():
+        if state.get("call_state") != "ringing":
+            return
+            
+        state["call_state"] = "connected"
+        call_status_text.value = "Connecting..."
+        call_controls_container.content = caller_controls_row
+        page.update()
+        
+        async def _accept():
+            try:
+                try:
+                    r = signed_get("/api/ice_servers")
+                    if r.status_code == 200:
+                        ice_data = r.json().get("ice_servers", [])
+                    else:
+                        ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+                except Exception:
+                    ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+
+                config_servers = []
+                for s in ice_data:
+                    urls = s.get("urls")
+                    if isinstance(urls, str):
+                        urls = [urls]
+                    config_servers.append(RTCIceServer(
+                        urls=urls,
+                        username=s.get("username"),
+                        credential=s.get("credential")
+                    ))
+                
+                config = RTCConfiguration(iceServers=config_servers)
+                pc = RTCPeerConnection(configuration=config)
+                state["active_pc"] = pc
+                
+                local_audio = MicrophoneTrack()
+                state["local_audio_track"] = local_audio
+                pc.addTrack(local_audio)
+                
+                video = (state["call_type"] == "video")
+                if video:
+                    local_video = CameraTrack()
+                    state["local_video_track"] = local_video
+                    pc.addTrack(local_video)
+                    start_local_video_rendering()
+                    
+                @pc.on("track")
+                def on_track(track):
+                    print(f"[VoIP] Remote track received: {track.kind}")
+                    if track.kind == "audio":
+                        player = AudioPlayer(track)
+                        state["audio_player"] = player
+                        player.start()
+                    elif track.kind == "video":
+                        start_remote_video_rendering(track)
+                        
+                @pc.on("iceconnectionstatechange")
+                async def on_iceconnectionstatechange():
+                    print(f"[VoIP] ICE connection state: {pc.iceConnectionState}")
+                    if pc.iceConnectionState in ["connected", "completed"]:
+                        if call_status_text.value != "Connected":
+                            state["call_state"] = "connected"
+                            call_status_text.value = "Connected"
+                            asyncio.create_task(_call_timer_loop())
+                            page.update()
+                    elif pc.iceConnectionState in ["failed", "closed"]:
+                        cleanup_call()
+                        
+                await pc.setRemoteDescription(RTCSessionDescription(
+                    sdp=state["remote_sdp"],
+                    type="offer"
+                ))
+                
+                answer = await pc.createAnswer()
+                await pc.setLocalDescription(answer)
+                
+                while pc.iceGatheringState != "complete":
+                    await asyncio.sleep(0.05)
+                    
+                send_ws_message_with_fallback({
+                    "type": "call_answer",
+                    "recipient": state["call_partner"],
+                    "call_id": state["active_call_id"],
+                    "sdp_answer": pc.localDescription.sdp
+                })
+                
+            except Exception as ex:
+                print(f"[VoIP] Error accepting call: {ex}")
+                cleanup_call()
+                
+        asyncio.run_coroutine_threadsafe(_accept(), state["ws_loop"])
+
+    def decline_call_clicked():
+        if state.get("active_call_id") and state.get("call_partner"):
+            send_ws_message_with_fallback({
+                "type": "call_reject",
+                "recipient": state["call_partner"],
+                "call_id": state["active_call_id"],
+                "reason": "rejected"
+            })
+        cleanup_call()
+
+    def hangup_call_clicked():
+        if state.get("active_call_id") and state.get("call_partner"):
+            send_ws_message_with_fallback({
+                "type": "call_end",
+                "recipient": state["call_partner"],
+                "call_id": state["active_call_id"],
+                "duration_seconds": state.get("call_duration", 0)
+            })
+        cleanup_call()
+
+    def toggle_call_mic():
+        track = state.get("local_audio_track")
+        if track:
+            track.enabled = not track.enabled
+            mic_btn.icon = ft.Icons.MIC if track.enabled else ft.Icons.MIC_OFF
+            mic_btn.icon_color = "#ffffff" if track.enabled else "#ef4444"
+            mic_btn.bgcolor = "#27272a" if track.enabled else "#2d1b1f"
+            page.update()
+
+    def toggle_call_cam():
+        track = state.get("local_video_track")
+        if track:
+            track.enabled = not track.enabled
+            cam_btn.icon = ft.Icons.VIDEOCAM if track.enabled else ft.Icons.VIDEOCAM_OFF
+            cam_btn.icon_color = "#ffffff" if track.enabled else "#ef4444"
+            cam_btn.bgcolor = "#27272a" if track.enabled else "#2d1b1f"
+            local_video_preview.visible = track.enabled
+            page.update()
+
+    async def _call_timer_loop():
+        state["call_duration"] = 0
+        call_timer_text.value = "00:00"
+        call_timer_text.visible = True
+        page.update()
+        while state.get("call_state") == "connected":
+            await asyncio.sleep(1)
+            state["call_duration"] += 1
+            mins = state["call_duration"] // 60
+            secs = state["call_duration"] % 60
+            call_timer_text.value = f"{mins:02d}:{secs:02d}"
+            page.update()
+
+    def start_local_video_rendering():
+        local_video_preview.visible = True
+        page.update()
+        
+        async def _render_local():
+            track = state.get("local_video_track")
+            while track and track.running and state.get("call_state") != "ended":
+                try:
+                    frame = await track.recv()
+                    img = frame.to_ndarray(format='bgr24')
+                    _, buffer = cv2.imencode('.jpg', img)
+                    b64_str = base64.b64encode(buffer).decode('utf-8')
+                    local_video_preview.src_base64 = b64_str
+                    page.update()
+                except Exception as e:
+                    break
+                    
+        asyncio.run_coroutine_threadsafe(_render_local(), state["ws_loop"])
+
+    def start_remote_video_rendering(track):
+        remote_video_view.visible = True
+        call_avatar.visible = False
+        video_container.visible = True
+        page.update()
+        
+        async def _render_remote():
+            while state.get("call_state") != "ended":
+                try:
+                    frame = await track.recv()
+                    img = frame.to_ndarray(format='bgr24')
+                    _, buffer = cv2.imencode('.jpg', img)
+                    b64_str = base64.b64encode(buffer).decode('utf-8')
+                    remote_video_view.src_base64 = b64_str
+                    page.update()
+                except Exception as e:
+                    break
+                    
+        asyncio.run_coroutine_threadsafe(_render_remote(), state["ws_loop"])
+
+    def cleanup_call():
+        print("[VoIP] Cleaning up call...")
+        state["call_state"] = "ended"
+        
+        if state.get("local_audio_track"):
+            try:
+                state["local_audio_track"].stop()
+            except Exception as e:
+                pass
+            state["local_audio_track"] = None
+            
+        if state.get("local_video_track"):
+            try:
+                state["local_video_track"].stop()
+            except Exception as e:
+                pass
+            state["local_video_track"] = None
+
+        if state.get("audio_player"):
+            try:
+                state["audio_player"].stop()
+            except Exception as e:
+                pass
+            state["audio_player"] = None
+
+        pc = state.get("active_pc")
+        if pc:
+            try:
+                asyncio.run_coroutine_threadsafe(pc.close(), state["ws_loop"])
+            except Exception as e:
+                pass
+            state["active_pc"] = None
+
+        state["active_call_id"] = None
+        state["call_role"] = None
+        state["call_partner"] = None
+        state["call_type"] = None
+        
+        local_video_preview.src_base64 = None
+        local_video_preview.visible = False
+        remote_video_view.src_base64 = None
+        remote_video_view.visible = False
+        call_timer_text.visible = False
+        
+        if state.get("logged_in", False):
+            show_chat_screen()
+        else:
+            show_login_screen()
+
     # ── Ekran Geçişleri ──────────────────────────────────────────────
 
     def show_login_screen():
@@ -2976,10 +3759,16 @@ def main(page: ft.Page):
                 chat_info = state["store"].get_chat_info(state["recipient"])
                 display_name = chat_info.get("partner", state["recipient"])
                 chat_title_text.value = f"Group: {display_name}"
+                call_icon_btn.visible = False
+                video_call_icon_btn.visible = False
             else:
                 chat_title_text.value = f"Chat: {state['recipient']}"
+                call_icon_btn.visible = True
+                video_call_icon_btn.visible = True
         else:
             chat_title_text.value = "No active chat"
+            call_icon_btn.visible = False
+            video_call_icon_btn.visible = False
             
         username_text.value = f"User: {state['username']}"
         refresh_recipient_status()
@@ -3001,4 +3790,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.run(main)

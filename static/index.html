@@ -785,6 +785,170 @@
         .server-status-text {
             font-weight: 500;
         }
+
+        /* ── VoIP ─────────────────────────────────────────────── */
+
+        /* Incoming Call Overlay */
+        #incoming-call-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
+            background: rgba(9, 9, 11, 0.92);
+            backdrop-filter: blur(20px);
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+        #incoming-call-overlay.visible {
+            display: flex;
+        }
+        .incoming-call-card {
+            background: var(--container-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 40px 48px;
+            text-align: center;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(139,92,246,0.2);
+            max-width: 340px;
+            width: 90%;
+            animation: callPulse 2s ease-in-out infinite;
+        }
+        @keyframes callPulse {
+            0%, 100% { box-shadow: 0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(139,92,246,0.2); }
+            50%       { box-shadow: 0 25px 60px rgba(0,0,0,0.6), 0 0 0 4px rgba(139,92,246,0.35), 0 0 40px rgba(139,92,246,0.12); }
+        }
+        .incoming-call-avatar {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-color), #6366f1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 32px; font-weight: 700;
+            color: white;
+            margin: 0 auto 20px;
+        }
+        .incoming-call-type {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 6px;
+        }
+        .incoming-call-name {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 32px;
+        }
+        .incoming-call-actions {
+            display: flex;
+            gap: 32px;
+            justify-content: center;
+        }
+        .call-action-btn {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px;
+            transition: transform 0.15s, filter 0.15s;
+        }
+        .call-action-btn:hover { transform: scale(1.1); }
+        .call-action-btn.accept  { background: #22c55e; }
+        .call-action-btn.reject  { background: #ef4444; }
+        .call-action-btn.reject:hover { filter: brightness(1.15); }
+
+        /* Active Call Screen */
+        #active-call-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 8900;
+            background: radial-gradient(ellipse at 50% 30%, #1e1b4b 0%, #09090b 70%);
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 60px 24px 48px;
+            animation: fadeIn 0.3s ease-out;
+        }
+        #active-call-screen.visible {
+            display: flex;
+        }
+        .active-call-top {
+            text-align: center;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        .active-call-avatar {
+            width: 100px; height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-color), #6366f1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 42px; font-weight: 700; color: white;
+            box-shadow: 0 0 0 12px rgba(139,92,246,0.12), 0 0 0 24px rgba(139,92,246,0.06);
+        }
+        .active-call-name {
+            font-size: 26px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+        .active-call-status {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        #call-timer {
+            font-size: 28px;
+            font-weight: 300;
+            color: var(--accent-hover);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 2px;
+        }
+        .active-call-controls {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .ctrl-btn {
+            width: 56px; height: 56px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            background: rgba(255,255,255,0.08);
+            color: white;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .ctrl-btn:hover     { background: rgba(255,255,255,0.15); transform: scale(1.05); }
+        .ctrl-btn.active    { background: var(--accent-color); }
+        .ctrl-btn.end-call  { background: #ef4444; width: 72px; height: 72px; font-size: 26px; }
+        .ctrl-btn.end-call:hover { background: #dc2626; }
+        .conn-quality {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        /* Call button in chat header */
+        .call-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+            padding: 0;
+        }
+        .call-btn:hover { background: rgba(139,92,246,0.15); color: var(--accent-hover); border-color: var(--accent-color); }
     </style>
 </head>
 <body>
@@ -902,6 +1066,14 @@
                             </div>
                         </div>
                         <div class="chat-header-actions">
+                            <!-- Audio Call -->
+                            <button id="audio-call-btn" class="call-btn" title="Start Audio Call">
+                                <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                            </button>
+                            <!-- Video Call -->
+                            <button id="video-call-btn" class="call-btn" title="Start Video Call">
+                                <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            </button>
                             <!-- Ephemeral mode toggle -->
                             <button id="ephemeral-btn" class="action-icon-btn" title="Ephemeral Mode (Don't save chat history)">
                                 <svg id="ephemeral-icon-svg" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
@@ -957,6 +1129,51 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- ── VoIP: Incoming Call Overlay ── -->
+    <div id="incoming-call-overlay">
+        <div class="incoming-call-card">
+            <div id="ic-avatar" class="incoming-call-avatar">U</div>
+            <div id="ic-type" class="incoming-call-type">📞 Incoming Audio Call</div>
+            <div id="ic-name" class="incoming-call-name">Caller</div>
+            <div class="incoming-call-actions">
+                <button class="call-action-btn accept" id="ic-accept-btn" title="Accept">
+                    <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                </button>
+                <button class="call-action-btn reject" id="ic-reject-btn" title="Reject">
+                    <svg width="28" height="28" fill="none" stroke="white" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── VoIP: Active Call Screen ── -->
+    <div id="active-call-screen">
+        <!-- Hidden audio element for remote stream -->
+        <audio id="remote-audio" autoplay playsinline style="display:none;"></audio>
+        <video id="remote-video" autoplay playsinline style="display:none; width:100%; max-height:50vh; border-radius:16px; object-fit:cover;"></video>
+        <video id="local-video"  autoplay muted    playsinline style="display:none; position:fixed; bottom:120px; right:24px; width:120px; border-radius:12px; border:2px solid var(--accent-color); z-index:9100;"></video>
+
+        <div class="active-call-top">
+            <div id="ac-avatar" class="active-call-avatar">U</div>
+            <div id="ac-name" class="active-call-name">Partner</div>
+            <div id="ac-status" class="active-call-status">Connecting...</div>
+            <div id="call-timer">00:00</div>
+            <div id="conn-quality" class="conn-quality">🔄 Establishing P2P connection...</div>
+        </div>
+
+        <div class="active-call-controls">
+            <button id="mute-btn" class="ctrl-btn" title="Mute / Unmute">
+                <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+            </button>
+            <button id="cam-btn" class="ctrl-btn hidden" title="Camera On / Off">
+                <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            </button>
+            <button id="end-call-btn" class="ctrl-btn end-call" title="End Call">
+                <svg width="30" height="30" fill="none" stroke="white" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+            </button>
         </div>
     </div>
 
@@ -1034,7 +1251,22 @@
             staged_file: null,
             ws: null,
             chats: {}, // chat_id -> { partner, ephemeral, messages: [] }
-            onlineStatus: {} // username -> online/offline
+            onlineStatus: {}, // username -> online/offline
+            // VoIP state
+            voip: {
+                peerConnection: null,  // RTCPeerConnection
+                localStream: null,     // MediaStream (mic + optional cam)
+                callId: null,          // UUID of active call
+                callType: null,        // "audio" | "video"
+                partner: null,         // who we're calling/receiving from
+                isCaller: false,       // true if we initiated
+                timerInterval: null,   // setInterval handle for call clock
+                startTime: null,       // Date.now() when call connected
+                muted: false,
+                camOff: false,
+                pendingIce: [],        // ICE candidates buffered before remote desc set
+                iceServers: null,      // cached ICE server config
+            }
         };
 
         // ── Helper functions for cryptography ──
@@ -2843,6 +3075,31 @@
                             }
                         }
                     }
+
+                    // 7. VoIP: Incoming call offer
+                    else if (data.type === "call_offer") {
+                        handleIncomingCallOffer(data);
+                    }
+
+                    // 8. VoIP: Call answer (we are the caller, received callee's answer)
+                    else if (data.type === "call_answer") {
+                        handleCallAnswer(data);
+                    }
+
+                    // 9. VoIP: Call rejected / busy / timeout / unavailable
+                    else if (data.type === "call_reject") {
+                        handleCallRejected(data);
+                    }
+
+                    // 10. VoIP: Remote party ended the call
+                    else if (data.type === "call_end") {
+                        handleCallEnded(data);
+                    }
+
+                    // 11. VoIP: ICE candidate from remote peer
+                    else if (data.type === "ice_candidate") {
+                        handleIceCandidate(data);
+                    }
                 } catch (e) {
                     console.error("WS mesaj işleme hatası:", e);
                 }
@@ -2876,6 +3133,426 @@
                 queryUserPresence(state.recipient);
             }
         }, 5000);
+
+        // ══════════════════════════════════════════════════════════════
+        //  VoIP ENGINE — Faz 2: Web İstemcisi (WebRTC Native)
+        //  Tüm medya P2P akar. Sunucu yalnızca sinyal relay yapar.
+        // ══════════════════════════════════════════════════════════════
+
+        /** Fetch ICE server config from server (Google STUN + optional self-hosted TURN) */
+        async function fetchIceServers() {
+            if (state.voip.iceServers) return state.voip.iceServers;
+            try {
+                const res = await fetch(`${API_URL}/api/ice_servers`);
+                const json = await res.json();
+                state.voip.iceServers = json.ice_servers;
+            } catch (e) {
+                // Fallback to Google STUN if server unreachable
+                state.voip.iceServers = [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun1.l.google.com:19302" },
+                ];
+            }
+            return state.voip.iceServers;
+        }
+
+        /** Build a fresh RTCPeerConnection wired to WebSocket signaling */
+        async function createPeerConnection(partnerUsername, callId) {
+            const iceServers = await fetchIceServers();
+            const pc = new RTCPeerConnection({ iceServers });
+
+            // Send each ICE candidate via WebSocket as it is discovered
+            pc.onicecandidate = (event) => {
+                if (event.candidate && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                    state.ws.send(JSON.stringify({
+                        type: "ice_candidate",
+                        recipient: partnerUsername,
+                        call_id: callId,
+                        candidate: event.candidate.candidate,
+                        sdp_mid: event.candidate.sdpMid,
+                        sdp_mline_index: event.candidate.sdpMLineIndex,
+                    }));
+                }
+            };
+
+            // Monitor P2P connection quality
+            pc.oniceconnectionstatechange = () => {
+                const el = document.getElementById("conn-quality");
+                const statusEl = document.getElementById("ac-status");
+                const states = {
+                    checking:     "🔄 Establishing P2P connection...",
+                    connected:    "🟢 P2P Connected — Encrypted",
+                    completed:    "🟢 P2P Connected — Encrypted",
+                    disconnected: "🟡 Connection unstable...",
+                    failed:       "🔴 Connection failed",
+                    closed:       "Connection closed",
+                };
+                if (el) el.textContent = states[pc.iceConnectionState] || pc.iceConnectionState;
+                if (statusEl && (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed")) {
+                    statusEl.textContent = "🔐 DTLS-SRTP Encrypted";
+                    // Start call timer when P2P is actually connected
+                    if (!state.voip.timerInterval) startCallTimer();
+                }
+                if (pc.iceConnectionState === "failed") {
+                    cleanupCall();
+                }
+            };
+
+            // When remote audio/video arrives, attach to elements
+            pc.ontrack = (event) => {
+                const [remoteStream] = event.streams;
+                if (event.track.kind === "audio") {
+                    const audio = document.getElementById("remote-audio");
+                    if (audio) audio.srcObject = remoteStream;
+                } else if (event.track.kind === "video") {
+                    const video = document.getElementById("remote-video");
+                    if (video) { video.srcObject = remoteStream; video.style.display = "block"; }
+                }
+            };
+
+            // Drain buffered ICE candidates (Trickle ICE)
+            const pending = state.voip.pendingIce.splice(0);
+            for (const c of pending) {
+                try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+            }
+
+            return pc;
+        }
+
+        /** Initiate an outgoing call */
+        async function startCall(callType) {
+            if (!state.recipient || state.isGroup) {
+                alert("Please select an individual chat first.");
+                return;
+            }
+            if (state.voip.peerConnection) {
+                alert("You are already in a call.");
+                return;
+            }
+
+            const callId = crypto.randomUUID();
+            state.voip.callId   = callId;
+            state.voip.callType = callType;
+            state.voip.partner  = state.recipient;
+            state.voip.isCaller = true;
+
+            // Show active call screen immediately ("Calling...")
+            showActiveCallScreen(state.recipient, callType, false);
+
+            try {
+                // Request microphone (+ camera for video calls)
+                const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: callType === "video" };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                state.voip.localStream = stream;
+
+                // Show local preview for video calls
+                if (callType === "video") {
+                    const localVid = document.getElementById("local-video");
+                    if (localVid) { localVid.srcObject = stream; localVid.style.display = "block"; }
+                    document.getElementById("cam-btn").classList.remove("hidden");
+                }
+
+                const pc = await createPeerConnection(state.recipient, callId);
+                state.voip.peerConnection = pc;
+
+                // Add local tracks to PeerConnection
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                // Create SDP offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Send offer via WebSocket
+                state.ws.send(JSON.stringify({
+                    type: "call_offer",
+                    recipient: state.recipient,
+                    call_id: callId,
+                    call_type: callType,
+                    sdp_offer: offer.sdp,
+                    timestamp: new Date().toISOString(),
+                }));
+
+                document.getElementById("ac-status").textContent = "🔔 Calling...";
+
+            } catch (err) {
+                console.error("[VoIP] startCall error:", err);
+                cleanupCall();
+                alert("Could not access microphone/camera: " + err.message);
+            }
+        }
+
+        /** Handle an incoming call_offer from the server */
+        async function handleIncomingCallOffer(data) {
+            const { caller, call_id, call_type, sdp_offer } = data;
+            // If already in a call, send busy automatically
+            if (state.voip.peerConnection) {
+                state.ws.send(JSON.stringify({ type: "call_reject", recipient: caller, call_id, reason: "busy" }));
+                return;
+            }
+            state.voip.callId   = call_id;
+            state.voip.callType = call_type;
+            state.voip.partner  = caller;
+            state.voip.isCaller = false;
+            // Store offer SDP for when user accepts
+            state.voip._pendingSdpOffer = sdp_offer;
+
+            // Show incoming call UI
+            const overlay = document.getElementById("incoming-call-overlay");
+            document.getElementById("ic-avatar").textContent = caller.charAt(0).toUpperCase();
+            document.getElementById("ic-name").textContent = caller;
+            document.getElementById("ic-type").textContent = call_type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Audio Call";
+            overlay.classList.add("visible");
+
+            // Play ringtone (simple beep via Web Audio API)
+            try { playRingtone(); } catch (_) {}
+        }
+
+        /** Called when user presses Accept on the incoming call overlay */
+        async function acceptCall() {
+            const overlay = document.getElementById("incoming-call-overlay");
+            overlay.classList.remove("visible");
+            stopRingtone();
+
+            const { callId, callType, partner, _pendingSdpOffer } = state.voip;
+            showActiveCallScreen(partner, callType, false);
+
+            try {
+                const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: callType === "video" };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                state.voip.localStream = stream;
+
+                if (callType === "video") {
+                    const localVid = document.getElementById("local-video");
+                    if (localVid) { localVid.srcObject = stream; localVid.style.display = "block"; }
+                    document.getElementById("cam-btn").classList.remove("hidden");
+                }
+
+                const pc = await createPeerConnection(partner, callId);
+                state.voip.peerConnection = pc;
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                // Set remote description (caller's SDP offer)
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: _pendingSdpOffer }));
+
+                // Create and set local answer
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // Send answer back via WebSocket
+                state.ws.send(JSON.stringify({
+                    type: "call_answer",
+                    recipient: partner,
+                    call_id: callId,
+                    sdp_answer: answer.sdp,
+                    timestamp: new Date().toISOString(),
+                }));
+
+                document.getElementById("ac-status").textContent = "🔄 Connecting...";
+
+            } catch (err) {
+                console.error("[VoIP] acceptCall error:", err);
+                cleanupCall();
+                alert("Could not access microphone/camera: " + err.message);
+            }
+        }
+
+        /** Called when user presses Reject on the incoming call overlay */
+        function rejectCall() {
+            const overlay = document.getElementById("incoming-call-overlay");
+            overlay.classList.remove("visible");
+            stopRingtone();
+
+            const { callId, partner } = state.voip;
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({
+                    type: "call_reject",
+                    recipient: partner,
+                    call_id: callId,
+                    reason: "rejected",
+                    timestamp: new Date().toISOString(),
+                }));
+            }
+            resetVoipState();
+        }
+
+        /** Handle server relaying the callee's SDP answer back to us (caller) */
+        async function handleCallAnswer(data) {
+            const { call_id, sdp_answer } = data;
+            if (!state.voip.peerConnection || state.voip.callId !== call_id) return;
+            try {
+                await state.voip.peerConnection.setRemoteDescription(
+                    new RTCSessionDescription({ type: "answer", sdp: sdp_answer })
+                );
+                // Drain any buffered ICE candidates
+                const pending = state.voip.pendingIce.splice(0);
+                for (const c of pending) {
+                    try { await state.voip.peerConnection.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+                }
+            } catch (err) {
+                console.error("[VoIP] handleCallAnswer error:", err);
+            }
+        }
+
+        /** Handle a call_reject (busy, unavailable, timeout, rejected) */
+        function handleCallRejected(data) {
+            const reasons = {
+                rejected:    "❌ Call was declined.",
+                busy:        "📵 User is busy in another call.",
+                timeout:     "⏰ No answer.",
+                unavailable: "🔴 User is offline.",
+                busy_caller: "⚠️ You are already in a call.",
+            };
+            const msg = reasons[data.reason] || "Call failed.";
+
+            // If incoming overlay is still open, close it
+            document.getElementById("incoming-call-overlay").classList.remove("visible");
+            stopRingtone();
+            cleanupCall();
+            // Show brief notification in the chat status area
+            const statusEl = document.getElementById("status-label");
+            if (statusEl) { const prev = statusEl.textContent; statusEl.textContent = msg; setTimeout(() => statusEl.textContent = prev, 4000); }
+        }
+
+        /** Handle the remote party ending the call */
+        function handleCallEnded(data) {
+            cleanupCall();
+        }
+
+        /** Handle a relayed ICE candidate from the remote peer */
+        async function handleIceCandidate(data) {
+            const { candidate, sdp_mid, sdp_mline_index, call_id } = data;
+            if (!candidate) return;
+            const iceCandidate = new RTCIceCandidate({ candidate, sdpMid: sdp_mid, sdpMLineIndex: sdp_mline_index });
+            const pc = state.voip.peerConnection;
+            if (pc && pc.remoteDescription) {
+                try { await pc.addIceCandidate(iceCandidate); } catch (_) {}
+            } else {
+                // Buffer until remote description is set
+                state.voip.pendingIce.push({ candidate, sdpMid: sdp_mid, sdpMLineIndex: sdp_mline_index });
+            }
+        }
+
+        /** End an active call (local action) */
+        function endCall() {
+            const { callId, partner } = state.voip;
+            const duration = state.voip.startTime ? Math.floor((Date.now() - state.voip.startTime) / 1000) : 0;
+            if (state.ws && state.ws.readyState === WebSocket.OPEN && partner && callId) {
+                state.ws.send(JSON.stringify({
+                    type: "call_end",
+                    recipient: partner,
+                    call_id: callId,
+                    duration_seconds: duration,
+                    timestamp: new Date().toISOString(),
+                }));
+            }
+            cleanupCall();
+        }
+
+        /** Show the active call screen UI */
+        function showActiveCallScreen(partnerName, callType, connected) {
+            const screen = document.getElementById("active-call-screen");
+            document.getElementById("ac-avatar").textContent = partnerName.charAt(0).toUpperCase();
+            document.getElementById("ac-name").textContent = partnerName;
+            document.getElementById("ac-status").textContent = connected ? "🔐 DTLS-SRTP Encrypted" : "Connecting...";
+            document.getElementById("call-timer").textContent = "00:00";
+            document.getElementById("conn-quality").textContent = "🔄 Establishing P2P connection...";
+            screen.classList.add("visible");
+        }
+
+        /** Start the call duration timer */
+        function startCallTimer() {
+            state.voip.startTime = Date.now();
+            const timerEl = document.getElementById("call-timer");
+            state.voip.timerInterval = setInterval(() => {
+                const sec = Math.floor((Date.now() - state.voip.startTime) / 1000);
+                const m = String(Math.floor(sec / 60)).padStart(2, "0");
+                const s = String(sec % 60).padStart(2, "0");
+                if (timerEl) timerEl.textContent = `${m}:${s}`;
+            }, 1000);
+        }
+
+        /** Stop all media, close PeerConnection, hide UI */
+        function cleanupCall() {
+            if (state.voip.timerInterval) { clearInterval(state.voip.timerInterval); }
+            if (state.voip.localStream) {
+                state.voip.localStream.getTracks().forEach(t => t.stop());
+            }
+            if (state.voip.peerConnection) {
+                state.voip.peerConnection.close();
+            }
+            const localVid  = document.getElementById("local-video");
+            const remoteVid = document.getElementById("remote-video");
+            const remoteAud = document.getElementById("remote-audio");
+            if (localVid)  { localVid.srcObject  = null; localVid.style.display  = "none"; }
+            if (remoteVid) { remoteVid.srcObject = null; remoteVid.style.display = "none"; }
+            if (remoteAud) { remoteAud.srcObject = null; }
+
+            document.getElementById("active-call-screen").classList.remove("visible");
+            document.getElementById("incoming-call-overlay").classList.remove("visible");
+            document.getElementById("cam-btn").classList.add("hidden");
+            document.getElementById("mute-btn").classList.remove("active");
+
+            resetVoipState();
+        }
+
+        /** Reset voip fields in state */
+        function resetVoipState() {
+            state.voip.peerConnection   = null;
+            state.voip.localStream      = null;
+            state.voip.callId           = null;
+            state.voip.callType         = null;
+            state.voip.partner          = null;
+            state.voip.isCaller         = false;
+            state.voip.timerInterval    = null;
+            state.voip.startTime        = null;
+            state.voip.muted            = false;
+            state.voip.camOff           = false;
+            state.voip.pendingIce       = [];
+            state.voip._pendingSdpOffer = null;
+        }
+
+        // ── Simple Web Audio ringtone (no file dependency) ──
+        let _ringtoneInterval = null;
+        function playRingtone() {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            function beep() {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.type = "sine"; osc.frequency.value = 520;
+                gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+                osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.45);
+            }
+            beep();
+            _ringtoneInterval = setInterval(beep, 1500);
+        }
+        function stopRingtone() {
+            if (_ringtoneInterval) { clearInterval(_ringtoneInterval); _ringtoneInterval = null; }
+        }
+
+        // ── Wire up VoIP UI button events ──
+        document.getElementById("audio-call-btn").addEventListener("click", () => startCall("audio"));
+        document.getElementById("video-call-btn").addEventListener("click", () => startCall("video"));
+        document.getElementById("ic-accept-btn").addEventListener("click", acceptCall);
+        document.getElementById("ic-reject-btn").addEventListener("click", rejectCall);
+        document.getElementById("end-call-btn").addEventListener("click", endCall);
+
+        document.getElementById("mute-btn").addEventListener("click", function() {
+            if (!state.voip.localStream) return;
+            state.voip.muted = !state.voip.muted;
+            state.voip.localStream.getAudioTracks().forEach(t => t.enabled = !state.voip.muted);
+            this.classList.toggle("active", state.voip.muted);
+            this.title = state.voip.muted ? "Unmute" : "Mute";
+        });
+
+        document.getElementById("cam-btn").addEventListener("click", function() {
+            if (!state.voip.localStream) return;
+            state.voip.camOff = !state.voip.camOff;
+            state.voip.localStream.getVideoTracks().forEach(t => t.enabled = !state.voip.camOff);
+            this.classList.toggle("active", state.voip.camOff);
+            this.title = state.voip.camOff ? "Turn Camera On" : "Turn Camera Off";
+        });
     </script>
 </body>
 </html>

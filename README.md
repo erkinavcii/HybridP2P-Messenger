@@ -1,6 +1,23 @@
 # 🔐 HybridP2P Messenger: Zero-Knowledge E2EE Messenger
 
-A secure, private, and lightweight hybrid peer-to-peer messaging application designed to withstand network-level surveillance and server compromises. Built with **FastAPI** (Server) and **Flet** (Client, Python-based Flutter), it employs state-of-the-art cryptography (RSA-4096 and AES-256-GCM) to implement true **End-to-End Encryption (E2EE)** for text messages, E2EE read receipts (double green ticks), ephemeral/view-once chats, files, and multi-user groups.
+A secure, private, and lightweight hybrid peer-to-peer messaging application designed to withstand network-level surveillance and server compromises. Built with **FastAPI** (Server) and **Flet** (Client, Python-based Flutter), it employs state-of-the-art cryptography (RSA-4096 and AES-256-GCM) to implement true **End-to-End Encryption (E2EE)** for text messages, E2EE read receipts (double green ticks), ephemeral/view-once chats, files, multi-user groups, and voice/video calling.
+
+---
+
+## ✨ Key Features
+
+* **End-to-End Encrypted (E2EE) Messaging:** Full confidentiality and integrity using RSA-4096 and AES-256-GCM.
+* **E2EE File & Image Sharing:** Files are encrypted locally on the sender's device before upload, stored as zero-knowledge blobs on the server, and permanently deleted immediately upon download. Supports inline image rendering.
+* **E2EE Read Receipts (Double Green Ticks):** Fully encrypted status tracking notifying senders when their messages have been read by the recipient.
+* **Ephemeral Chat Mode:** Sync-capable ephemeral messaging that keeps conversations strictly in volatile memory (RAM) and never writes them to disk.
+* **View-Once Messages & Files:** Individual text messages or files that can be opened only once before being permanently deleted from RAM and UI.
+* **E2EE VoIP Voice & Video Calling (STUN-First P2P):**
+  * **Zero Server Cost (STUN-First):** Uses public STUN servers to negotiate direct peer-to-peer UDP connections for ~90% of calls.
+  * **End-to-End Cryptography:** Media stream is fully E2EE using DTLS-SRTP, ensuring neither the ISP nor the server can intercept audio/video.
+  * **TURN Fallback (Alternative):** Supports seamless fallback to a TURN server (e.g., coturn or Metered TURN) if STUN direct P2P fails due to symmetric NATs.
+  * **Performance Optimization:** Prioritizes hardware-accelerated H.264, dynamically adapts resolution/FPS (720p to 360p) based on network quality, and leverages audio priority and WebRTC audio processing filters (AEC/ANS/AGC).
+* **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with dynamic cryptographic rekeying (forward secrecy) upon member additions/removals, keeping upload bandwidth constant at $O(1)$.
+* **Secure Passwordless Authentication:** Connections and modifying API requests are authenticated using cryptographic challenges and RSA-PSS signatures.
 
 ---
 
@@ -156,6 +173,45 @@ To maintain security boundaries during membership changes, we enforce strict key
 
 ---
 
+## ☑️ E2EE Read Receipts (Seen Status)
+
+To prevent the server from gathering metadata about when a message was read, read receipts are fully encrypted and signed at the application layer:
+* **Status States:**
+  * **Single Gray Tick (Sent):** The message has been encrypted and uploaded to the server, and is either waiting in the recipient's offline queue or the recipient is connected but has not opened the specific chat.
+  * **Double Green Ticks (Read/Seen):** The recipient has opened the chat window, decrypted the message, and transmitted a signed `read_receipt` back to the sender.
+* **Cryptographic Delivery:**
+  * When a user opens a chat, the client sends a `read_receipt` message type via WebSockets containing `{recipient, sender, timestamp}`.
+  * Like regular messages, if the sender is offline when the receipt is sent, the server queues it and delivers it as soon as the sender connects, updating the local database state and UI in real-time.
+
+---
+
+## 📞 E2EE VoIP Voice & Video Calling (STUN-First P2P)
+
+HybridP2P Messenger features a military-grade, secure, and low-latency voice and video calling infrastructure designed to operate with zero server media overhead.
+
+### 1. Peer-to-Peer STUN-First Architecture
+To bypass firewall constraints and establish direct device-to-device streaming without expensive relay server costs:
+* **STUN Signaling:** The clients query public, free STUN servers (e.g., Google or Cloudflare) via `GET /api/ice_servers` to discover their external public IP addresses and ports.
+* **Direct P2P UDP:** Using the gathered ICE candidates, the clients negotiate a direct UDP session (WebRTC). In over 85-90% of household networks, this allows media traffic (audio/video packets) to flow directly between devices.
+* **Zero Server Media Burden:** The main server (`server.py`) acts purely as a routing channel for the initialization handshakes (SDP Offer/Answer and ICE candidates) and maintains no contact with the actual media stream.
+
+### 2. TURN Alternative / Fallback
+For scenarios where both devices are restricted behind strict symmetric NAT firewalls (common in secure enterprise environments or specific carrier networks) where direct P2P is blocked:
+* **Optional TURN Relay:** The application is architected to seamlessly fall back to a TURN server (like a self-hosted `coturn` instance or an external provider like Metered TURN).
+* **Zero-Knowledge Relay:** Even when routed through a TURN server, the relay only passes encrypted packets. The server cannot read the media stream as it does not possess the decryption keys.
+
+### 3. Media Cryptography & Privacy (DTLS-SRTP)
+* **Standard E2EE:** The media streams are encrypted using **DTLS-SRTP** (Datagram Transport Layer Security - Secure Real-time Transport Protocol), a WebRTC native security suite.
+* **ISP Protection:** Internet Service Providers (ISPs) and network operators can only monitor that a connection exists and estimate data volumes. They are mathematically incapable of listening to the calls or accessing video feeds.
+
+### 4. Performance & Bandwidth Optimization
+* **H.264 Priority:** Prioritizes hardware-accelerated H.264 constrained baseline profiles on web and mobile devices to conserve battery life and prevent CPU overheating.
+* **Adaptive Bitrate & Resolution:** Dynamically adjusts resolution and frame rates between **720p HD @ 30 FPS** (under optimal conditions) down to **360p @ 15 FPS** (on degraded connections) to maintain continuity.
+* **Audio Priority Over Video:** Ensures audio tracks are given higher transmission priority (`priority: "high"` in SDP) during bandwidth congestion, preferring the video frame-rate to drop rather than corrupting audio clarity.
+* **Acoustic Quality Filters:** Leverages WebRTC's native Acoustic Echo Cancellation (AEC), Acoustic Noise Suppression (ANS), and Automatic Gain Control (AGC) for clear, crisp audio.
+
+---
+
 ## 🛠️ Tech Stack & Directory Structure
 
 * **Client:** Python 3.x, [Flet](https://flet.dev) (UI Framework based on Flutter), `requests` (REST), `websockets` (real-time).
@@ -210,6 +266,7 @@ The clients will automatically generate their RSA-4096 keys under `~/.hybridp2p_
 The server automatically hosts a self-contained, browser-side Zero-Knowledge E2EE Web Client directly at the root path (`/`).
 
 * **Localhost Access:** Simply open your web browser and navigate to `http://127.0.0.1:8000/`.
+* **Full Feature Parity:** The Web Client has full feature parity with the Desktop client, including E2EE messaging, file/image sharing (with inline image rendering), view-once media, chat history search, real-time online/offline statuses, and E2EE read receipts.
 * **Private Key Import & Export (Device/Account Transfer):**
   * To log in as your existing desktop user on the Web Client, click **Import existing Private Key (.pem)** on the web login screen, and paste your private key PEM. The client will derive your public key using WebCrypto SubtleCrypto and authenticate securely.
   * You can retrieve your private key from the Web Client anytime by clicking the key icon (`🔑`) in the sidebar header to copy/backup it.

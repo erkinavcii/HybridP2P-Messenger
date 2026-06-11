@@ -308,6 +308,13 @@ def main(page: ft.Page):
         "remote_sdp":        None,
     }
 
+    def run_on_ui(func, *args, **kwargs):
+        async def _run():
+            res = func(*args, **kwargs)
+            if asyncio.iscoroutine(res):
+                await res
+        page.run_task(_run)
+
     # ╔═══════════════════════════════════════════════════════════════╗
     # ║                     MESAJ BALONCULARI                          ║
     # ╚═══════════════════════════════════════════════════════════════╝
@@ -603,19 +610,18 @@ def main(page: ft.Page):
                                     fit="contain",
                                     border_radius=8,
                                 )
-                                show_view_once_dialog(
-                                    img,
-                                    "This file will be permanently deleted from the chat once closed."
-                                )
+                                run_on_ui(show_view_once_dialog, img, "This file will be permanently deleted from the chat once closed.")
                             else:
                                 downloads = Path.home() / "Downloads"
                                 downloads.mkdir(exist_ok=True)
                                 dest = downloads / original_name
                                 dest.write_bytes(raw)
-                                show_view_once_dialog(
-                                    ft.Text(f"Dosya indirildi ve kaydedildi:\n{dest.name}", size=13, color="#ffffff", text_align=ft.TextAlign.CENTER),
-                                    "This file has been saved to your local Downloads folder. It will be permanently deleted from the chat once closed."
-                                )
+                                def _show_file_vo():
+                                    show_view_once_dialog(
+                                        ft.Text(f"Dosya indirildi ve kaydedildi:\n{dest.name}", size=13, color="#ffffff", text_align=ft.TextAlign.CENTER),
+                                        "This file has been saved to your local Downloads folder. It will be permanently deleted from the chat once closed."
+                                    )
+                                run_on_ui(_show_file_vo)
                         else:
                             if file_type == "image":
                                 b64 = base64.b64encode(raw).decode("ascii")
@@ -627,23 +633,32 @@ def main(page: ft.Page):
                                     fit="contain",
                                     border_radius=8,
                                 )
-                                image_display.controls.clear()
-                                image_display.controls.append(img)
-                                image_display.visible = True
-                                status_text.value = original_name
+                                def _show_normal_img():
+                                    image_display.controls.clear()
+                                    image_display.controls.append(img)
+                                    image_display.visible = True
+                                    status_text.value = original_name
+                                    page.update()
+                                run_on_ui(_show_normal_img)
                             else:
                                 downloads = Path.home() / "Downloads"
                                 downloads.mkdir(exist_ok=True)
                                 dest = downloads / original_name
                                 dest.write_bytes(raw)
-                                status_text.value = f"Kaydedildi: {dest.name}"
-                            page.update()
+                                def _show_normal_file():
+                                    status_text.value = f"Kaydedildi: {dest.name}"
+                                    page.update()
+                                run_on_ui(_show_normal_file)
                     else:
-                        status_text.value = "Download failed or already downloaded."
-                        page.update()
+                        def _failed():
+                            status_text.value = "Download failed or already downloaded."
+                            page.update()
+                        run_on_ui(_failed)
                 except Exception as ex:
-                    status_text.value = f"Hata: {ex}"
-                    page.update()
+                    def _err():
+                        status_text.value = f"Hata: {ex}"
+                        page.update()
+                    run_on_ui(_err)
 
             threading.Thread(target=do_download, daemon=True).start()
 
@@ -1465,9 +1480,11 @@ def main(page: ft.Page):
                            max_lines=2, overflow=ft.TextOverflow.ELLIPSIS)
 
     def log_status(msg: str):
-        status_text.value = msg
-        try: page.update()
-        except: pass
+        def _update():
+            status_text.value = msg
+            try: page.update()
+            except: pass
+        run_on_ui(_update)
 
     def copy_to_clipboard(text: str):
         async def do_copy():
@@ -1990,17 +2007,20 @@ def main(page: ft.Page):
             page.update()
 
             def do_file_upload_and_send():
+                def _progress(val: float, status: str = None):
+                    upload_progress.value = val
+                    if status:
+                        status_text.value = status
+                    page.update()
+
                 try:
                     raw = Path(staged["path"]).read_bytes()
                     file_type = staged["type"]
                     
-                    upload_progress.value = 0.4
-                    log_status("Uploading encrypted payload...")
-                    page.update()
+                    run_on_ui(_progress, 0.4, "Uploading encrypted payload...")
 
                     encrypted = encrypt_bytes(raw, state["recipient_pub_key"])
-                    upload_progress.value = 0.6
-                    page.update()
+                    run_on_ui(_progress, 0.6)
 
                     resp = signed_post(
                         "/api/upload_file",
@@ -2015,15 +2035,16 @@ def main(page: ft.Page):
                     )
                     
                     if resp.status_code != 200:
-                        log_status(f"Upload failed: {resp.text}")
-                        upload_progress.visible = False
-                        staged_file_container.disabled = False
-                        attach_btn.disabled = False
-                        page.update()
+                        def _upload_failed():
+                            status_text.value = f"Upload failed: {resp.text}"
+                            upload_progress.visible = False
+                            staged_file_container.disabled = False
+                            attach_btn.disabled = False
+                            page.update()
+                        run_on_ui(_upload_failed)
                         return
 
-                    upload_progress.value = 0.8
-                    page.update()
+                    run_on_ui(_progress, 0.8)
 
                     file_uuid = resp.json()["uuid"]
                     
@@ -2037,38 +2058,42 @@ def main(page: ft.Page):
                         "view_once":     view_once,
                     })
 
-                    add_file_to_chat(
-                        sender=state["username"],
-                        file_uuid=file_uuid,
-                        original_name=staged["name"],
-                        file_type=file_type,
-                        is_mine=True,
-                        view_once=view_once,
-                    )
-                    load_inbox_chats()
+                    def _upload_success():
+                        add_file_to_chat(
+                            sender=state["username"],
+                            file_uuid=file_uuid,
+                            original_name=staged["name"],
+                            file_type=file_type,
+                            is_mine=True,
+                            view_once=view_once,
+                        )
+                        load_inbox_chats()
 
-                    # Reset view-once toggle
-                    if view_once:
-                        state["view_once_mode"] = False
-                        view_once_msg_btn.icon       = ft.Icons.VISIBILITY
-                        view_once_msg_btn.icon_color = "#888888"
+                        # Reset view-once toggle
+                        if view_once:
+                            state["view_once_mode"] = False
+                            view_once_msg_btn.icon       = ft.Icons.VISIBILITY
+                            view_once_msg_btn.icon_color = "#888888"
 
-                    log_status(f"Sent: {staged['name']}")
-                    
-                    # Clear staged state and reset UI
-                    state["staged_file"] = None
-                    staged_file_container.visible = False
-                    staged_file_container.disabled = False
-                    upload_progress.visible = False
-                    attach_btn.disabled = False
-                    page.update()
+                        status_text.value = f"Sent: {staged['name']}"
+                        
+                        # Clear staged state and reset UI
+                        state["staged_file"] = None
+                        staged_file_container.visible = False
+                        staged_file_container.disabled = False
+                        upload_progress.visible = False
+                        attach_btn.disabled = False
+                        page.update()
+                    run_on_ui(_upload_success)
 
                 except Exception as ex:
-                    log_status(f"Upload error: {ex}")
-                    upload_progress.visible = False
-                    staged_file_container.disabled = False
-                    attach_btn.disabled = False
-                    page.update()
+                    def _upload_error():
+                        status_text.value = f"Upload error: {ex}"
+                        upload_progress.visible = False
+                        staged_file_container.disabled = False
+                        attach_btn.disabled = False
+                        page.update()
+                    run_on_ui(_upload_error)
 
             threading.Thread(target=do_file_upload_and_send, daemon=True).start()
 

@@ -21,12 +21,12 @@ Flet, Python ve Flutter arasında bir WebSocket köprüsü kurarak çalışır. 
 * **Giriş İşlemi:** `do_login` fonksiyonu (Satır 1605-1655 arası) `threading.Thread` ile başlatılmakta ve içerisinden `show_inbox_screen()` çağrılmaktadır (Satır 1643).
 * **Arama Sayacı:** `_call_timer_loop` coroutine'i (Satır 3646-3657 arası) `ws_loop` üzerinde `asyncio.create_task` ile çalıştırılmakta ve her saniye `page.update()` çağırmaktadır.
 * **Diğer Potansiyel Noktalar:**
-  * `do_download` (Dosya indirme thread'i)
-  * `do_rest` (API istekleri thread'i)
-  * `do_file_upload_and_send` (Dosya yükleme thread'i)
-  * `do_rekey` (Anahtar yenileme thread'i)
-  * `do_create` (Grup oluşturma thread'i)
-  * `check_recipient_status_loop` (Kullanıcı durum kontrolü)
+  - [x] `do_download` (Dosya indirme thread'i)
+  - [x] `do_rest` (API istekleri thread'i)
+  - [x] `do_file_upload_and_send` (Dosya yükleme thread'i)
+  - [ ] `do_rekey` (Anahtar yenileme thread'i)
+  - [ ] `do_create` (Grup oluşturma thread'i)
+  - [ ] `check_recipient_status_loop` (Kullanıcı durum kontrolü)
 
 ### Çözüm Önerileri ve Strateji
 

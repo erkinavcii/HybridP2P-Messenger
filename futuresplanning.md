@@ -364,3 +364,427 @@ gantt
 
 > [!IMPORTANT]
 > En kritik karar noktası: **Private key yönetimi**. IndexedDB + parola-korumalı export/import akışı doğru kurulursa, geri kalan her şey teknik detay. Bu aynı zamanda "hesap taşıma" sorusunun da cevabı — kullanıcı şifreli key dosyasını başka cihaza taşıyarak aynı kimlikle giriş yapabilir.
+
+---
+
+## Bölüm C: Web İstemcisinde Grup Sohbeti (Group Chat) Desteği Detaylı Planı
+
+Bu bölüm, web istemcisinde (`static/index.html`) grup sohbeti özelliğinin masaüstü istemcisiyle (`client.py`) ve sunucuyla (`server.py`) tam uyumlu şekilde çalışabilmesi için yapılması gereken adımları içerir. Kodlamaya başlamadan önce bu adımların onaylanması beklenmektedir.
+
+### 1. Veri Yapısı ve Depolama (Storage & State)
+- [ ] **Grup Anahtarı Depolama Alanı:** `localStorage` üzerinde veya local state'de grup anahtarlarını saklamak için bir yapı kur.
+  - Şema: `group_key_{group_id}` -> `Hex (AES Key)`.
+- [ ] **Chat Nesnesinde Grup Ayırımı:** `state.chats[partner]` nesnelerine `isGroup: true` bayrağı ekle. `group_` ile başlayan partner ID'lerini otomatik olarak grup olarak tanı.
+- [ ] **Kişi Listesi (Contacts) Genişletme:** `state.contacts` listesinde grupları da listele ve bunlara özel grup ikonları ata.
+
+### 2. Arayüz (UI) Güncellemeleri
+- [ ] **Yeni Grup Oluşturma Arayüzü:** "New Chat" modal pencerisine "Grup Sohbeti Oluştur" sekmesi ekle.
+  - Girdiler: Grup Adı (`Group Name`), Üyeler (`Members` - virgülle ayrılmış kullanıcı adları).
+- [ ] **Sol Sohbet Listesi (Inbox) Güncellemesi:** Gruplar için kişi ikonları yerine grup ikonları (`ft.Icons.GROUP` benzeri SVG) kullan.
+- [ ] **Grup Üst Bilgi Paneli (Chat Header):** Aktif sohbet bir grup olduğunda üst kısımda "Group: [Grup Adı]" yazdır ve gruptan çıkma (`Leave Group`) veya yeniden anahtarlama (`Rekey`) düğmelerini göster.
+- [ ] **Gönderen Bilgisi (Message Bubble):** Grup sohbetinde gelen mesaj balonlarında, mesajın sol üstünde gerçek göndericinin kullanıcı adını göster (kişisel sohbetlerde bu gizli kalır).
+
+### 3. Grup Oluşturma ve Anahtar Dağıtımı (Key Distribution)
+- [ ] **Üye Public Key Sorgulama:** Grup oluşturulurken listedeki her üye için `/api/public_key/{username}` endpoint'ine istek atarak RSA public key'lerini al.
+- [ ] **Grup Anahtarı Üretimi:** Rastgele 256-bit (32 byte) kriptografik simetrik grup anahtarı üret.
+- [ ] **Key Wrapping (Şifreleme):** Üretilen grup anahtarını gruptaki her bir üyenin RSA public key'i ile Web Crypto API kullanarak şifrele (`encryptBytesJS` ile RSA-OAEP-256).
+- [ ] **REST API Grup Kaydı:** `/api/groups` adresine `POST` isteği at (grup kurucusu, grup adı, grup ID'si, üye listesi).
+- [ ] **WebSocket Üzerinden Anahtar Dağıtımı:** Gruptaki tüm üyelere WebSocket üzerinden `group_key_dist` tipinde mesaj gönder. Bu mesaj şunları içerir:
+  - `recipient`: Üyenin kullanıcı adı
+  - `group_id`: Yeni oluşturulan grubun ID'si
+  - `encrypted_payload`: Üyenin RSA public key'i ile şifrelenmiş grup anahtarı
+
+### 4. Gelen Grup Anahtarını Alma (Key Acquisition)
+- [ ] **WS group_key_dist İşleyicisi:** WebSocket dinleyicisine (`type === "group_key_dist"`) durumunu ekle.
+- [ ] **Key Unwrapping (Deşifreleme):** Gelen `encrypted_payload` verisini kullanıcının kendi RSA Private Key'i ile çöz.
+- [ ] **Yerel Kayıt:** Çözülen grup anahtarını yerel depoda (`group_key_{group_id}`) sakla ve sohbet listesine bu grubu ekle.
+
+### 5. Grup Mesajı Gönderme (Encrypt & Sign)
+- [ ] **Simetrik Şifreleme:** Mesaj yazılıp gönderildiğinde, ilgili grubun anahtarını çek ve mesaj gövdesini AES-GCM 256 ile şifrele (`encryptBytesJS` / `encryptSymmetric`).
+- [ ] **Kriptografik İmza (RSA Signature):** Gönderici, mesajı taklit edilmesini önlemek amacıyla kendi RSA Private Key'i ile imzalar.
+  - İmzalanacak veri formatı: `${username}:${group_id}:${encrypted_payload}`
+- [ ] **WS group_message Gönderimi:** WebSocket üzerinden `type: "group_message"`, `group_id`, `encrypted_payload` (şifreli veri) ve `signature` (imza) içeren paketi sunucuya yolla.
+
+### 6. Gelen Grup Mesajını Deşifre Etme ve İmza Doğrulama (Decrypt & Verify)
+- [ ] **WS group_message İşleyicisi:** WebSocket dinleyicisine (`type === "group_message"`) durumunu ekle.
+- [ ] **İmza Doğrulama (Signature Verification):** Gönderen kişinin RSA public key'ini yerel rehberden (yoksa `/api/public_key/{sender}` üzerinden) çek ve gelen imzayı doğrula.
+  - İmza geçersizse mesajı engelle ve güvenlik uyarısı ver.
+- [ ] **Simetrik Deşifreleme:** Doğrulanan mesajı yereldeki `group_key_{group_id}` anahtarı ile çöz ve ekranda göster.
+
+### 7. Oturum Açılışında Grupları Senkronize Etme (Sync Groups)
+- [ ] **Grup Listesi Çekme:** Kullanıcı giriş yaptığında `/api/groups/{username}` endpoint'ine istek atarak dahil olduğu tüm grupları ve grup isimlerini çek, sohbet arayüzündeki inbox listesine ekle.
+- [ ] **Çevrimdışı Mesaj Kuyruğu:** Çevrimdışı mesajlar indirilirken (`/api/fetch_messages/{username}`) gelen grup anahtarı dağıtımlarını (`group_key_dist`) ve grup mesajlarını (`group_message`) normal mesajlar gibi çözüp yerel depoya kaydet.
+
+---
+
+## Bölüm D: VoIP (Sesli / Görüntülü Arama) Altyapı Planı
+
+Bu bölüm, HybridP2P Messenger'a **uçtan uca şifreli, düşük gecikmeli ve düşük sunucu maliyetli** sesli ve görüntülü arama (VoIP) özelliği eklenmesi için detaylı planı içerir.
+
+### Temel Mimari Kararlar
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         VoIP Mimarisi                                │
+│                                                                      │
+│  Sinyal (Signaling)    →  Mevcut WebSocket altyapısı (server.py)     │
+│  Medya Aktarımı        →  WebRTC (P2P, tarayıcı + masaüstü)         │
+│  NAT Geçişi            →  STUN (ücretsiz) + TURN (fallback)         │
+│  Ses Codec             →  Opus (48kHz, adaptif bitrate)              │
+│  Video Codec           →  VP8/VP9 veya H.264 (platform tercihi)     │
+│  E2EE Medya            →  SRTP (WebRTC varsayılan) + DTLS-SRTP      │
+│                                                                      │
+│  Sunucu Maliyeti:  ~$0  (STUN ücretsiz, medya P2P)                  │
+│  TURN Maliyeti:    ~$5-15/ay (sadece simetrik NAT fallback, %10-15) │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Neden WebRTC?
+
+| Alternatif | Gecikme | Maliyet | E2EE | P2P | Uyumluluk |
+|-----------|---------|---------|------|-----|-----------|
+| **WebRTC** | ~50-150ms | $0 (P2P) | ✅ DTLS-SRTP | ✅ | Tüm tarayıcılar + aiortc |
+| SIP + RTP | ~100-200ms | Sunucu gerekli | ❌ Ek yapılandırma | Kısmen | Karmaşık |
+| Özel UDP | ~30-80ms | Tam sunucu | Manuel | Manuel | Hiçbiri |
+| Jitsi/Twilio | ~100ms | $0.004/dk | ✅ | ❌ SFU | Kolay ama pahalı |
+
+WebRTC seçimi hem tarayıcıda native desteğe sahip (hiçbir plugin gerekmez), hem de masaüstünde `aiortc` veya `python-webrtc` kütüphaneleri ile Python'dan kullanılabilir. Medya varsayılan olarak P2P akar → sunucu yükü sıfır.
+
+#### NAT Traversal Stratejisi (Sunucu Maliyeti Minimizasyonu)
+
+```
+┌────────────────────────────────────────────────────────┐
+│ Bağlantı Denemesi Sırası (ICE Framework)               │
+│                                                         │
+│  1. Host Candidate      → Aynı LAN'daki cihazlar       │
+│     ↓ başarısız                                         │
+│  2. Server Reflexive    → STUN ile public IP keşfi      │
+│     (Google STUN, ücretsiz)                             │
+│     ↓ başarısız (simetrik NAT)                          │
+│  3. Relay Candidate     → TURN sunucusu üzerinden       │
+│     (coturn, kendi VPS'imiz veya Cloudflare Calls)      │
+│                                                         │
+│  İstatistik: %85-90 arama STUN ile P2P bağlanır.        │
+│  TURN sadece simetrik NAT arkasındaki kullanıcılar için │
+│  devreye girer (~%10-15 arama).                         │
+└────────────────────────────────────────────────────────┘
+```
+
+**STUN Sunucuları (Ücretsiz — sıfır maliyet):**
+- `stun:stun.l.google.com:19302`
+- `stun:stun1.l.google.com:19302`
+- `stun:stun.cloudflare.com:3478`
+
+**TURN Sunucusu Seçenekleri (Sadece fallback, düşük maliyet):**
+
+| Seçenek | Maliyet | Kurulum |
+|---------|---------|---------|
+| **coturn (kendi VPS)** | ~$5/ay (zaten var olan VPS) | `apt install coturn` |
+| **Cloudflare Calls** | 250GB/ay ücretsiz | API key gerekli |
+| **Metered TURN** | 500MB/ay ücretsiz | metered.ca kayıt |
+
+---
+
+### Faz 1: Sinyal Katmanı (Signaling Layer) — server.py
+
+Mevcut WebSocket altyapısı sinyal iletimi için yeterli. Yeni mesaj tipleri eklenerek arama başlatma, cevaplama, ICE candidate değişimi ve sonlandırma sinyalleri iletilecek.
+
+#### 1.1 — Yeni WebSocket Mesaj Tipleri
+
+- [x] **`call_offer` mesaj tipi:** Arayan taraf bir arama başlattığında karşı tarafa gönderilir.
+  ```json
+  {
+    "type": "call_offer",
+    "recipient": "bob",
+    "call_id": "uuid-...",
+    "call_type": "audio" | "video",
+    "sdp_offer": "<WebRTC SDP offer string>",
+    "timestamp": "ISO8601"
+  }
+  ```
+- [x] **`call_answer` mesaj tipi:** Aranan kişi aramayı kabul ettiğinde SDP cevabını döner.
+  ```json
+  {
+    "type": "call_answer",
+    "recipient": "alice",
+    "call_id": "uuid-...",
+    "sdp_answer": "<WebRTC SDP answer string>",
+    "timestamp": "ISO8601"
+  }
+  ```
+- [x] **`call_reject` mesaj tipi:** Aranan kişi aramayı reddeder veya meşgul sinyali gönderir.
+  ```json
+  {
+    "type": "call_reject",
+    "recipient": "alice",
+    "call_id": "uuid-...",
+    "reason": "rejected" | "busy" | "timeout" | "unavailable",
+    "timestamp": "ISO8601"
+  }
+  ```
+- [x] **`call_end` mesaj tipi:** Taraflardan biri aramayı sonlandırır.
+  ```json
+  {
+    "type": "call_end",
+    "recipient": "bob",
+    "call_id": "uuid-...",
+    "duration_seconds": 127,
+    "timestamp": "ISO8601"
+  }
+  ```
+- [x] **`ice_candidate` mesaj tipi:** ICE candidate değişimi — NAT traversal için gerekli.
+  ```json
+  {
+    "type": "ice_candidate",
+    "recipient": "bob",
+    "call_id": "uuid-...",
+    "candidate": "<ICE candidate string>",
+    "sdp_mid": "0",
+    "sdp_mline_index": 0
+  }
+  ```
+
+#### 1.2 — Sunucu Tarafı Sinyal Relay Mantığı
+
+- [x] **Sinyal iletim fonksiyonu:** `server.py` WebSocket handler'ına yukarıdaki beş yeni mesaj tipini ekle. Mantık basit: gelen sinyal paketini `recipient`'e `manager.send_to_user()` ile ilet. **Sunucu SDP veya ICE içeriğini okumaz/saklamaz.**
+- [x] **Çevrimdışı arama koruması:** Aranan kişi offline ise `call_offer` kuyruklanmaz, bunun yerine arayana anında `call_reject` + `reason: "unavailable"` döndürülür.
+- [x] **Eş zamanlı arama koruması:** Bir kullanıcı zaten bir aramadayken ikinci bir `call_offer` gelirse, arayana `call_reject` + `reason: "busy"` döndürülür. Bunun için server tarafında basit bir `active_calls: dict[str, str]` (username → call_id) haritası tutulur (bellekte, DB'de değil).
+- [x] **Arama zaman aşımı:** 30 saniye içinde `call_answer` gelmezse sunucu otomatik olarak her iki tarafa `call_reject` + `reason: "timeout"` gönderir. `asyncio.create_task()` ile timer kurulur.
+
+#### 1.3 — STUN/TURN Yapılandırma Endpoint'i
+
+- [x] **`GET /api/ice_servers` endpoint'i:** İstemcilerin ICE yapılandırmasını sunucudan almasını sağlar. TURN credential'ları dinamik üretilir (time-limited HMAC).
+  ```json
+  {
+    "ice_servers": [
+      { "urls": "stun:stun.l.google.com:19302" },
+      { "urls": "stun:stun.cloudflare.com:3478" },
+      {
+        "urls": "turn:turn.example.com:3478",
+        "username": "1718100000:alice",
+        "credential": "<HMAC-SHA1 temp credential>"
+      }
+    ]
+  }
+  ```
+- [ ] **TURN credential rotasyonu:** Credential'lar 6 saat geçerli, HMAC-SHA1 ile shared secret'tan türetilir (coturn `use-auth-secret` modu). Sunucu asla medya verisi görmez.
+
+---
+
+### Faz 2: Web İstemcisi VoIP — Tarayıcı Tarafı (WebRTC Native)
+
+Tarayıcılar WebRTC'yi yerleşik olarak destekler. `RTCPeerConnection`, `getUserMedia()` ve `MediaStream` API'leri doğrudan kullanılır.
+
+#### 2.1 — Arama Başlatma (Caller / Arayan)
+
+- [x] **ICE Sunucu listesini çek:** `GET /api/ice_servers` endpoint'inden STUN/TURN yapılandırmasını al.
+- [x] **RTCPeerConnection oluştur:** ICE sunucu listesiyle yeni bir `RTCPeerConnection` instance'ı oluştur.
+- [x] **Medya akışı al:** `navigator.mediaDevices.getUserMedia({ audio: true, video: callType === "video" })` ile mikrofon (ve opsiyonel kamera) erişimi iste.
+- [x] **Track ekleme:** Alınan medya track'lerini (`MediaStreamTrack`) `peerConnection.addTrack(track, localStream)` ile bağlantıya ekle.
+- [x] **SDP Offer üret:** `peerConnection.createOffer()` → `peerConnection.setLocalDescription(offer)`.
+- [x] **Offer gönder:** WebSocket üzerinden `call_offer` mesajını karşı tarafa ilet.
+- [x] **ICE Candidate toplama:** `peerConnection.onicecandidate` event'ini dinle, her yeni candidate için WebSocket üzerinden `ice_candidate` mesajı gönder (Trickle ICE).
+
+#### 2.2 — Aramayı Cevaplama (Callee / Aranan)
+
+- [x] **Gelen arama bildirimi:** WebSocket'ten `call_offer` geldiğinde ekranda tam ekran gelen arama UI'ı göster (zil sesi + titreşim + arayan adı + kabul/reddet butonları).
+- [x] **Reddetme:** Kullanıcı reddederse WebSocket üzerinden `call_reject` gönder. UI'ı kapat.
+- [x] **Kabul etme:** Kullanıcı kabul ederse:
+  - `getUserMedia()` ile medya akışı al.
+  - `peerConnection.setRemoteDescription(offer)` ile karşı tarafın SDP'sini ayarla.
+  - `peerConnection.createAnswer()` → `peerConnection.setLocalDescription(answer)`.
+  - WebSocket üzerinden `call_answer` mesajı gönder.
+- [x] **ICE Candidate alma:** Karşı taraftan gelen her `ice_candidate` mesajını `peerConnection.addIceCandidate()` ile ekle.
+
+#### 2.3 — Medya Akışı ve Görüntü (Active Call UI)
+
+- [x] **Uzak ses/video gösterimi:** `peerConnection.ontrack` event'i ile gelen `MediaStream`'i bir `<audio>` veya `<video>` elementine bağla.
+- [x] **Arama ekranı UI:** Tam ekran arama arayüzü:
+  - Aranan kişinin adı ve avatar'ı (üst)
+  - Arama süresi sayacı (ortada, `00:00` formatı)
+  - Kontrol butonları (alt): 🔇 Sessiz, 📷 Kamera Aç/Kapat (video call), 🔊 Hoparlör, 📱 Ekranı Kapat (telefon tuşları yerleşimi)
+  - 🔴 Aramayı Sonlandır butonu (büyük, kırmızı, ortada)
+- [x] **Mikrofon mute/unmute:** `localStream.getAudioTracks()[0].enabled = false/true` ile ses akışını durdur/başlat (track kaldırılmaz, sadece susturulur).
+- [x] **Kamera toggle (video):** `localStream.getVideoTracks()[0].enabled = false/true` ile görüntüyü durdur/başlat.
+- [x] **Aramayı sonlandırma:** `peerConnection.close()` → medya track'leri durdur → WebSocket üzerinden `call_end` gönder → UI'ı kapat.
+
+#### 2.4 — Bağlantı Kalitesi İzleme
+
+- [x] **ICE bağlantı durumu:** `peerConnection.oniceconnectionstatechange` ile bağlantı durumunu izle (`checking`, `connected`, `disconnected`, `failed`). `failed` durumunda otomatik yeniden bağlanma dene veya aramayı sonlandır.
+- [ ] **Ağ istatistikleri:** `peerConnection.getStats()` ile periyodik olarak RTT (gecikme), packet loss, jitter değerlerini oku. Bağlantı kalitesi düşükse kullanıcıya bilgi ikonu göster.
+
+---
+
+### Faz 3: Masaüstü İstemcisi VoIP — Python (aiortc)
+
+Masaüstü istemcisi (`client.py`) Flet/Python tabanlı olduğundan, WebRTC desteği için `aiortc` kütüphanesi kullanılacak. Bu kütüphane Python'da tam WebRTC implementasyonu sağlar (ICE, DTLS, SRTP, codec'ler).
+
+#### 3.1 — Bağımlılıklar
+
+- [x] **`aiortc` kurulumu:** `requirements.txt`'e `aiortc>=1.9.0` ekle. Bu kütüphane opus ses ve VP8/H264 video codec'lerini içerir.
+- [x] **`pyaudio` veya `sounddevice` kurulumu:** Mikrofon ve hoparlör erişimi için `sounddevice>=0.4.6` ekle (NumPy tabanlı, cross-platform).
+- [x] **`opencv-python` (opsiyonel, sadece video):** Kamera erişimi için `opencv-python-headless>=4.8` ekle.
+
+#### 3.2 — Arama Başlatma (Masaüstü → Herhangi Biri)
+
+- [x] **ICE yapılandırması çekme:** `signed_get("/api/ice_servers")` ile STUN/TURN listesini al.
+- [x] **RTCPeerConnection oluşturma:** `aiortc.RTCPeerConnection(configuration)` ile bağlantı oluştur.
+- [x] **Ses yakalama:** `sounddevice` ile mikrofon stream'i başlat → `aiortc.MediaStreamTrack` alt sınıfı olarak özel bir `MicrophoneTrack` oluştur → `peerConnection.addTrack(mic_track)`.
+- [x] **Video yakalama (opsiyonel):** `cv2.VideoCapture(0)` ile kamera stream'i başlat → `CameraTrack(MediaStreamTrack)` oluştur → `peerConnection.addTrack(cam_track)`.
+- [x] **SDP Offer üretme ve gönderme:** `await pc.createOffer()` → `await pc.setLocalDescription(offer)` → WebSocket üzerinden `call_offer` gönder.
+- [x] **ICE Candidate gönderme:** Vanilla ICE ile SDP içinde otomatik olarak ve gerektiğinde WebSocket `ice_candidate` üzerinden iletildi.
+
+#### 3.3 — Aramayı Cevaplama (Masaüstü)
+
+- [x] **Gelen arama UI (Flet):** Flet overlay dialog ile gelen arama bildirimi göster:
+  - Arayan kişinin adı
+  - 📞 Kabul (yeşil) ve 📵 Reddet (kırmızı) butonları
+  - 30 saniye zil sesi + timeout
+- [x] **Kabul sonrası SDP exchange:** `pc.setRemoteDescription(offer)` → `pc.createAnswer()` → `pc.setLocalDescription(answer)` → WebSocket üzerinden `call_answer` gönder.
+- [x] **Uzak ses çalma:** `pc.on("track")` ile gelen `AudioStreamTrack`'ten frame'leri oku → `sounddevice.OutputStream` ile hoparlörden çal.
+- [x] **Uzak video gösterme (opsiyonel):** Gelen `VideoStreamTrack` frame'lerini Flet `Image` widget'ına döngüsel olarak aktar.
+
+#### 3.4 — Arama Kontrolleri (Masaüstü UI)
+
+- [x] **Arama ekranı widget'ı:** Flet'te aktif arama sırasında gözüken overlay:
+  - Arama süresi sayacı
+  - 🔇 Mute, 📷 Kamera, 🔴 Kapat butonları
+  - Bağlantı durumu göstergesi (🟢 bağlı, 🟡 bağlanıyor, 🔴 koptu)
+- [x] **Mute toggle:** `mic_track.enabled = not mic_track.enabled`.
+
+---
+
+### Faz 4: E2EE Medya Güvenliği
+
+WebRTC zaten DTLS-SRTP ile medyayı şifreler, ancak TURN sunucusu üzerinden geçen veriler için ek güvence sağlamak amacıyla uygulama katmanı şifreleme opsiyonel olarak eklenebilir.
+
+#### 4.1 — Varsayılan Güvenlik (DTLS-SRTP — Otomatik)
+
+- [ ] **DTLS-SRTP doğrulama:** WebRTC bağlantısı kurulurken DTLS fingerprint'leri her iki taraf tarafından `SDP` içinde paylaşılır. Bu fingerprint'ler eşleşmezse bağlantı kurulmaz → MITM koruması sağlanır.
+- [ ] **SDP fingerprint loglama:** Her arama başlangıcında DTLS fingerprint'ini loga yaz. Paranoid kullanıcılar bunu karşılıklı doğrulayabilir (Signal'daki güvenlik numarası gibi).
+
+#### 4.2 — Ek Güvenlik: Insertable Streams API (Opsiyonel, Gelecek)
+
+- [ ] **Web'de Insertable Streams (Encoded Transform):** `RTCRtpSender.transform` ve `RTCRtpReceiver.transform` ile medya frame'lerini gönderilmeden önce AES-GCM ile ekstra şifrele, alınca çöz. Bu sayede TURN sunucusu bile şifreli veri görür. (Not: Bu API deneysel ve sadece Chromium tabanlı tarayıcılarda desteklenir — Safari desteği sınırlıdır.)
+- [ ] **Masaüstünde frame şifreleme:** `aiortc` üzerinden her ses/video frame'ini göndermeden önce oturum anahtarı ile AES-GCM encrypt et. Bu mevcut RSA key exchange altyapısı üzerinden oturum anahtarı türetilebilir.
+
+---
+
+### Faz 5: Grup Arama (Conference Call) — İleri Aşama
+
+Grup aramaları için iki mimari seçenek vardır:
+
+#### Seçenek A: Mesh (Küçük Gruplar, ≤4 Kişi)
+
+```
+       Alice ←──P2P──→ Bob
+         ↕                ↕
+       Carol ←──P2P──→ Dave
+
+  Her katılımcı diğer herkesle P2P bağlantı kurar.
+  N kişi = N*(N-1)/2 bağlantı
+  Sunucu maliyeti: $0
+  Limit: 3-4 kişi (bant genişliği sınırı)
+```
+
+- [ ] **Mesh topology implementasyonu:** Her katılımcı için ayrı `RTCPeerConnection` oluştur. Yeni katılımcı geldiğinde mevcut herkesle bağlantı kur.
+- [ ] **Grup sinyal mesajları:** `call_offer` ve `call_answer`'a `group_call_id` alanı ekle. Sunucu grubun tüm üyelerine sinyal ilet.
+
+#### Seçenek B: SFU (Büyük Gruplar, 5+ Kişi, Gelecek)
+
+```
+       Alice ──→ ┌───────────┐ ──→ Bob
+       Carol ──→ │ SFU Server │ ──→ Dave
+       Eve   ──→ └───────────┘ ──→ Frank
+
+  Her katılımcı sadece SFU'ya bir bağlantı kurar.
+  SFU medyayı diğerlerine iletir (transcode etmez).
+  Sunucu maliyeti: VPS CPU + bandwidth
+```
+
+- [ ] **SFU seçimi:** Lightweight SFU olarak `mediasoup` (Node.js) veya `Janus` (C) değerlendirilecek. İlk etapta bu fazı atlayıp Mesh ile 3-4 kişilik grup aramalarını desteklemek yeterli.
+
+---
+
+### Faz 6: UX ve Cilalama
+
+#### 6.1 — Bildirimler ve Ses
+
+- [ ] **Zil sesi:** Gelen arama bildiriminde tarayıcıda `new Audio("ringtone.mp3").play()`, masaüstünde `playsound` veya `sounddevice` ile çalma.
+- [ ] **Titreşim (mobil web):** `navigator.vibrate([200, 100, 200])` ile titreşim deseni.
+- [ ] **Push Notification (web):** Tarayıcı sekmesi arka plandayken `Notification API` ile gelen arama bildirimi göster.
+- [ ] **Çevrimdışı arama bildirimi:** Aranan kişi offline ise arayana "Kullanıcı çevrimdışı" mesajı + sohbet geçmişine "Cevapsız arama" system mesajı yaz.
+
+#### 6.2 — Arama Geçmişi
+
+- [ ] **Arama kaydı:** Her aramanın `call_id`, `caller`, `callee`, `call_type`, `duration`, `status` (completed/rejected/missed/failed) bilgilerini yerel SQLite'a (`message_store.py`) kaydet.
+- [ ] **Arama geçmişi UI:** Sohbet geçmişinde arama event'lerini özel ikonlarla göster:
+  - 📞↗️ Giden arama (yeşil)
+  - 📞↙️ Gelen arama (yeşil)
+  - 📞❌ Cevapsız arama (kırmızı)
+  - ⏱️ Süre bilgisi
+
+#### 6.3 — Görüntülü Arama & Ses Performans Optimizasyonları (Sektör Standartları)
+
+- [ ] **H.264 & VP8/VP9 Tercihi ve Donanım Hızlandırma:** Tarayıcı ve mobil cihazlarda donanım hızlandırma (hardware acceleration) kullanan **H.264 (Constrained Baseline Profile)** codec'ini önceliklendir. Bu sayede mobil cihazlarda pil tüketimi ve ısınma minimumda tutulur. Masaüstü/Python tarafında ise fallback olarak **VP8** veya **VP9** kullan.
+- [ ] **Dinamik Çözünürlük ve Kare Hızı Kontrolü (Adaptive Quality):** 
+  - Varsayılan başlangıç: **720p (1280x720) @ 30 FPS** (ideal kalite/bant genişliği dengesi).
+  - Ağ darboğazı durumunda constraints kullanarak çözünürlüğü dinamik olarak **360p (640x360) @ 15 FPS** seviyesine kadar düşür.
+- [ ] **Bant Genişliği Sınırlandırması (Bitrate Limiting):** `RTCRtpSender.setParameters()` ile maksimum bant genişliğini:
+  - 720p için: **1200 - 1500 kbps** ile sınırla.
+  - 360p için: **300 - 500 kbps** ile sınırla.
+  - Sadece ses durumunda: **40 - 64 kbps (Opus)** ile sınırla.
+  - Gereksiz bant genişliği ve sunucu (TURN) tüketimini engelle.
+- [ ] **Ses Önceliği (Audio Priority over Video):** Zayıf bağlantılarda görüntünün donmasına izin ver ama sesin kesilmesini engelle. SDP'ye `priority: "high"` parametresini ekle ve `degradationPreference: "balanced"` veya `"maintain-resolution"` ayarla.
+- [ ] **Yankı ve Gürültü Engelleme (AEC / ANS / AGC):** Tarayıcı yerleşik WebRTC filtrelerini aktif et:
+  - `echoCancellation: true` (Akustik Yankı Giderici)
+  - `noiseSuppression: true` (Gürültü Bastırma)
+  - `autoGainControl: true` (Otomatik Kazanç Kontrolü)
+- [ ] **Ağ İstatistiklerini İzleme ve Kullanıcı Bildirimi:** `RTCPeerConnection.getStats()` API'sini her 2 saniyede bir sorgulayarak packet loss, jitter ve RTT (Round Trip Time) değerlerini oku. Bağlantı kalitesi bozulduğunda arayüzde bir "Zayıf Bağlantı" uyarısı göster.
+
+
+---
+
+### Teknik Bağımlılık Haritası
+
+```mermaid
+graph TD
+    A[Faz 1: Signaling<br/>server.py WS tipleri] --> B[Faz 2: Web VoIP<br/>WebRTC Native]
+    A --> C[Faz 3: Desktop VoIP<br/>aiortc + sounddevice]
+    B --> D[Faz 4: E2EE Medya<br/>DTLS-SRTP + Insertable]
+    C --> D
+    B --> E[Faz 5: Grup Arama<br/>Mesh / SFU]
+    C --> E
+    D --> F[Faz 6: UX<br/>Bildirim + Geçmiş]
+    E --> F
+```
+
+### Maliyet Özeti
+
+| Bileşen | Fiyat | Açıklama |
+|---------|-------|----------|
+| STUN | $0 | Google/Cloudflare ücretsiz sunucular |
+| Sinyal (Signaling) | $0 | Mevcut WebSocket + server.py |
+| Medya (P2P) | $0 | Direkt tarayıcı/istemci arası |
+| TURN (fallback, %10-15 arama) | ~$0-5/ay | coturn aynı VPS'te veya Cloudflare Calls (250GB ücretsiz) |
+| SFU (sadece 5+ kişi grup, opsiyonel) | ~$10-20/ay | Ayrı VPS veya aynı makine |
+| **Toplam** | **$0-5/ay** | Bireysel kullanım için neredeyse sıfır maliyet |
+
+### Tahmini Süre
+
+| Faz | Süre | Öncelik |
+|-----|------|---------|
+| Faz 1: Signaling (server.py) | 1 gün | Kritik |
+| Faz 2: Web VoIP | 2-3 gün | Kritik |
+| Faz 3: Desktop VoIP | 2-3 gün | Yüksek |
+| Faz 4: E2EE medya | 1 gün | Orta |
+| Faz 5: Grup arama | 2-3 gün | Düşük |
+| Faz 6: UX + Polish | 1-2 gün | Orta |
+| **Toplam** | **~9-15 gün** | |
+
+> [!IMPORTANT]
+> VoIP için en kritik karar: **TURN sunucusu**. Eğer zaten bir VPS'iniz varsa (standalone web için), aynı makineye `coturn` kurmak yeterli. Cloudflare Calls da ücretsiz katmanıyla küçük-orta ölçek için ideal. Başlangıçta sadece STUN ile çalışmak bile vakaların ~%85-90'ını karşılar.
+
+> [!TIP]
+> `aiortc` Python kütüphanesi Opus ve VP8 codec'lerini doğrudan destekler. Bu sayede masaüstü istemcisi hiçbir ek native bağımlılık olmadan (ffmpeg vb.) sesli arama yapabilir. Ancak video için performans sınırlamaları olabilir — ilk fazda sadece sesli arama ile başlayıp video desteğini ikinci iterasyonda eklemek mantıklıdır.
+

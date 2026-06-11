@@ -1635,22 +1635,26 @@ def main(page: ft.Page):
 
                 register_with_server(username, pub, priv)
 
-                # Reset button state
-                login_btn.disabled = False
-                login_btn.content.controls[1].value = "Sign In"
+                # Reset button state and transition to inbox on Flet's event loop
+                async def login_success_ui():
+                    login_btn.disabled = False
+                    login_btn.content.controls[1].value = "Sign In"
+                    state["logged_in"] = True
+                    show_inbox_screen()
+                    sync_chat_settings()
+                    sync_user_groups_from_server()
+                    fetch_offline_messages()
+                    start_websocket_listener()
 
-                state["logged_in"] = True
-                show_inbox_screen()
-                sync_chat_settings()
-                sync_user_groups_from_server()
-                fetch_offline_messages()
-                start_websocket_listener()
+                page.run_task(login_success_ui)
             except Exception as ex:
-                login_btn.disabled = False
-                login_btn.content.controls[1].value = "Sign In"
-                username_field.error_text = f"Hata: {ex}"
-                log_status(f"Giris sirasinda hata olustu: {ex}")
-                page.update()
+                async def login_failed_ui():
+                    login_btn.disabled = False
+                    login_btn.content.controls[1].value = "Sign In"
+                    username_field.error_text = f"Hata: {ex}"
+                    log_status(f"Giris sirasinda hata olustu: {ex}")
+                    page.update()
+                page.run_task(login_failed_ui)
 
         threading.Thread(target=do_login, daemon=True).start()
 
@@ -3484,9 +3488,11 @@ def main(page: ft.Page):
                     if pc.iceConnectionState in ["connected", "completed"]:
                         if call_status_text.value != "Connected":
                             state["call_state"] = "connected"
-                            call_status_text.value = "Connected"
-                            asyncio.create_task(_call_timer_loop())
-                            page.update()
+                            async def _start_call_ui():
+                                call_status_text.value = "Connected"
+                                page.update()
+                            page.run_task(_start_call_ui)
+                            page.run_task(_call_timer_loop)
                     elif pc.iceConnectionState in ["failed", "closed"]:
                         cleanup_call()
                         
@@ -3574,9 +3580,11 @@ def main(page: ft.Page):
                     if pc.iceConnectionState in ["connected", "completed"]:
                         if call_status_text.value != "Connected":
                             state["call_state"] = "connected"
-                            call_status_text.value = "Connected"
-                            asyncio.create_task(_call_timer_loop())
-                            page.update()
+                            async def _start_call_ui():
+                                call_status_text.value = "Connected"
+                                page.update()
+                            page.run_task(_start_call_ui)
+                            page.run_task(_call_timer_loop)
                     elif pc.iceConnectionState in ["failed", "closed"]:
                         cleanup_call()
                         
@@ -3657,8 +3665,10 @@ def main(page: ft.Page):
             page.update()
 
     def start_local_video_rendering():
-        local_video_preview.visible = True
-        page.update()
+        async def _init_local_ui():
+            local_video_preview.visible = True
+            page.update()
+        page.run_task(_init_local_ui)
         
         async def _render_local():
             track = state.get("local_video_track")
@@ -3673,13 +3683,15 @@ def main(page: ft.Page):
                 except Exception as e:
                     break
                     
-        asyncio.run_coroutine_threadsafe(_render_local(), state["ws_loop"])
+        page.run_task(_render_local)
 
     def start_remote_video_rendering(track):
-        remote_video_view.visible = True
-        call_avatar.visible = False
-        video_container.visible = True
-        page.update()
+        async def _init_remote_ui():
+            remote_video_view.visible = True
+            call_avatar.visible = False
+            video_container.visible = True
+            page.update()
+        page.run_task(_init_remote_ui)
         
         async def _render_remote():
             while state.get("call_state") != "ended":
@@ -3693,7 +3705,7 @@ def main(page: ft.Page):
                 except Exception as e:
                     break
                     
-        asyncio.run_coroutine_threadsafe(_render_remote(), state["ws_loop"])
+        page.run_task(_render_remote)
 
     def cleanup_call():
         print("[VoIP] Cleaning up call...")
@@ -3733,16 +3745,21 @@ def main(page: ft.Page):
         state["call_partner"] = None
         state["call_type"] = None
         
-        local_video_preview.src_base64 = None
-        local_video_preview.visible = False
-        remote_video_view.src_base64 = None
-        remote_video_view.visible = False
-        call_timer_text.visible = False
-        
-        if state.get("logged_in", False):
-            show_chat_screen()
-        else:
-            show_login_screen()
+        async def _cleanup_ui():
+            local_video_preview.src_base64 = None
+            local_video_preview.src = transparent_placeholder
+            local_video_preview.visible = False
+            remote_video_view.src_base64 = None
+            remote_video_view.src = transparent_placeholder
+            remote_video_view.visible = False
+            call_timer_text.visible = False
+            
+            if state.get("logged_in", False):
+                show_chat_screen()
+            else:
+                show_login_screen()
+                
+        page.run_task(_cleanup_ui)
 
     # ── Ekran Geçişleri ──────────────────────────────────────────────
 

@@ -2077,8 +2077,10 @@
             for (const [k, v] of Object.entries(state.chats)) {
                 chatsClone[k] = {
                     partner: v.partner,
+                    groupName: v.groupName || null,
+                    isGroup: !!v.isGroup,
                     ephemeral: v.ephemeral,
-                    messages: v.ephemeral ? [] : v.messages
+                    messages: v.ephemeral ? [] : (v.messages || []).filter(m => !m.view_once)
                 };
             }
             await dbSet("chats", `chats_${state.username}`, JSON.stringify(chatsClone));

@@ -19,9 +19,9 @@
 | # | Sorun | Açıklama |
 |---|-------|----------|
 | 4 | **Web'de dosya/resim gönderimi** | ✅ Tamamlandı — RSA-OAEP + AES-GCM şifreli dosya/resim transferleri, inline resimler ve one-time view-once indirmeleri web istemcisinde çalışıyor. |
-| 5 | **Web'de grup desteği yok** | Desktop'ta grup oluşturma/mesajlaşma var, web client'ta grup UI'ı ve `group_message` / `group_key_dist` WS handler'ları yok. |
-| 6 | **Web'de arama (search) yok** | Desktop'ta inbox search var, web'de yalnızca basit chat listesi render ediliyor, filtreleme/mesaj içi arama yok. |
-| 7 | **Web'de view-once mesaj alımı** | Gelen view-once mesajlar web'de görünüyor ama decrypt + self-destruct akışı kısmen var — countdown ve mesaj silme güvenilir değil (sayfa yenilenince mesaj localStorage'da kalıyor). |
+| 5 | **Web'de grup desteği yok** | ✅ Tamamlandı — Web istemcisine grup oluşturma, üye ekleme, grup mesajlaşma ve grup anahtarlarının dağıtımı (re-keying dahil) tamamen entegre edildi. |
+| 6 | **Web'de arama (search) yok** | ✅ Tamamlandı — Web istemcisine hem sohbet odalarını hem de mesaj metinlerini filtreleyen global arama (search) özelliği eklendi. |
+| 7 | **Web'de view-once mesaj alımı** | ✅ Tamamlandı — Sayfa yenilenmesinde veya modal kapatıldığında view-once mesaj ve dosyaları kalıcı olarak IndexedDB'den silinerek güvenli hale getirildi. |
 | 8 | **Okundu bilgisi (Read Receipt)** | ✅ Tamamlandı — Çift yeşil tik okundu bilgisi desktop ve web için eklendi. |
 | 9 | **"Yazıyor..." göstergesi** | Hiçbir platformda typing indicator yok. |
 
@@ -29,7 +29,7 @@
 
 | # | Sorun | Açıklama |
 |---|-------|----------|
-| 10 | **Web UI'da system mesaj stili** | `appendSystemMessage()` fonksiyonu `msg-system-bubble` class'ını kullanıyor ama bu class CSS'te tanımlı değil — görsel olarak düz metin gibi çıkıyor. |
+| 10 | **Web UI'da system mesaj stili** | ✅ Tamamlandı — `.msg-system-bubble` CSS kuralı styles.css dosyasına eklenerek sistem mesajlarının görünümü iyileştirildi. |
 | 11 | **Desktop Tab hatası (ElevatedButton deprecation)** | Flet 0.85.x uyarıları devam ediyor (cosmetic). |
 | 12 | **Mesaj tarih ayracı** | "Bugün", "Dün", "12 Haziran" gibi gün gruplandırması yok. |
 | 13 | **Bildirim sesi** | Yeni mesaj geldiğinde ses efekti yok. |
@@ -47,13 +47,13 @@
 | Ephemeral mode toggle | ✅ | ✅ (yeni düzeltildi) |
 | View-once mesaj gönderme | ✅ | ✅ |
 | Dosya/resim gönderimi | ✅ | ✅ |
-| Grup sohbeti | ✅ | ❌ |
+| Grup sohbeti | ✅ | ✅ |
 | Online/Offline durumu | ✅ | ✅ |
 | Chat inbox listesi | ✅ | ✅ |
-| Mesaj arama | ✅ | ❌ |
+| Mesaj arama | ✅ | ✅ |
 | Server status göstergesi | ✅ | ✅ |
 | Okundu bilgisi (çift yeşil tik) | ✅ | ✅ |
-| Secret key backup | kısmen | kısmen |
+| Secret key backup | kısmen | ✅ |
 
 ---
 
@@ -372,48 +372,48 @@ gantt
 Bu bölüm, web istemcisinde (`static/index.html`) grup sohbeti özelliğinin masaüstü istemcisiyle (`client.py`) ve sunucuyla (`server.py`) tam uyumlu şekilde çalışabilmesi için yapılması gereken adımları içerir. Kodlamaya başlamadan önce bu adımların onaylanması beklenmektedir.
 
 ### 1. Veri Yapısı ve Depolama (Storage & State)
-- [ ] **Grup Anahtarı Depolama Alanı:** `localStorage` üzerinde veya local state'de grup anahtarlarını saklamak için bir yapı kur.
+- [x] **Grup Anahtarı Depolama Alanı:** `localStorage` üzerinde veya local state'de grup anahtarlarını saklamak için bir yapı kur.
   - Şema: `group_key_{group_id}` -> `Hex (AES Key)`.
-- [ ] **Chat Nesnesinde Grup Ayırımı:** `state.chats[partner]` nesnelerine `isGroup: true` bayrağı ekle. `group_` ile başlayan partner ID'lerini otomatik olarak grup olarak tanı.
-- [ ] **Kişi Listesi (Contacts) Genişletme:** `state.contacts` listesinde grupları da listele ve bunlara özel grup ikonları ata.
+- [x] **Chat Nesnesinde Grup Ayırımı:** `state.chats[partner]` nesnelerine `isGroup: true` bayrağı ekle. `group_` ile başlayan partner ID'lerini otomatik olarak grup olarak tanı.
+- [x] **Kişi Listesi (Contacts) Genişletme:** `state.contacts` listesinde grupları da listele ve bunlara özel grup ikonları ata.
 
 ### 2. Arayüz (UI) Güncellemeleri
-- [ ] **Yeni Grup Oluşturma Arayüzü:** "New Chat" modal pencerisine "Grup Sohbeti Oluştur" sekmesi ekle.
+- [x] **Yeni Grup Oluşturma Arayüzü:** "New Chat" modal pencerisine "Grup Sohbeti Oluştur" sekmesi ekle.
   - Girdiler: Grup Adı (`Group Name`), Üyeler (`Members` - virgülle ayrılmış kullanıcı adları).
-- [ ] **Sol Sohbet Listesi (Inbox) Güncellemesi:** Gruplar için kişi ikonları yerine grup ikonları (`ft.Icons.GROUP` benzeri SVG) kullan.
-- [ ] **Grup Üst Bilgi Paneli (Chat Header):** Aktif sohbet bir grup olduğunda üst kısımda "Group: [Grup Adı]" yazdır ve gruptan çıkma (`Leave Group`) veya yeniden anahtarlama (`Rekey`) düğmelerini göster.
-- [ ] **Gönderen Bilgisi (Message Bubble):** Grup sohbetinde gelen mesaj balonlarında, mesajın sol üstünde gerçek göndericinin kullanıcı adını göster (kişisel sohbetlerde bu gizli kalır).
+- [x] **Sol Sohbet Listesi (Inbox) Güncellemesi:** Gruplar için kişi ikonları yerine grup ikonları (`ft.Icons.GROUP` benzeri SVG) kullan.
+- [x] **Grup Üst Bilgi Paneli (Chat Header):** Aktif sohbet bir grup olduğunda üst kısımda "Group: [Grup Adı]" yazdır ve gruptan çıkma (`Leave Group`) veya yeniden anahtarlama (`Rekey`) düğmelerini göster.
+- [x] **Gönderen Bilgisi (Message Bubble):** Grup sohbetinde gelen mesaj balonlarında, mesajın sol üstünde gerçek göndericinin kullanıcı adını göster (kişisel sohbetlerde bu gizli kalır).
 
 ### 3. Grup Oluşturma ve Anahtar Dağıtımı (Key Distribution)
-- [ ] **Üye Public Key Sorgulama:** Grup oluşturulurken listedeki her üye için `/api/public_key/{username}` endpoint'ine istek atarak RSA public key'lerini al.
-- [ ] **Grup Anahtarı Üretimi:** Rastgele 256-bit (32 byte) kriptografik simetrik grup anahtarı üret.
-- [ ] **Key Wrapping (Şifreleme):** Üretilen grup anahtarını gruptaki her bir üyenin RSA public key'i ile Web Crypto API kullanarak şifrele (`encryptBytesJS` ile RSA-OAEP-256).
-- [ ] **REST API Grup Kaydı:** `/api/groups` adresine `POST` isteği at (grup kurucusu, grup adı, grup ID'si, üye listesi).
-- [ ] **WebSocket Üzerinden Anahtar Dağıtımı:** Gruptaki tüm üyelere WebSocket üzerinden `group_key_dist` tipinde mesaj gönder. Bu mesaj şunları içerir:
+- [x] **Üye Public Key Sorgulama:** Grup oluşturulurken listedeki her üye için `/api/public_key/{username}` endpoint'ine istek atarak RSA public key'lerini al.
+- [x] **Grup Anahtarı Üretimi:** Rastgele 256-bit (32 byte) kriptografik simetrik grup anahtarı üret.
+- [x] **Key Wrapping (Şifreleme):** Üretilen grup anahtarını gruptaki her bir üyenin RSA public key'i ile Web Crypto API kullanarak şifrele (`encryptBytesJS` ile RSA-OAEP-256).
+- [x] **REST API Grup Kaydı:** `/api/groups` adresine `POST` isteği at (grup kurucusu, grup adı, grup ID'si, üye listesi).
+- [x] **WebSocket Üzerinden Anahtar Dağıtımı:** Gruptaki tüm üyelere WebSocket üzerinden `group_key_dist` tipinde mesaj gönder. Bu mesaj şunları içerir:
   - `recipient`: Üyenin kullanıcı adı
   - `group_id`: Yeni oluşturulan grubun ID'si
   - `encrypted_payload`: Üyenin RSA public key'i ile şifrelenmiş grup anahtarı
 
 ### 4. Gelen Grup Anahtarını Alma (Key Acquisition)
-- [ ] **WS group_key_dist İşleyicisi:** WebSocket dinleyicisine (`type === "group_key_dist"`) durumunu ekle.
-- [ ] **Key Unwrapping (Deşifreleme):** Gelen `encrypted_payload` verisini kullanıcının kendi RSA Private Key'i ile çöz.
-- [ ] **Yerel Kayıt:** Çözülen grup anahtarını yerel depoda (`group_key_{group_id}`) sakla ve sohbet listesine bu grubu ekle.
+- [x] **WS group_key_dist İşleyicisi:** WebSocket dinleyicisine (`type === "group_key_dist"`) durumunu ekle.
+- [x] **Key Unwrapping (Deşifreleme):** Gelen `encrypted_payload` verisini kullanıcının kendi RSA Private Key'i ile çöz.
+- [x] **Yerel Kayıt:** Çözülen grup anahtarını yerel depoda (`group_key_{group_id}`) sakla ve sohbet listesine bu grubu ekle.
 
 ### 5. Grup Mesajı Gönderme (Encrypt & Sign)
-- [ ] **Simetrik Şifreleme:** Mesaj yazılıp gönderildiğinde, ilgili grubun anahtarını çek ve mesaj gövdesini AES-GCM 256 ile şifrele (`encryptBytesJS` / `encryptSymmetric`).
-- [ ] **Kriptografik İmza (RSA Signature):** Gönderici, mesajı taklit edilmesini önlemek amacıyla kendi RSA Private Key'i ile imzalar.
+- [x] **Simetrik Şifreleme:** Mesaj yazılıp gönderildiğinde, ilgili grubun anahtarını çek ve mesaj gövdesini AES-GCM 256 ile şifrele (`encryptBytesJS` / `encryptSymmetric`).
+- [x] **Kriptografik İmza (RSA Signature):** Gönderici, mesajı taklit edilmesini önlemek amacıyla kendi RSA Private Key'i ile imzalar.
   - İmzalanacak veri formatı: `${username}:${group_id}:${encrypted_payload}`
-- [ ] **WS group_message Gönderimi:** WebSocket üzerinden `type: "group_message"`, `group_id`, `encrypted_payload` (şifreli veri) ve `signature` (imza) içeren paketi sunucuya yolla.
+- [x] **WS group_message Gönderimi:** WebSocket üzerinden `type: "group_message"`, `group_id`, `encrypted_payload` (şifreli veri) ve `signature` (imza) içeren paketi sunucuya yolla.
 
 ### 6. Gelen Grup Mesajını Deşifre Etme ve İmza Doğrulama (Decrypt & Verify)
-- [ ] **WS group_message İşleyicisi:** WebSocket dinleyicisine (`type === "group_message"`) durumunu ekle.
-- [ ] **İmza Doğrulama (Signature Verification):** Gönderen kişinin RSA public key'ini yerel rehberden (yoksa `/api/public_key/{sender}` üzerinden) çek ve gelen imzayı doğrula.
+- [x] **WS group_message İşleyicisi:** WebSocket dinleyicisine (`type === "group_message"`) durumunu ekle.
+- [x] **İmza Doğrulama (Signature Verification):** Gönderen kişinin RSA public key'ini yerel rehberden (yoksa `/api/public_key/{sender}` üzerinden) çek ve gelen imzayı doğrula.
   - İmza geçersizse mesajı engelle ve güvenlik uyarısı ver.
-- [ ] **Simetrik Deşifreleme:** Doğrulanan mesajı yereldeki `group_key_{group_id}` anahtarı ile çöz ve ekranda göster.
+- [x] **Simetrik Deşifreleme:** Doğrulanan mesajı yereldeki `group_key_{group_id}` anahtarı ile çöz ve ekranda göster.
 
 ### 7. Oturum Açılışında Grupları Senkronize Etme (Sync Groups)
-- [ ] **Grup Listesi Çekme:** Kullanıcı giriş yaptığında `/api/groups/{username}` endpoint'ine istek atarak dahil olduğu tüm grupları ve grup isimlerini çek, sohbet arayüzündeki inbox listesine ekle.
-- [ ] **Çevrimdışı Mesaj Kuyruğu:** Çevrimdışı mesajlar indirilirken (`/api/fetch_messages/{username}`) gelen grup anahtarı dağıtımlarını (`group_key_dist`) ve grup mesajlarını (`group_message`) normal mesajlar gibi çözüp yerel depoya kaydet.
+- [x] **Grup Listesi Çekme:** Kullanıcı giriş yaptığında `/api/groups/{username}` endpoint'ine istek atarak dahil olduğu tüm grupları ve grup isimlerini çek, sohbet arayüzündeki inbox listesine ekle.
+- [x] **Çevrimdışı Mesaj Kuyruğu:** Çevrimdışı mesajlar indirilirken (`/api/fetch_messages/{username}`) gelen grup anahtarı dağıtımlarını (`group_key_dist`) ve grup mesajlarını (`group_message`) normal mesajlar gibi çözüp yerel depoya kaydet.
 
 ---
 
@@ -828,11 +828,11 @@ Kullanıcıların fiziki olarak kod taşımak istemediği durumlarda, merkeziyet
 
 ### 2. Yapılacak İşler Listesi (Checklist)
 
-- [ ] **Arayüz Tasarımı:** `client.py` içerisine "P2P Bağlantı Modu" sekmesi/paneli ekle.
-- [ ] **SDP / ICE Paketleme:** Yerel SDP ve toplanan ICE adaylarını tek bir sıkıştırılmış JSON dizesi haline getirip base64 formatına çeviren serialize modülü yaz.
+- [x] **Arayüz Tasarımı:** `client.py` içerisine "P2P Bağlantı Modu" sekmesi/paneli ekle.
+- [x] **SDP / ICE Paketleme:** Yerel SDP ve toplanan ICE adaylarını tek bir sıkıştırılmış JSON dizesi haline getirip base64 formatına çeviren serialize modülü yaz.
 - [ ] **QR Kod Modülü:** Base64 kodlu SDP verisini göstermek için arayüze dinamik QR kod üreteci (`qrcode` kütüphanesi) entegre et. QR kod taramak için ise kamerayı açıp çözümleyen bir tarayıcı modülü ekle.
-- [ ] **Manuel Giriş Alanları:** QR kod kamerası olmayan masaüstü kullanıcıları için SDP yapıştırma textbox'ları ekle.
+- [x] **Manuel Giriş Alanları:** QR kod kamerası olmayan masaüstü kullanıcıları için SDP yapıştırma textbox'ları ekle.
 - [ ] **DHT Entegrasyonu:** Python tarafında hafif bir DHT kütüphanesi (örn. `bittorrent-dht` veya `kademlia` türevi) kullanarak eş bulma ve sinyalleşme mekanizmasını prototiple.
-- [ ] **STUN Entegrasyonu:** Pure P2P modunda sadece ücretsiz ve güvenilir genel STUN sunucularını (Google, Cloudflare) kullanacak şekilde WebRTC yapılandırmasını kısıtla.
+- [x] **STUN Entegrasyonu:** Pure P2P modunda sadece ücretsiz ve güvenilir genel STUN sunucularını (Google, Cloudflare) kullanacak şekilde WebRTC yapılandırmasını kısıtla.
 
 

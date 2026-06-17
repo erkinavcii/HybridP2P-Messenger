@@ -49,6 +49,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 - [x] **Web Client IndexedDB:** `static/index.html` üzerinde LocalStorage yerine IndexedDB'ye geçildi; grup metadata'sı korundu ve view-once mesajların yenileme sonrası sızması engellendi.
 - [x] **API /api/ice_servers Güvenliği:** `server.py` üzerinde isteklerin imza doğrulama (X-Signature) ile doğrulanması sağlandı; `TURN_SECRET` parametresine bağlı TURN şifresi üretimi eklendi.
 - [x] **Pure P2P Entegrasyonu:** Hem masaüstü hem de web istemcisine zlib/deflate sıkıştırmalı Base64 SDP kopyala-yapıştır ile sunucusuz arama özelliği entegre edildi.
+- [x] **Web İstemcisi Modülerleştirme:** CSS ve devasa script blokları `styles.css`, `state.js`, `crypto.js`, `db.js`, `voip.js`, `ws.js`, `ui.js`, `app.js` şeklinde ES6 modüllerine bölünerek `static/index.html` 400+ satıra düşürüldü.
 
 ---
 
@@ -61,7 +62,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 
 ### 5.2. Modülerleştirme ve Refactoring (Modularization & Refactoring)
 *Tek dosyada biriken ve boyutu aşırı büyüyen web istemcisi (`static/index.html` — 4400+ satır) ve röle sunucusu (`server.py` — 1800+ satır) dosyalarının daha temiz, okunabilir ve yönetilebilir modüllere ayrılması.*
-- [ ] **Web İstemcisi Modülerleştirme:** CSS dosyalarının `static/css/styles.css` olarak dışarı aktarılması ve Javascript kısımlarının `db.js`, `crypto.js`, `ws.js`, `voip.js`, `ui.js`, `app.js` şeklinde ES6 modüllerine bölünmesi.
+- [x] **Web İstemcisi Modülerleştirme:** CSS dosyalarının `static/css/styles.css` olarak dışarı aktarılması ve Javascript kısımlarının `db.js`, `crypto.js`, `ws.js`, `voip.js`, `ui.js`, `app.js` şeklinde ES6 modüllerine bölünmesi.
 - [ ] **Sunucu Modülerleştirme:** APIRouter kullanılarak `users.py`, `messages.py`, `groups.py`, `voip.py` olarak ayrılması ve `main.py`, `config.py`, `database.py` şeklinde paket yapısına kavuşturulması.
 
 ### 5.3. Sinyalleşme ve NAT Optimizasyonları

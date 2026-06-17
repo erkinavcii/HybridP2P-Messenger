@@ -392,3 +392,66 @@ Sınırlı veya dalgalı ağ bağlantılarında görüşme kalitesini sürdürme
 * **Akış:** `RTCPeerConnection.getStats()` periyodik olarak sorgulanarak packet loss, jitter ve RTT izlenir. Ağ kalitesi düştüğünde çözünürlük dinamik olarak 720p@30FPS'ten 360p@15FPS seviyesine çekilir, ses önceliklendirilir (SDP priority high) ve Opus ses codec'i 40 kbps seviyesine sınırlanarak kesinti engellenir.
 * **Kullanım Alanı:** Düşük bant genişliğinde kararlı VoIP görüşmeleri.
 
+---
+
+## 🏛️ Özellik 10: Modülerleştirme ve Refactoring (Modularization & Refactoring)
+
+### Ne İstiyoruz?
+Tek dosyada biriken ve boyutu aşırı büyüyen web istemcisi (`static/index.html` — 4400+ satır) ve röle sunucusu (`server.py` — 1800+ satır) dosyalarının daha temiz, okunabilir ve yönetilebilir modüllere ayrılmasını istiyoruz.
+
+### Teknik Yaklaşım
+
+#### 10.1 — Web İstemcisi (`static/` Klasörü) Modüler Yapısı
+* **`static/css/styles.css`**: CSS tasarımları, animasyonlar ve temalandırma kuralları.
+* **`static/js/` (JavaScript ES6 Modülleri):**
+  * `db.js`: IndexedDB veritabanı işlemleri (chat geçmişi, metadata, keys saklama).
+  * `crypto.js`: RSA ve AES-GCM şifreleme/çözme, anahtar üretimi ve şifreli PEM yedekleme.
+  * `ws.js`: WebSocket bağlantı döngüsü ve gelen WebSocket mesajlarının yönlendirilmesi (Dispatcher).
+  * `voip.js`: WebRTC peer connection kurulumu, medya akışları ve Pure P2P VoIP kontrolleri.
+  * `ui.js`: DOM manipülasyonu, mesaj balonlarının render edilmesi, inbox listesinin güncellenmesi ve modal pencereler.
+  * `app.js`: Ana giriş noktası. Uygulama state'ini tutar ve modülleri koordine eder.
+* **`static/index.html`**: Yalnızca temiz HTML5 iskeleti ve modül yükleyici `<script type="module" src="js/app.js"></script>`.
+
+#### 10.2 — Röle Sunucusu (`server.py`) APIRouter Yapısı
+* **`server/` (Modüler Python Paketi Klasörü):**
+  * `config.py`: Ortam değişkenleri (.env), CORS izinleri, host/port ayarları ve TURN sunucu parametreleri.
+  * `database.py`: SQLite şema ve aiosqlite oturum yönetimi.
+  * `auth.py`: X-Signature imza doğrulamaları ve güvenlik middleware'leri.
+  * `websocket_manager.py`: WebSocket ConnectionManager sınıfı ve anlık online kullanıcı durumu.
+  * `routes/` (APIRouter'lar):
+    * `users.py`: Kayıt (`/api/register`), public key ve online durumu sorgulamaları.
+    * `messages.py`: Çevrimdışı mesaj ve şifreli dosya transfer API'leri.
+    * `groups.py`: Grup oluşturma, üye yönetimi ve anahtar dağıtımı.
+    * `voip.py`: ICE/TURN sunucu adres üretimi (`/api/ice_servers`).
+  * `main.py`: Sunucu başlangıç noktası (FastAPI instantiating & Uvicorn tetikleyici).
+
+---
+
+## 📱 Özellik 11: Bağımsız Sunucusuz Uygulama (Standalone Serverless App)
+
+### Ne İstiyoruz?
+Herhangi bir merkezi sunucuya (FastAPI röle sunucusu) veya veritabanı kaydına ihtiyaç duymadan, tamamen bağımsız (standalone) bir şekilde çalışan iki minimalist istemci istiyoruz. Biri masaüstü (Python script) diğeri tarayıcı (tek sayfalık HTML) olarak çalışacak ve taraflar sadece manuel SDP (kopyala-yapıştır/QR kod) takasıyla doğrudan sesli/görüntülü P2P görüşme yapabilecek.
+
+### Kullanıcı Akışı
+```
+1. Kullanıcı `serverless_client.py` scriptini veya `serverless.html` sayfasını açar.
+2. Arayüzde sadece iki ana bölüm bulunur:
+   - "Arama Başlat (Teklif Oluştur)"
+   - "Aramaya Katıl (Cevap Yapıştır)"
+3. Başlatan taraf [Teklif Üret] butonuna tıklar -> Local WebRTC Offer + ICE candidate'leri toplanır, zlib+Base64 ile sıkıştırılmış tek bir metin bloku üretilir.
+4. Bu blok kopyalanıp (veya QR kod olarak gösterilip) alıcıya başka bir kanal (SMS, e-posta, fiziksel görüşme vb.) üzerinden iletilir.
+5. Alıcı taraf bu teklif metnini arayüzdeki kutuya yapıştırıp [Cevap Üret] butonuna basar -> Kendi WebRTC Answer + candidate'lerini içeren sıkıştırılmış yanıt metnini üretir.
+6. Arayan taraf bu yanıtı alıp kendi arayüzüne yapıştırdığı an doğrudan sesli/görüntülü P2P WebRTC görüşmesi başlar.
+```
+
+### Teknik Yaklaşım
+- **Sıfır Sunucu & Sıfır DB Bağımlılığı:** Herhangi bir API çağrısı veya WebSocket bağlantısı kurulmaz.
+- **Medya Entegrasyonu:** `getUserMedia` (Web) ve `aiortc` (Python) ile kamera/mikrofon akışı doğrudan yakalanır.
+- **Sıkıştırma:** SDP boyutunu el ile taşınabilir hale getirmek için Python'da `zlib` ve tarayıcıda `CompressionStream("deflate")` kullanılarak SDP offer ve answer paketleri sıkıştırılır.
+
+### Bağımlılıklar
+- `aiortc` (Masaüstü/Python)
+- Tarayıcı WebRTC APIs (Web)
+
+
+

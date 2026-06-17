@@ -1114,6 +1114,14 @@
                             <button id="view-once-btn" class="action-icon-btn view-once-circle-btn" title="Send next message as View-Once">
                                 <span class="view-once-circle-label">1</span>
                             </button>
+                            <!-- Group Rekey -->
+                            <button id="group-rekey-btn" class="action-icon-btn hidden" title="Generate New Group Key" style="color: var(--accent-hover);">
+                                🔑
+                            </button>
+                            <!-- Leave Group -->
+                            <button id="leave-group-btn" class="action-icon-btn hidden" title="Leave Group" style="color: #ef4444;">
+                                ✕
+                            </button>
                         </div>
                     </div>
 
@@ -1213,14 +1221,35 @@
     <div id="new-chat-modal" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
-                <span class="modal-title">New Chat</span>
+                <span class="modal-title">New Chat / Group</span>
                 <button id="modal-close-btn" class="action-icon-btn">✕</button>
             </div>
-            <div class="input-group" style="margin-bottom: 0;">
-                <label for="new-username-input">Enter Username</label>
-                <input type="text" id="new-username-input" class="input-control" placeholder="bob">
+            <div class="modal-tabs" style="display: flex; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                <button id="tab-dm" class="tab-btn active" style="background: none; border: none; color: var(--accent-color); font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--accent-color); padding-bottom: 5px; font-size: 14px;">Direct Message</button>
+                <button id="tab-group" class="tab-btn" style="background: none; border: none; color: var(--text-muted); font-weight: 600; cursor: pointer; padding-bottom: 5px; font-size: 14px;">Group Chat</button>
             </div>
-            <div class="modal-footer">
+            
+            <!-- DM Section -->
+            <div id="section-dm" class="tab-section">
+                <div class="input-group" style="margin-bottom: 0;">
+                    <label for="new-username-input">Enter Username</label>
+                    <input type="text" id="new-username-input" class="input-control" placeholder="bob">
+                </div>
+            </div>
+            
+            <!-- Group Section -->
+            <div id="section-group" class="tab-section" style="display: none; flex-direction: column; gap: 15px;">
+                <div class="input-group" style="margin-bottom: 0;">
+                    <label for="group-name-input">Group Name</label>
+                    <input type="text" id="group-name-input" class="input-control" placeholder="Project Team">
+                </div>
+                <div class="input-group" style="margin-bottom: 0;">
+                    <label for="group-members-input">Group Members (comma-separated)</label>
+                    <input type="text" id="group-members-input" class="input-control" placeholder="alice, bob, charlie">
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="margin-top: 20px;">
                 <button id="new-chat-cancel-btn" class="btn" style="background-color: var(--border-color); width: auto;">Cancel</button>
                 <button id="new-chat-confirm-btn" class="btn" style="width: auto; padding: 10px 20px;">Start Chat</button>
             </div>
@@ -1279,7 +1308,7 @@
 
         // ── IndexedDB Helpers ──
         const dbName = "hybridp2p_db";
-        const dbVersion = 1;
+        const dbVersion = 2;
 
         function getDB() {
             return new Promise((resolve, reject) => {
@@ -1291,6 +1320,9 @@
                     }
                     if (!db.objectStoreNames.contains("chats")) {
                         db.createObjectStore("chats");
+                    }
+                    if (!db.objectStoreNames.contains("group_keys")) {
+                        db.createObjectStore("group_keys");
                     }
                 };
                 request.onsuccess = (e) => resolve(e.target.result);
@@ -1853,6 +1885,191 @@
             return await signDataJS(privateKeyPem, encoder.encode(dataToSign));
         }
 
+        // ── Helper functions for Hex / Byte conversions ──
+        function hexToUint8Array(hexString) {
+            if (hexString.length % 2 !== 0) hexString = '0' + hexString;
+            const numBytes = hexString.length / 2;
+            const array = new Uint8Array(numBytes);
+            for (let i = 0; i < numBytes; i++) {
+                array[i] = parseInt(hexString.substr(i * 2, 2), 16);
+            }
+            return array;
+        }
+
+        function arrayBufferToHex(buffer) {
+            const byteArray = new Uint8Array(buffer);
+            let hexString = "";
+            for (let i = 0; i < byteArray.length; i++) {
+                const hex = byteArray[i].toString(16).padStart(2, '0');
+                hexString += hex;
+            }
+            return hexString;
+        }
+
+        // ── AES-256-GCM Symmetric Encryption ──
+        async function generateSymmetricKeyHex() {
+            const key = await window.crypto.subtle.generateKey(
+                { name: "AES-GCM", length: 256 },
+                true,
+                ["encrypt", "decrypt"]
+            );
+            const raw = await window.crypto.subtle.exportKey("raw", key);
+            return arrayBufferToHex(raw);
+        }
+
+        async function encryptSymmetricJS(plaintext, keyHex) {
+            const keyBytes = hexToUint8Array(keyHex);
+            const aesKey = await window.crypto.subtle.importKey(
+                "raw",
+                keyBytes,
+                { name: "AES-GCM" },
+                false,
+                ["encrypt"]
+            );
+            const iv = window.crypto.getRandomValues(new Uint8Array(12));
+            const encoder = new TextEncoder();
+            const plaintextBytes = encoder.encode(plaintext);
+            const ciphertextBuffer = await window.crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv },
+                aesKey,
+                plaintextBytes
+            );
+            const packet = {
+                "nonce": arrayBufferToBase64(iv),
+                "ciphertext": arrayBufferToBase64(ciphertextBuffer)
+            };
+            const packetJson = JSON.stringify(packet);
+            const packetJsonBytes = encoder.encode(packetJson);
+            return arrayBufferToBase64(packetJsonBytes);
+        }
+
+        async function decryptSymmetricJS(encryptedPacketBase64, keyHex) {
+            const keyBytes = hexToUint8Array(keyHex);
+            const aesKey = await window.crypto.subtle.importKey(
+                "raw",
+                keyBytes,
+                { name: "AES-GCM" },
+                false,
+                ["decrypt"]
+            );
+            const decoder = new TextDecoder();
+            const packetJsonBytes = base64ToArrayBuffer(encryptedPacketBase64);
+            const packetJson = decoder.decode(packetJsonBytes);
+            const packet = JSON.parse(packetJson);
+            
+            const nonce = base64ToArrayBuffer(packet.nonce);
+            const ciphertext = base64ToArrayBuffer(packet.ciphertext);
+            
+            const decryptedBuffer = await window.crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: nonce },
+                aesKey,
+                ciphertext
+            );
+            return decoder.decode(decryptedBuffer);
+        }
+
+        async function verifySignatureJS(publicKeyPem, signatureBase64, dataBytes) {
+            const cleanPem = publicKeyPem
+                .replace(/-----BEGIN PUBLIC KEY-----/, '')
+                .replace(/-----END PUBLIC KEY-----/, '')
+                .replace(/\s+/g, '');
+            const derBuffer = base64ToArrayBuffer(cleanPem);
+            
+            const key = await window.crypto.subtle.importKey(
+                "spki",
+                derBuffer,
+                {
+                    name: "RSA-PSS",
+                    hash: "SHA-256"
+                },
+                false,
+                ["verify"]
+            );
+            
+            const signatureBytes = base64ToArrayBuffer(signatureBase64);
+            
+            return await window.crypto.subtle.verify(
+                {
+                    name: "RSA-PSS",
+                    saltLength: 478
+                },
+                key,
+                signatureBytes,
+                dataBytes
+            );
+        }
+
+        async function getContactPubKey(username) {
+            let pubKey = await dbGet("keys", `pubkey_${username}`);
+            if (!pubKey) {
+                try {
+                    const path = `/api/public_key/${username}`;
+                    const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                    const res = await fetch(`${API_URL}${path}`, { headers });
+                    if (res.status === 200) {
+                        const data = await res.json();
+                        pubKey = data.public_key;
+                        await dbSet("keys", `pubkey_${username}`, pubKey);
+                    }
+                } catch (err) {
+                    console.error("Error fetching contact pub key:", err);
+                }
+            }
+            return pubKey;
+        }
+
+        async function fetchGroupName(groupId) {
+            try {
+                const path = `/api/groups/${state.username}`;
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                const res = await fetch(`${API_URL}${path}`, { headers });
+                if (res.status === 200) {
+                    const data = await res.json();
+                    const grp = data.groups.find(g => g.group_id === groupId);
+                    if (grp) return grp.group_name;
+                }
+            } catch (e) {
+                console.error("Error fetching group name:", e);
+            }
+            return groupId;
+        }
+
+        async function syncUserGroups() {
+            if (!state.username) return;
+            try {
+                const path = `/api/groups/${state.username}`;
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                const res = await fetch(`${API_URL}${path}`, { headers });
+                if (res.status === 200) {
+                    const data = await res.json();
+                    let changed = false;
+                    for (let g of data.groups) {
+                        if (!state.chats[g.group_id]) {
+                            state.chats[g.group_id] = {
+                                partner: g.group_id,
+                                groupName: g.group_name,
+                                ephemeral: false,
+                                isGroup: true,
+                                messages: []
+                            };
+                            changed = true;
+                        } else {
+                            if (state.chats[g.group_id].groupName !== g.group_name) {
+                                state.chats[g.group_id].groupName = g.group_name;
+                                changed = true;
+                            }
+                        }
+                    }
+                    if (changed) {
+                        await persistChats();
+                        renderInbox();
+                    }
+                }
+            } catch (e) {
+                console.error("Error syncing groups:", e);
+            }
+        }
+
         // ── Database / IndexedDB State Management ──
         async function persistChats() {
             if (!state.username) return;
@@ -1964,6 +2181,11 @@
         const newChatCancelBtn = document.getElementById("new-chat-cancel-btn");
         const newChatConfirmBtn = document.getElementById("new-chat-confirm-btn");
         const newUsernameInput = document.getElementById("new-username-input");
+        
+        const audioCallBtn = document.getElementById("audio-call-btn");
+        const videoCallBtn = document.getElementById("video-call-btn");
+        const groupRekeyBtn = document.getElementById("group-rekey-btn");
+        const leaveGroupBtn = document.getElementById("leave-group-btn");
 
         // Open Modal
         addChatBtn.addEventListener("click", () => {
@@ -1975,33 +2197,268 @@
         const closeModal = () => {
             newChatModal.classList.remove("active");
             newUsernameInput.value = "";
+            document.getElementById("group-name-input").value = "";
+            document.getElementById("group-members-input").value = "";
+            tabDm.click();
         };
         modalCloseBtn.addEventListener("click", closeModal);
         newChatCancelBtn.addEventListener("click", closeModal);
 
-        newChatConfirmBtn.addEventListener("click", async () => {
-            const partner = newUsernameInput.value.trim().toLowerCase();
-            if (!partner) return;
-            if (partner === state.username) {
-                alert("You cannot add yourself!");
-                return;
-            }
+        const tabDm = document.getElementById("tab-dm");
+        const tabGroup = document.getElementById("tab-group");
+        const sectionDm = document.getElementById("section-dm");
+        const sectionGroup = document.getElementById("section-group");
+        let activeTabName = "dm"; // "dm" or "group"
+
+        tabDm.addEventListener("click", () => {
+            activeTabName = "dm";
+            tabDm.classList.add("active");
+            tabDm.style.color = "var(--accent-color)";
+            tabDm.style.borderBottom = "2px solid var(--accent-color)";
             
-            // Try fetching partner public key from server
+            tabGroup.classList.remove("active");
+            tabGroup.style.color = "var(--text-muted)";
+            tabGroup.style.borderBottom = "none";
+            
+            sectionDm.style.display = "block";
+            sectionGroup.style.display = "none";
+            newChatConfirmBtn.innerText = "Start Chat";
+            newUsernameInput.focus();
+        });
+
+        tabGroup.addEventListener("click", () => {
+            activeTabName = "group";
+            tabGroup.classList.add("active");
+            tabGroup.style.color = "var(--accent-color)";
+            tabGroup.style.borderBottom = "2px solid var(--accent-color)";
+            
+            tabDm.classList.remove("active");
+            tabDm.style.color = "var(--text-muted)";
+            tabDm.style.borderBottom = "none";
+            
+            sectionDm.style.display = "none";
+            sectionGroup.style.display = "flex";
+            newChatConfirmBtn.innerText = "Create Group";
+            document.getElementById("group-name-input").focus();
+        });
+
+        newChatConfirmBtn.addEventListener("click", async () => {
+            if (activeTabName === "dm") {
+                const partner = newUsernameInput.value.trim().toLowerCase();
+                if (!partner) return;
+                if (partner === state.username) {
+                    alert("You cannot add yourself!");
+                    return;
+                }
+                
+                // Try fetching partner public key from server
+                try {
+                    const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", `/api/public_key/${partner}`);
+                    const res = await fetch(`${API_URL}/api/public_key/${partner}`, { headers });
+                    
+                    if (res.status === 200) {
+                        const data = await res.json();
+                        await saveChatToLocalStorage(partner, null);
+                        closeModal();
+                        selectChat(partner, data.public_key, false);
+                    } else {
+                        alert(`Kullanıcı '${partner}' bulunamadı veya sunucu hatası.`);
+                    }
+                } catch (err) {
+                    alert("Bağlantı hatası: " + err);
+                }
+            } else {
+                // Group Chat Creation
+                const groupName = document.getElementById("group-name-input").value.trim();
+                const membersRaw = document.getElementById("group-members-input").value.trim().toLowerCase();
+                if (!groupName) {
+                    alert("Lütfen bir grup adı girin.");
+                    return;
+                }
+                const members = membersRaw.split(",").map(m => m.trim()).filter(m => m.length > 0);
+                if (members.length === 0) {
+                    alert("Lütfen en az bir üye girin.");
+                    return;
+                }
+                
+                newChatConfirmBtn.disabled = true;
+                newChatConfirmBtn.innerText = "Creating...";
+                
+                try {
+                    // Generate unique group ID and random 256-bit key
+                    const groupId = "group_" + crypto.randomUUID().replace(/-/g, "").substring(0, 12);
+                    const groupKeyHex = await generateSymmetricKeyHex();
+                    
+                    // Save group key locally
+                    await dbSet("group_keys", groupId, groupKeyHex);
+                    
+                    // Add ourselves to the group members list
+                    const allMembers = [...members];
+                    if (!allMembers.includes(state.username)) {
+                        allMembers.push(state.username);
+                    }
+                    
+                    const path = "/api/groups";
+                    const body = {
+                        group_id: groupId,
+                        group_name: groupName,
+                        creator: state.username,
+                        members: allMembers
+                    };
+                    const bodyText = JSON.stringify(body);
+                    const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+                    headers["Content-Type"] = "application/json";
+                    
+                    const resp = await fetch(`${API_URL}${path}`, {
+                        method: "POST",
+                        headers: headers,
+                        body: bodyText
+                    });
+                    
+                    if (resp.status === 200) {
+                        // Group created successfully on server
+                        state.chats[groupId] = {
+                            partner: groupId,
+                            groupName: groupName,
+                            ephemeral: false,
+                            isGroup: true,
+                            messages: []
+                        };
+                        await persistChats();
+                        
+                        // Distribute group key to each member via WebSocket / WS fallback
+                        for (let m of members) {
+                            if (m === state.username) continue;
+                            try {
+                                const mPath = `/api/public_key/${m}`;
+                                const mHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", mPath);
+                                const mRes = await fetch(`${API_URL}${mPath}`, { headers: mHeaders });
+                                if (mRes.status === 200) {
+                                    const mData = await mRes.json();
+                                    const encKey = await encryptMessageJS(groupKeyHex, mData.public_key);
+                                    
+                                    const distPayload = {
+                                        type: "group_key_dist",
+                                        sender: state.username,
+                                        recipient: m,
+                                        group_id: groupId,
+                                        encrypted_payload: encKey,
+                                        timestamp: new Date().toISOString()
+                                    };
+                                    
+                                    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                                        state.ws.send(JSON.stringify(distPayload));
+                                    } else {
+                                        const fPath = "/api/send_ws_fallback";
+                                        const fBody = JSON.stringify({ payload: JSON.stringify(distPayload) });
+                                        const fHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", fPath, fBody);
+                                        fHeaders["Content-Type"] = "application/json";
+                                        await fetch(`${API_URL}${fPath}`, { method: "POST", headers: fHeaders, body: fBody });
+                                    }
+                                }
+                            } catch (distErr) {
+                                console.error(`Failed to distribute key to ${m}:`, distErr);
+                            }
+                        }
+                        
+                        closeModal();
+                        selectChat(groupId, null, true);
+                    } else {
+                        const errTxt = await resp.text();
+                        alert("Grup oluşturulurken hata oluştu: " + errTxt);
+                    }
+                } catch (err) {
+                    alert("Grup oluşturulamadı: " + err.message);
+                } finally {
+                    newChatConfirmBtn.disabled = false;
+                    newChatConfirmBtn.innerText = "Create Group";
+                }
+            }
+        });
+
+        // Group actions
+        groupRekeyBtn.addEventListener("click", async () => {
+            if (!state.recipient || !state.isGroup) return;
+            if (!confirm("Bu gruba ait şifreleme anahtarını yenilemek istiyor musunuz? Gruptaki tüm aktif üyeler yeni anahtarla güncellenecektir.")) return;
+            
+            groupRekeyBtn.disabled = true;
             try {
-                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", `/api/public_key/${partner}`);
-                const res = await fetch(`${API_URL}/api/public_key/${partner}`, { headers });
+                const groupKeyHex = await generateSymmetricKeyHex();
+                await dbSet("group_keys", state.recipient, groupKeyHex);
+                
+                const path = `/api/groups/${state.recipient}/members`;
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                const res = await fetch(`${API_URL}${path}`, { headers });
                 
                 if (res.status === 200) {
                     const data = await res.json();
-                    await saveChatToLocalStorage(partner, null);
-                    closeModal();
-                    selectChat(partner, data.public_key);
+                    for (let m of data.members) {
+                        if (m.username === state.username) continue;
+                        try {
+                            const encKey = await encryptMessageJS(groupKeyHex, m.public_key);
+                            const distPayload = {
+                                type: "group_key_dist",
+                                sender: state.username,
+                                recipient: m.username,
+                                group_id: state.recipient,
+                                encrypted_payload: encKey,
+                                timestamp: new Date().toISOString()
+                            };
+                            
+                            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                                state.ws.send(JSON.stringify(distPayload));
+                            } else {
+                                const fPath = "/api/send_ws_fallback";
+                                const fBody = JSON.stringify({ payload: JSON.stringify(distPayload) });
+                                const fHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", fPath, fBody);
+                                fHeaders["Content-Type"] = "application/json";
+                                await fetch(`${API_URL}${fPath}`, { method: "POST", headers: fHeaders, body: fBody });
+                            }
+                        } catch (err) {
+                            console.error("Rekey distribution error for member:", m.username, err);
+                        }
+                    }
+                    alert("Grup anahtarı başarıyla yenilendi ve dağıtıldı.");
                 } else {
-                    alert(`Kullanıcı '${partner}' bulunamadı veya sunucu hatası.`);
+                    alert("Grup üyeleri listesi alınamadı.");
                 }
             } catch (err) {
-                alert("Bağlantı hatası: " + err);
+                alert("Anahtar yenileme hatası: " + err.message);
+            } finally {
+                groupRekeyBtn.disabled = false;
+            }
+        });
+        
+        leaveGroupBtn.addEventListener("click", async () => {
+            if (!state.recipient || !state.isGroup) return;
+            if (!confirm("Bu gruptan çıkmak ve tüm grup mesaj geçmişini silmek istediğinize emin misiniz?")) return;
+            
+            leaveGroupBtn.disabled = true;
+            try {
+                const path = `/api/groups/${state.recipient}/members/${state.username}`;
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "DELETE", path);
+                const res = await fetch(`${API_URL}${path}`, { method: "DELETE", headers });
+                
+                if (res.status === 200) {
+                    const groupId = state.recipient;
+                    delete state.chats[groupId];
+                    await dbDel("group_keys", groupId);
+                    await persistChats();
+                    
+                    state.recipient = null;
+                    state.isGroup = false;
+                    emptyChatState.classList.remove("hidden");
+                    activeChat.classList.add("hidden");
+                    renderInbox();
+                    alert("Gruptan başarıyla çıkıldı.");
+                } else {
+                    const txt = await res.text();
+                    alert("Gruptan çıkılamadı: " + txt);
+                }
+            } catch (err) {
+                alert("Gruptan çıkma hatası: " + err.message);
+            } finally {
+                leaveGroupBtn.disabled = false;
             }
         });
 
@@ -2046,6 +2503,7 @@
 
                     await fetchOfflineMessages();
                     await syncChatSettingsFromServer();
+                    await syncUserGroups();
                     renderInbox();
                     connectWebSocket();
                 }
@@ -2267,6 +2725,7 @@
 
                     await fetchOfflineMessages();
                     await syncChatSettingsFromServer();
+                    await syncUserGroups();
                     renderInbox();
                     connectWebSocket();
                 } else {
@@ -2449,11 +2908,14 @@
                 const tile = document.createElement("div");
                 tile.className = `chat-tile ${activeClass}`;
                 
+                const displayName = c.isGroup ? c.groupName : c.partner;
+                const avatarText = displayName.substring(0, 2).toUpperCase();
+                
                 tile.innerHTML = `
-                    <div class="avatar">${c.partner.substring(0, 2).toUpperCase()}</div>
+                    <div class="avatar ${c.isGroup ? 'group' : ''}">${avatarText}</div>
                     <div class="chat-tile-content">
                         <div class="chat-tile-header">
-                            <span class="chat-tile-name">${c.partner}</span>
+                            <span class="chat-tile-name">${displayName}</span>
                             <span class="chat-tile-time ${unreadCount > 0 ? 'unread' : ''}">${timeStr}</span>
                         </div>
                         <div class="chat-tile-footer">
@@ -2464,17 +2926,21 @@
                 `;
                 
                 tile.addEventListener("click", async () => {
-                    // Fetch partner public key first
-                    try {
-                        const path = `/api/public_key/${c.partner}`;
-                        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
-                        const res = await fetch(`${API_URL}${path}`, { headers });
-                        if (res.status === 200) {
-                            const data = await res.json();
-                            selectChat(c.partner, data.public_key);
+                    if (c.isGroup) {
+                        await selectChat(c.partner, null, true);
+                    } else {
+                        // Fetch partner public key first
+                        try {
+                            const path = `/api/public_key/${c.partner}`;
+                            const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+                            const res = await fetch(`${API_URL}${path}`, { headers });
+                            if (res.status === 200) {
+                                const data = await res.json();
+                                selectChat(c.partner, data.public_key, false);
+                            }
+                        } catch (err) {
+                            console.error(err);
                         }
-                    } catch (err) {
-                        console.error(err);
                     }
                 });
                 
@@ -2532,9 +2998,10 @@
         });
 
         // Select active chat session
-        function selectChat(partner, publicKeyPem) {
+        async function selectChat(partner, publicKeyPem, isGroup = false) {
             state.recipient = partner;
             state.recipientPubKey = publicKeyPem;
+            state.isGroup = isGroup;
             
             // Mark all messages in this chat as read
             if (state.chats[partner]) {
@@ -2542,35 +3009,69 @@
                 persistChats();
                 
                 // Trigger read receipt for the latest received message
-                const receivedMsgs = state.chats[partner].messages.filter(m => m.sender !== state.username);
-                if (receivedMsgs.length > 0) {
-                    const latestMsg = receivedMsgs[receivedMsgs.length - 1];
-                    sendReadReceipt(partner, latestMsg.timestamp);
+                if (!isGroup) {
+                    const receivedMsgs = state.chats[partner].messages.filter(m => m.sender !== state.username);
+                    if (receivedMsgs.length > 0) {
+                        const latestMsg = receivedMsgs[receivedMsgs.length - 1];
+                        sendReadReceipt(partner, latestMsg.timestamp);
+                    }
                 }
             }
             
             // Sync ephemeral button visual state with this chat's setting
             const chatEphemeral = state.chats[partner] ? state.chats[partner].ephemeral : false;
             state.ephemeral = chatEphemeral;
-            if (chatEphemeral) {
-                ephemeralBtn.classList.add("ephemeral-active");
-                ephemeralBtn.title = "Ephemeral Mode ON (chat history not saved)";
+            
+            if (isGroup) {
+                audioCallBtn.classList.add("hidden");
+                videoCallBtn.classList.add("hidden");
+                ephemeralBtn.classList.add("hidden");
+                viewOnceBtn.classList.add("hidden");
+                attachBtn.classList.add("hidden");
+                groupRekeyBtn.classList.remove("hidden");
+                leaveGroupBtn.classList.remove("hidden");
             } else {
-                ephemeralBtn.classList.remove("ephemeral-active");
-                ephemeralBtn.title = "Ephemeral Mode (Don't save chat history)";
+                audioCallBtn.classList.remove("hidden");
+                videoCallBtn.classList.remove("hidden");
+                ephemeralBtn.classList.remove("hidden");
+                viewOnceBtn.classList.remove("hidden");
+                attachBtn.classList.remove("hidden");
+                groupRekeyBtn.classList.add("hidden");
+                leaveGroupBtn.classList.add("hidden");
+                
+                if (chatEphemeral) {
+                    ephemeralBtn.classList.add("ephemeral-active");
+                    ephemeralBtn.title = "Ephemeral Mode ON (chat history not saved)";
+                } else {
+                    ephemeralBtn.classList.remove("ephemeral-active");
+                    ephemeralBtn.title = "Ephemeral Mode (Don't save chat history)";
+                }
             }
 
             emptyChatState.classList.add("hidden");
             activeChat.classList.remove("hidden");
             
-            chatPartnerName.innerText = partner;
-            document.getElementById("chat-avatar").innerText = partner.substring(0, 2).toUpperCase();
+            const chatObj = state.chats[partner];
+            const displayName = (isGroup && chatObj) ? chatObj.groupName : partner;
+            chatPartnerName.innerText = displayName;
+            document.getElementById("chat-avatar").innerText = displayName.substring(0, 2).toUpperCase();
+            
+            if (isGroup) {
+                document.getElementById("chat-avatar").classList.add("group");
+            } else {
+                document.getElementById("chat-avatar").classList.remove("group");
+            }
             
             renderMessages();
             renderInbox();
             
             // Set online indicator dynamically
-            queryUserPresence(partner);
+            if (isGroup) {
+                chatPartnerStatus.style.visibility = "hidden";
+            } else {
+                chatPartnerStatus.style.visibility = "visible";
+                queryUserPresence(partner);
+            }
         }
 
         async function queryUserPresence(partner) {
@@ -3132,8 +3633,40 @@
             // If there is text message, send it
             if (text) {
                 try {
-                    const encryptedPayload = await encryptMessageJS(text, state.recipientPubKey);
+                    let encryptedPayload, textMsgPayload;
                     const timestamp = new Date().toISOString();
+                    
+                    if (state.isGroup) {
+                        const groupKeyHex = await dbGet("group_keys", state.recipient);
+                        if (!groupKeyHex) {
+                            alert("Bu grubun şifreleme anahtarı yerel depoda bulunamadı!");
+                            return;
+                        }
+                        encryptedPayload = await encryptSymmetricJS(text, groupKeyHex);
+                        
+                        // Sign the message
+                        const dataToSign = new TextEncoder().encode(state.username + ":" + state.recipient + ":" + encryptedPayload);
+                        const signature = await signDataJS(state.privateKeyPem, dataToSign);
+                        
+                        textMsgPayload = {
+                            "type": "group_message",
+                            "sender": state.username,
+                            "group_id": state.recipient,
+                            "encrypted_payload": encryptedPayload,
+                            "signature": signature,
+                            "timestamp": timestamp
+                        };
+                    } else {
+                        encryptedPayload = await encryptMessageJS(text, state.recipientPubKey);
+                        textMsgPayload = {
+                            "type": "message",
+                            "sender": state.username,
+                            "recipient": state.recipient,
+                            "encrypted_payload": encryptedPayload,
+                            "view_once": isViewOnce,
+                            "timestamp": timestamp
+                        };
+                    }
                     
                     const msgObj = {
                         sender: state.username,
@@ -3146,15 +3679,6 @@
                     await saveChatToLocalStorage(state.recipient, msgObj);
                     renderMessages();
                     renderInbox();
-                    
-                    const textMsgPayload = {
-                        "type": "message",
-                        "sender": state.username,
-                        "recipient": state.recipient,
-                        "encrypted_payload": encryptedPayload,
-                        "view_once": isViewOnce,
-                        "timestamp": timestamp
-                    };
                     
                     if (state.ws && state.ws.readyState === WebSocket.OPEN) {
                         state.ws.send(JSON.stringify(textMsgPayload));
@@ -3343,6 +3867,92 @@
                             if (state.recipient === sender) {
                                 renderMessages();
                             }
+                        }
+                    }
+                    
+                    // Group Key Distribution
+                    else if (data.type === "group_key_dist") {
+                        const sender = data.sender;
+                        const groupId = data.group_id;
+                        const encPayload = data.encrypted_payload;
+                        try {
+                            const groupKeyHex = await decryptMessageJS(encPayload, state.privateKeyPem);
+                            await dbSet("group_keys", groupId, groupKeyHex);
+                            console.log(`Grup anahtarı alındı: ${groupId} (Gönderen: ${sender})`);
+                            await syncUserGroups();
+                        } catch (ex) {
+                            console.error("Grup anahtarı çözme hatası:", ex);
+                        }
+                    }
+                    
+                    // Group Message received
+                    else if (data.type === "group_message") {
+                        const sender = data.sender;
+                        const groupId = data.group_id;
+                        const encPayload = data.encrypted_payload;
+                        const sig = data.signature;
+                        const timestamp = data.timestamp || new Date().toISOString();
+                        const isActive = (state.recipient === groupId);
+                        
+                        // Verify sender's signature
+                        let verified = false;
+                        const senderPubKey = await getContactPubKey(sender);
+                        if (senderPubKey && sig) {
+                            try {
+                                const dataToVerify = new TextEncoder().encode(sender + ":" + groupId + ":" + encPayload);
+                                verified = await verifySignatureJS(senderPubKey, sig, dataToVerify);
+                            } catch (sigErr) {
+                                console.error("Grup mesajı imza doğrulama hatası:", sigErr);
+                            }
+                        }
+                        
+                        if (!verified) {
+                            console.error(`HATA: '${sender}' kullanıcısının grup imza doğrulaması başarısız!`);
+                            if (isActive) {
+                                appendSystemMessage(groupId, `⚠️ UYARI: '${sender}' adlı kullanıcının kimliği doğrulanamadı (Taklit Teşebbüsü)!`);
+                            }
+                            return;
+                        }
+                        
+                        // Decrypt symmetric group message
+                        const groupKeyHex = await dbGet("group_keys", groupId);
+                        if (groupKeyHex) {
+                            try {
+                                const plaintext = await decryptSymmetricJS(encPayload, groupKeyHex);
+                                
+                                const msgObj = {
+                                    sender: sender,
+                                    content: plaintext,
+                                    timestamp: timestamp,
+                                    read: isActive
+                                };
+                                
+                                if (!state.chats[groupId]) {
+                                    const groupName = await fetchGroupName(groupId);
+                                    state.chats[groupId] = {
+                                        partner: groupId,
+                                        groupName: groupName,
+                                        ephemeral: false,
+                                        isGroup: true,
+                                        messages: []
+                                    };
+                                }
+                                
+                                const exists = state.chats[groupId].messages.some(
+                                    m => m.timestamp === msgObj.timestamp && m.content === msgObj.content
+                                );
+                                if (!exists) state.chats[groupId].messages.push(msgObj);
+                                await persistChats();
+                                
+                                if (isActive) {
+                                    renderMessages();
+                                }
+                                renderInbox();
+                            } catch (decEx) {
+                                console.error("Grup mesajı deşifre edilemedi:", decEx);
+                            }
+                        } else {
+                            console.warn(`Grup anahtarı bulunamadı: ${groupId}. Lütfen kurucudan anahtarı yenilemesini isteyin.`);
                         }
                     }
 

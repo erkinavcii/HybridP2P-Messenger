@@ -966,6 +966,14 @@
             color: #ffffff !important;
             border-bottom-color: var(--accent-color) !important;
         }
+        .tab-content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .tab-content.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -1043,6 +1051,9 @@
                         </button>
                         <button id="add-chat-btn" class="action-icon-btn" title="New Chat / Group">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+                        <button id="pure-p2p-btn" class="action-icon-btn" title="Pure P2P (Sunucusuz Bağlantı)">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
                         </button>
                         <button id="logout-btn" class="action-icon-btn" title="Sign Out">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
@@ -1252,6 +1263,74 @@
             <div class="modal-footer" style="margin-top: 20px;">
                 <button id="new-chat-cancel-btn" class="btn" style="background-color: var(--border-color); width: auto;">Cancel</button>
                 <button id="new-chat-confirm-btn" class="btn" style="width: auto; padding: 10px 20px;">Start Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Pure P2P (Sunucusuz) Connection -->
+    <div id="p2p-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <span class="modal-title">Pure P2P (Sunucusuz Bağlantı)</span>
+                <button id="p2p-close-btn" class="action-icon-btn">✕</button>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 12px;">
+                Sunucusuz doğrudan E2EE bağlantısı kurmak için SDP kodlarını kopyalayıp yapıştırın.
+            </p>
+            
+            <!-- Tab Headers -->
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
+                <button id="p2p-tab-caller" class="tab-btn active" style="flex: 1; padding: 8px; background: transparent; border: none; color: #fff; border-bottom: 2px solid var(--accent-color); font-weight: 600; cursor: pointer;">Arama Başlat (Caller)</button>
+                <button id="p2p-tab-callee" class="tab-btn" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-muted); border-bottom: 2px solid transparent; font-weight: 600; cursor: pointer;">Aramaya Cevap Ver (Callee)</button>
+            </div>
+
+            <!-- Caller Tab Content -->
+            <div id="p2p-content-caller" class="tab-content">
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label for="p2p-call-type">Görüşme Tipi</label>
+                    <select id="p2p-call-type" class="input-control" style="background-color: #09090b; border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 4px; width: 100%;">
+                        <option value="audio">🎙️ Sesli Arama (Audio)</option>
+                        <option value="video">📹 Görüntülü Arama (Video)</option>
+                    </select>
+                </div>
+                <button id="p2p-gen-offer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">1. Arama Teklifi (Offer) Üret</button>
+                
+                <div id="p2p-caller-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--accent-hover);">
+                    <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <span style="font-size: 12px;">ICE adayları toplanıyor (bu işlem 2-5 sn sürebilir)...</span>
+                </div>
+                
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <label for="p2p-offer-code">Sizin Teklifiniz (Offer Kodu)</label>
+                    <textarea id="p2p-offer-code" class="input-control" rows="4" readonly placeholder="Burada kod üretilecek..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                </div>
+                <button id="p2p-copy-offer-btn" class="btn" style="background-color: var(--border-color); margin-bottom: 15px;" disabled>Teklifi Kopyala</button>
+
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <label for="p2p-caller-answer-code">2. Karşı Tarafın Cevabı (Answer Kodu)</label>
+                    <textarea id="p2p-caller-answer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Answer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                </div>
+                <button id="p2p-connect-btn" class="btn" style="background-color: var(--accent-color);" disabled>3. Bağlan ve Görüşmeyi Başlat</button>
+            </div>
+
+            <!-- Callee Tab Content -->
+            <div id="p2p-content-callee" class="tab-content hidden">
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label for="p2p-callee-offer-code">1. Karşı Tarafın Teklifi (Offer Kodu)</label>
+                    <textarea id="p2p-callee-offer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Offer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                </div>
+                <button id="p2p-gen-answer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">2. Kabul Et ve Cevap (Answer) Üret</button>
+                
+                <div id="p2p-callee-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--accent-hover);">
+                    <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <span style="font-size: 12px;">ICE adayları toplanıyor (bu işlem 2-5 sn sürebilir)...</span>
+                </div>
+                
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <label for="p2p-answer-code">Kabul Cevabınız (Answer Kodu)</label>
+                    <textarea id="p2p-answer-code" class="input-control" rows="4" readonly placeholder="Cevap kodunuz burada üretilecek..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                </div>
+                <button id="p2p-copy-answer-btn" class="btn" style="background-color: var(--border-color);" disabled>Cevabı Kopyala</button>
             </div>
         </div>
     </div>
@@ -4412,6 +4491,343 @@
         function stopRingtone() {
             if (_ringtoneInterval) { clearInterval(_ringtoneInterval); _ringtoneInterval = null; }
         }
+
+        // ── Pure P2P (Serverless) SDP Compression & Call negotiation ──
+        async function compressStringJS(str) {
+            const stream = new Response(str).body.pipeThrough(new CompressionStream("deflate"));
+            const buffer = await new Response(stream).arrayBuffer();
+            return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        }
+
+        async function decompressStringJS(base64Str) {
+            const binary = atob(base64Str);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            const stream = new Response(bytes).body.pipeThrough(new DecompressionStream("deflate"));
+            return await new Response(stream).text();
+        }
+
+        async function packSDPJS(sdpStr, sdpType, callType = "audio", compress = true) {
+            const data = {
+                sdp: sdpStr,
+                type: sdpType,
+                call_type: callType
+            };
+            const jsonStr = JSON.stringify(data);
+            if (compress && typeof CompressionStream !== 'undefined') {
+                try {
+                    const b64 = await compressStringJS(jsonStr);
+                    return `z1:${b64}`;
+                } catch (e) {
+                    console.warn("Compression failed, falling back to uncompressed", e);
+                }
+            }
+            const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+            return `v1:${b64}`;
+        }
+
+        async function unpackSDPJS(packedStr) {
+            packedStr = packedStr.trim();
+            if (packedStr.startsWith("z1:")) {
+                const b64 = packedStr.substring(3);
+                const jsonStr = await decompressStringJS(b64);
+                return JSON.parse(jsonStr);
+            } else if (packedStr.startsWith("v1:")) {
+                const b64 = packedStr.substring(3);
+                const jsonStr = decodeURIComponent(escape(atob(b64)));
+                return JSON.parse(jsonStr);
+            } else {
+                try {
+                    const decoded = atob(packedStr);
+                    if (decoded.charCodeAt(0) === 0x78) {
+                        const jsonStr = await decompressStringJS(packedStr);
+                        return JSON.parse(jsonStr);
+                    }
+                    return JSON.parse(decoded);
+                } catch (e) {
+                    throw new Error("Invalid packed SDP format: " + e.message);
+                }
+            }
+        }
+
+        // P2P UI Management
+        const p2pModal = document.getElementById("p2p-modal");
+        const pureP2pBtn = document.getElementById("pure-p2p-btn");
+        const p2pCloseBtn = document.getElementById("p2p-close-btn");
+        const p2pTabCaller = document.getElementById("p2p-tab-caller");
+        const p2pTabCallee = document.getElementById("p2p-tab-callee");
+        const p2pContentCaller = document.getElementById("p2p-content-caller");
+        const p2pContentCallee = document.getElementById("p2p-content-callee");
+
+        pureP2pBtn.addEventListener("click", () => {
+            p2pModal.classList.add("active");
+        });
+
+        p2pCloseBtn.addEventListener("click", () => {
+            p2pModal.classList.remove("active");
+            if (state.voip.peerConnection && state.voip.peerConnection.iceConnectionState !== "connected" && state.voip.peerConnection.iceConnectionState !== "completed") {
+                cleanupCall();
+            }
+        });
+
+        p2pTabCaller.addEventListener("click", () => {
+            p2pTabCaller.classList.add("active");
+            p2pTabCaller.style.color = "#fff";
+            p2pTabCaller.style.borderBottomColor = "var(--accent-color)";
+            p2pTabCallee.classList.remove("active");
+            p2pTabCallee.style.color = "var(--text-muted)";
+            p2pTabCallee.style.borderBottomColor = "transparent";
+            p2pContentCaller.classList.remove("hidden");
+            p2pContentCallee.classList.add("hidden");
+        });
+
+        p2pTabCallee.addEventListener("click", () => {
+            p2pTabCallee.classList.add("active");
+            p2pTabCallee.style.color = "#fff";
+            p2pTabCallee.style.borderBottomColor = "var(--accent-color)";
+            p2pTabCaller.classList.remove("active");
+            p2pTabCaller.style.color = "var(--text-muted)";
+            p2pTabCaller.style.borderBottomColor = "transparent";
+            p2pContentCallee.classList.remove("hidden");
+            p2pContentCaller.classList.add("hidden");
+        });
+
+        // Caller: Generate Offer
+        document.getElementById("p2p-gen-offer-btn").addEventListener("click", async () => {
+            const btn = document.getElementById("p2p-gen-offer-btn");
+            const loading = document.getElementById("p2p-caller-loading");
+            const callType = document.getElementById("p2p-call-type").value;
+
+            btn.disabled = true;
+            loading.classList.remove("hidden");
+
+            try {
+                const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: callType === "video" };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                state.voip.localStream = stream;
+
+                if (callType === "video") {
+                    const localVid = document.getElementById("local-video");
+                    if (localVid) { localVid.srcObject = stream; localVid.style.display = "block"; }
+                    document.getElementById("cam-btn").classList.remove("hidden");
+                }
+
+                // Create Peer Connection with STUN
+                const iceServers = [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun1.l.google.com:19302" },
+                    { urls: "stun:stun.cloudflare.com:3478" }
+                ];
+                const pc = new RTCPeerConnection({ iceServers });
+                state.voip.peerConnection = pc;
+                state.voip.callType = callType;
+                state.voip.partner = "Pure P2P Peer";
+                state.voip.isCaller = true;
+
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                pc.oniceconnectionstatechange = () => {
+                    if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+                        p2pModal.classList.remove("active");
+                        showActiveCallScreen("Pure P2P Peer", callType, true);
+                        if (!state.voip.timerInterval) startCallTimer();
+                    }
+                    if (pc.iceConnectionState === "failed") {
+                        cleanupCall();
+                    }
+                };
+
+                pc.ontrack = (event) => {
+                    const [remoteStream] = event.streams;
+                    if (event.track.kind === "audio") {
+                        const audio = document.getElementById("remote-audio");
+                        if (audio) audio.srcObject = remoteStream;
+                    } else if (event.track.kind === "video") {
+                        const video = document.getElementById("remote-video");
+                        if (video) { video.srcObject = remoteStream; video.style.display = "block"; }
+                    }
+                };
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering complete
+                await new Promise((resolve) => {
+                    if (pc.iceGatheringState === "complete") {
+                        resolve();
+                        return;
+                    }
+                    function checkGathering() {
+                        if (pc.iceGatheringState === "complete") {
+                            pc.removeEventListener("icegatheringstatechange", checkGathering);
+                            resolve();
+                        }
+                    }
+                    pc.addEventListener("icegatheringstatechange", checkGathering);
+                    pc.onicecandidate = (e) => {
+                        if (!e.candidate) {
+                            resolve();
+                        }
+                    };
+                });
+
+                const packed = await packSDPJS(pc.localDescription.sdp, "offer", callType);
+                document.getElementById("p2p-offer-code").value = packed;
+                document.getElementById("p2p-copy-offer-btn").disabled = false;
+                document.getElementById("p2p-connect-btn").disabled = false;
+                loading.classList.add("hidden");
+
+            } catch (err) {
+                console.error("[P2P] Offer Error:", err);
+                alert("Offer generation error: " + err.message);
+                btn.disabled = false;
+                loading.classList.add("hidden");
+                cleanupCall();
+            }
+        });
+
+        document.getElementById("p2p-copy-offer-btn").addEventListener("click", () => {
+            const el = document.getElementById("p2p-offer-code");
+            el.select();
+            document.execCommand("copy");
+            const btn = document.getElementById("p2p-copy-offer-btn");
+            btn.innerText = "Copied!";
+            setTimeout(() => { btn.innerText = "Teklifi Kopyala"; }, 2000);
+        });
+
+        // Caller: Paste Answer and Connect
+        document.getElementById("p2p-connect-btn").addEventListener("click", async () => {
+            const answerCode = document.getElementById("p2p-caller-answer-code").value;
+            if (!answerCode) {
+                alert("Please paste the Callee's Answer code first.");
+                return;
+            }
+            try {
+                const unpacked = await unpackSDPJS(answerCode);
+                const pc = state.voip.peerConnection;
+                if (pc) {
+                    await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: unpacked.sdp }));
+                } else {
+                    alert("Active Peer Connection not found.");
+                }
+            } catch (err) {
+                alert("Error connecting call: " + err.message);
+                cleanupCall();
+            }
+        });
+
+        // Callee: Generate Answer
+        document.getElementById("p2p-gen-answer-btn").addEventListener("click", async () => {
+            const offerCode = document.getElementById("p2p-callee-offer-code").value;
+            if (!offerCode) {
+                alert("Please paste the Caller's Offer code first.");
+                return;
+            }
+            const btn = document.getElementById("p2p-gen-answer-btn");
+            const loading = document.getElementById("p2p-callee-loading");
+
+            btn.disabled = true;
+            loading.classList.remove("hidden");
+
+            try {
+                const unpacked = await unpackSDPJS(offerCode);
+                const callType = unpacked.call_type || "audio";
+
+                const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: callType === "video" };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                state.voip.localStream = stream;
+
+                if (callType === "video") {
+                    const localVid = document.getElementById("local-video");
+                    if (localVid) { localVid.srcObject = stream; localVid.style.display = "block"; }
+                    document.getElementById("cam-btn").classList.remove("hidden");
+                }
+
+                // Create Peer Connection with STUN
+                const iceServers = [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun1.l.google.com:19302" },
+                    { urls: "stun:stun.cloudflare.com:3478" }
+                ];
+                const pc = new RTCPeerConnection({ iceServers });
+                state.voip.peerConnection = pc;
+                state.voip.callType = callType;
+                state.voip.partner = "Pure P2P Peer";
+                state.voip.isCaller = false;
+
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                pc.oniceconnectionstatechange = () => {
+                    if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+                        p2pModal.classList.remove("active");
+                        showActiveCallScreen("Pure P2P Peer", callType, true);
+                        if (!state.voip.timerInterval) startCallTimer();
+                    }
+                    if (pc.iceConnectionState === "failed") {
+                        cleanupCall();
+                    }
+                };
+
+                pc.ontrack = (event) => {
+                    const [remoteStream] = event.streams;
+                    if (event.track.kind === "audio") {
+                        const audio = document.getElementById("remote-audio");
+                        if (audio) audio.srcObject = remoteStream;
+                    } else if (event.track.kind === "video") {
+                        const video = document.getElementById("remote-video");
+                        if (video) { video.srcObject = remoteStream; video.style.display = "block"; }
+                    }
+                };
+
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: unpacked.sdp }));
+
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // Wait for ICE gathering complete
+                await new Promise((resolve) => {
+                    if (pc.iceGatheringState === "complete") {
+                        resolve();
+                        return;
+                    }
+                    function checkGathering() {
+                        if (pc.iceGatheringState === "complete") {
+                            pc.removeEventListener("icegatheringstatechange", checkGathering);
+                            resolve();
+                        }
+                    }
+                    pc.addEventListener("icegatheringstatechange", checkGathering);
+                    pc.onicecandidate = (e) => {
+                        if (!e.candidate) {
+                            resolve();
+                        }
+                    };
+                });
+
+                const packed = await packSDPJS(pc.localDescription.sdp, "answer", callType);
+                document.getElementById("p2p-answer-code").value = packed;
+                document.getElementById("p2p-copy-answer-btn").disabled = false;
+                loading.classList.add("hidden");
+
+            } catch (err) {
+                console.error("[P2P] Answer Error:", err);
+                alert("Answer generation error: " + err.message);
+                btn.disabled = false;
+                loading.classList.add("hidden");
+                cleanupCall();
+            }
+        });
+
+        document.getElementById("p2p-copy-answer-btn").addEventListener("click", () => {
+            const el = document.getElementById("p2p-answer-code");
+            el.select();
+            document.execCommand("copy");
+            const btn = document.getElementById("p2p-copy-answer-btn");
+            btn.innerText = "Copied!";
+            setTimeout(() => { btn.innerText = "Cevabı Kopyala"; }, 2000);
+        });
 
         // ── Wire up VoIP UI button events ──
         document.getElementById("audio-call-btn").addEventListener("click", () => startCall("audio"));

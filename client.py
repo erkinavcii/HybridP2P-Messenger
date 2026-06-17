@@ -1198,7 +1198,8 @@ def main(page: ft.Page):
                                 )
 
                             elif t == "ephemeral_toggle":
-                                _on_ephemeral_toggle_received(
+                                run_on_ui(
+                                    _on_ephemeral_toggle_received,
                                     data.get("sender","?"),
                                     bool(data.get("ephemeral", False)),
                                     data.get("timestamp",""),
@@ -1249,7 +1250,7 @@ def main(page: ft.Page):
                                 if not verified:
                                     print(f"HATA: '{sender}' kullanicisinin grup imza dogrulamasi basarisiz!")
                                     if state["recipient"] == group_id:
-                                        add_system_event(f"UYARI: '{sender}' adli kullanicinin kimligi dogrulanamadi (Taklit Tesebbusu)!")
+                                        run_on_ui(add_system_event, f"UYARI: '{sender}' adli kullanicinin kimligi dogrulanamadi (Taklit Tesebbusu)!")
                                     continue
 
                                 group_key = state["store"].get_group_key(group_id)
@@ -1265,18 +1266,21 @@ def main(page: ft.Page):
                                             is_read=(1 if is_active else 0)
                                         )
                                         if state["recipient"] == group_id:
-                                            add_message_to_chat(
-                                                sender=sender,
-                                                text=pt,
-                                                is_mine=False,
-                                                time_str=ts,
-                                                save=False
-                                             )
+                                            def _group_ui():
+                                                add_message_to_chat(
+                                                    sender=sender,
+                                                    text=pt,
+                                                    is_mine=False,
+                                                    time_str=ts,
+                                                    save=False
+                                                )
+                                                load_inbox_chats()
+                                            run_on_ui(_group_ui)
                                         else:
                                             chat_info = state["store"].get_chat_info(group_id)
                                             gname = chat_info.get("partner", group_id)
                                             log_status(f"Grup '{gname}'dan yeni mesaj!")
-                                        load_inbox_chats()
+                                            run_on_ui(load_inbox_chats)
                                     except Exception as ex:
                                         print(f"Grup mesaji cozme hatasi: {ex}")
 
@@ -1294,7 +1298,7 @@ def main(page: ft.Page):
                                 if state["store"]:
                                     state["store"].mark_sent_messages_as_read(sender, ts)
                                 if state["recipient"] == sender:
-                                    load_history_to_chat()
+                                    run_on_ui(load_history_to_chat)
 
                             elif t == "call_offer":
                                 caller = data.get("caller", "?")
@@ -1315,7 +1319,7 @@ def main(page: ft.Page):
                                     state["call_type"] = ctype
                                     state["call_state"] = "ringing"
                                     state["remote_sdp"] = sdp
-                                    show_call_screen()
+                                    run_on_ui(show_call_screen)
 
                             elif t == "call_answer":
                                 callee = data.get("callee", "?")
@@ -1629,11 +1633,13 @@ def main(page: ft.Page):
                 if import_key_checkbox.value:
                     imported_pem = import_key_field.value.strip()
                     if not imported_pem:
-                        login_btn.disabled = False
-                        login_btn.content.controls[1].value = "Sign In"
-                        username_field.error_text = "Please paste your Private Key PEM."
-                        log_status("Sign in failed. Private key empty.")
-                        page.update()
+                        def _fail_empty_key():
+                            login_btn.disabled = False
+                            login_btn.content.controls[1].value = "Sign In"
+                            username_field.error_text = "Please paste your Private Key PEM."
+                            log_status("Sign in failed. Private key empty.")
+                            page.update()
+                        run_on_ui(_fail_empty_key)
                         return
                     try:
                         from crypto_utils import deserialize_private_key, save_keys_to_disk
@@ -1642,11 +1648,13 @@ def main(page: ft.Page):
                         save_keys_to_disk(username, priv, pub)
                         print(f"[Import] Key successfully imported and stored for user '{username}'.")
                     except Exception as e_key:
-                        login_btn.disabled = False
-                        login_btn.content.controls[1].value = "Sign In"
-                        username_field.error_text = f"Invalid Private Key PEM: {e_key}"
-                        log_status(f"Import failed: {e_key}")
-                        page.update()
+                        def _fail_invalid_key(err_msg=str(e_key)):
+                            login_btn.disabled = False
+                            login_btn.content.controls[1].value = "Sign In"
+                            username_field.error_text = f"Invalid Private Key PEM: {err_msg}"
+                            log_status(f"Import failed: {err_msg}")
+                            page.update()
+                        run_on_ui(_fail_invalid_key)
                         return
 
                 priv, pub = initialize_keys(username)
@@ -1662,10 +1670,14 @@ def main(page: ft.Page):
                     login_btn.content.controls[1].value = "Sign In"
                     state["logged_in"] = True
                     show_inbox_screen()
-                    sync_chat_settings()
-                    sync_user_groups_from_server()
-                    fetch_offline_messages()
-                    start_websocket_listener()
+                    
+                    def background_sync():
+                        sync_chat_settings()
+                        sync_user_groups_from_server()
+                        fetch_offline_messages()
+                        start_websocket_listener()
+                    
+                    threading.Thread(target=background_sync, daemon=True).start()
 
                 page.run_task(login_success_ui)
             except Exception as ex:
@@ -2788,62 +2800,64 @@ def main(page: ft.Page):
             except:
                 groups = []
             
-            groups_list_column.controls.clear()
-            
-            if not groups:
-                groups_list_column.controls.append(
-                    ft.Text("No groups found.", size=12, color="#888888")
-                )
-            else:
-                for g in groups:
-                    gid = g["group_id"]
-                    gname = g["group_name"]
-                    
+            def _update_ui(g_list):
+                groups_list_column.controls.clear()
+                if not g_list:
                     groups_list_column.controls.append(
-                        ft.Container(
-                            content=ft.Column(
-                                controls=[
-                                    ft.Row(
-                                        controls=[
-                                            ft.Text(gname, weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
-                                            ft.Container(expand=True),
-                                            ft.IconButton(
-                                                icon=ft.Icons.CHAT,
-                                                icon_size=16,
-                                                icon_color="#8b5cf6",
-                                                tooltip="Start Chat",
-                                                on_click=lambda e, gid=gid, gname=gname: on_group_select(gid, gname)
-                                            ),
-                                            ft.IconButton(
-                                                icon=ft.Icons.KEY,
-                                                icon_size=16,
-                                                icon_color="#22c55e",
-                                                tooltip="Refresh Key (Rekey)",
-                                                on_click=lambda e, gid=gid, gname=gname: on_group_rekey(gid, gname)
-                                            ),
-                                            ft.IconButton(
-                                                icon=ft.Icons.EXIT_TO_APP,
-                                                icon_size=16,
-                                                icon_color="#ef4444",
-                                                tooltip="Leave Group",
-                                                on_click=lambda e, gid=gid, gname=gname: on_group_leave(gid, gname)
-                                            )
-                                        ],
-                                        alignment=ft.MainAxisAlignment.CENTER,
-                                        spacing=4
-                                    ),
-                                    ft.Text(f"ID: {gid}", size=9, color="#888888")
-                                ],
-                                spacing=2
-                            ),
-                            padding=6,
-                            border=ft.Border(left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"), right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")),
-                            border_radius=8,
-                            bgcolor="#27272a"
-                        )
+                        ft.Text("No groups found.", size=12, color="#888888")
                     )
-            try: page.update()
-            except: pass
+                else:
+                    for g in g_list:
+                        gid = g["group_id"]
+                        gname = g["group_name"]
+                        
+                        groups_list_column.controls.append(
+                            ft.Container(
+                                content=ft.Column(
+                                    controls=[
+                                        ft.Row(
+                                            controls=[
+                                                ft.Text(gname, weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
+                                                ft.Container(expand=True),
+                                                ft.IconButton(
+                                                    icon=ft.Icons.CHAT,
+                                                    icon_size=16,
+                                                    icon_color="#8b5cf6",
+                                                    tooltip="Start Chat",
+                                                    on_click=lambda e, gid=gid, gname=gname: on_group_select(gid, gname)
+                                                ),
+                                                ft.IconButton(
+                                                    icon=ft.Icons.KEY,
+                                                    icon_size=16,
+                                                    icon_color="#22c55e",
+                                                    tooltip="Refresh Key (Rekey)",
+                                                    on_click=lambda e, gid=gid, gname=gname: on_group_rekey(gid, gname)
+                                                ),
+                                                ft.IconButton(
+                                                    icon=ft.Icons.EXIT_TO_APP,
+                                                    icon_size=16,
+                                                    icon_color="#ef4444",
+                                                    tooltip="Leave Group",
+                                                    on_click=lambda e, gid=gid, gname=gname: on_group_leave(gid, gname)
+                                                )
+                                            ],
+                                            alignment=ft.MainAxisAlignment.CENTER,
+                                            spacing=4
+                                        ),
+                                        ft.Text(f"ID: {gid}", size=9, color="#888888")
+                                    ],
+                                    spacing=2
+                                ),
+                                padding=6,
+                                border=ft.Border(left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"), right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")),
+                                border_radius=8,
+                                bgcolor="#27272a"
+                            )
+                        )
+                try: page.update()
+                except: pass
+
+            run_on_ui(_update_ui, groups)
 
         page.overlay.append(dialog)
         dialog.open = True
@@ -3099,8 +3113,10 @@ def main(page: ft.Page):
 
     def refresh_inbox_and_messages():
         search_field.value = ""
-        fetch_offline_messages()
-        load_inbox_chats()
+        def do_refresh():
+            fetch_offline_messages()
+            run_on_ui(load_inbox_chats)
+        threading.Thread(target=do_refresh, daemon=True).start()
 
     inbox_view = ft.Container(
         content=ft.Column(
@@ -3229,7 +3245,7 @@ def main(page: ft.Page):
                             ft.IconButton(
                                 icon=ft.Icons.REFRESH, icon_color="#8b5cf6",
                                 icon_size=20, tooltip="Fetch Offline Messages",
-                                on_click=lambda e: fetch_offline_messages(),
+                                on_click=lambda e: threading.Thread(target=fetch_offline_messages, daemon=True).start(),
                             ),
                         ],
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -3684,17 +3700,21 @@ def main(page: ft.Page):
             page.update()
 
     async def _call_timer_loop():
-        state["call_duration"] = 0
-        call_timer_text.value = "00:00"
-        call_timer_text.visible = True
-        page.update()
+        def _init_timer():
+            state["call_duration"] = 0
+            call_timer_text.value = "00:00"
+            call_timer_text.visible = True
+            page.update()
+        run_on_ui(_init_timer)
         while state.get("call_state") == "connected":
             await asyncio.sleep(1)
             state["call_duration"] += 1
             mins = state["call_duration"] // 60
             secs = state["call_duration"] % 60
-            call_timer_text.value = f"{mins:02d}:{secs:02d}"
-            page.update()
+            def _update_timer_ui(m=mins, s=secs):
+                call_timer_text.value = f"{m:02d}:{s:02d}"
+                page.update()
+            run_on_ui(_update_timer_ui)
 
     def start_local_video_rendering():
         async def _init_local_ui():
@@ -3710,8 +3730,10 @@ def main(page: ft.Page):
                     img = frame.to_ndarray(format='bgr24')
                     _, buffer = cv2.imencode('.jpg', img)
                     b64_str = base64.b64encode(buffer).decode('utf-8')
-                    local_video_preview.src_base64 = b64_str
-                    page.update()
+                    def _update_local(b=b64_str):
+                        local_video_preview.src_base64 = b
+                        page.update()
+                    run_on_ui(_update_local)
                 except Exception as e:
                     break
                     
@@ -3732,8 +3754,10 @@ def main(page: ft.Page):
                     img = frame.to_ndarray(format='bgr24')
                     _, buffer = cv2.imencode('.jpg', img)
                     b64_str = base64.b64encode(buffer).decode('utf-8')
-                    remote_video_view.src_base64 = b64_str
-                    page.update()
+                    def _update_remote(b=b64_str):
+                        remote_video_view.src_base64 = b
+                        page.update()
+                    run_on_ui(_update_remote)
                 except Exception as e:
                     break
                     

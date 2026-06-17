@@ -370,3 +370,25 @@ Sunucu güvenliğini ve kaynak kullanımını optimize etmek amacıyla isteğe b
 - Dosya upload'ları teslim sonrası sunucudan silinir (offline_msgs ile aynı prensip)
 - Grup anahtarı yönetimi (re-keying) ileri aşama için ayrı bir mini-protokol gerektirir
 - Rate Limiting ve Sunucu Konfigürasyonu gibi altyapı özellikleri "Futures Optional" olarak değerlendirilecektir.
+
+---
+
+## 🌐 Özellik 9: Sunucusuz Arama, DHT Sinyalleşmesi ve VoIP Optimizasyonları (Pure P2P & VoIP Polish)
+
+Bu bölüm, sunucusuz ve merkeziyetsiz operasyonları desteklemek amacıyla planlanan üç teknik alternatif yönü detaylandırır:
+
+### 9.1 — Manuel WebRTC Sinyalleşmesi (Manual SDP Base64 Exchange)
+Röle sunucusu (`server.py`) tamamen kapalı veya erişilemez olduğunda, iki istemci arasında sesli/görüntülü görüşme başlatmak için kullanılan manuel SDP takas mekanizmasıdır.
+* **Akış:** Arayan taraf local WebRTC teklifini (SDP offer + ICE candidates) oluşturur, bunu sıkıştırıp Base64 formatında bir metin kutusu veya QR Kod olarak gösterir. Alıcı bu kodu kendi istemcisine yapıştırarak çözümleme yapar, bir WebRTC cevabı (SDP answer + candidates) üretir ve arayana aynı yolla geri iletir. Arayan cevabı yapıştırdığı an P2P WebRTC tüneli kurulur.
+* **Kullanım Alanı:** Sıfır sunucu bağımlılığı ve iz bırakmayan gizli aramalar.
+
+### 9.2 — BitTorrent DHT Sinyalleşmesi (Decentralized Peer Discovery)
+Kullanıcıların fiziki olarak SDP kodlarını taşımak istemediği durumlarda, merkeziyetsiz bir buluşma (rendezvous) noktası olarak BitTorrent Mainline DHT ağı kullanılır.
+* **Akış:** Eşler aralarında anlaştıkları bir oda ismi/parolası belirler (örn: `room_secret`). Bu isim kriptografik olarak SHA-256 ile hash'lenir ve DHT ağında bir infohash olarak yayınlanır. İstemciler DHT ağı üzerinden bu infohash'i arayarak birbirinin dış IP ve portlarını keşfeder ve WebRTC SDP takasını otomatik olarak bu kanal üzerinden yürütür.
+* **Kullanım Alanı:** Otomatik ve merkeziyetsiz oda buluşmaları.
+
+### 9.3 — Dinamik Ses/Görüntü Kalitesi ve Bant Genişliği Adaptasyonu (VoIP Polish)
+Sınırlı veya dalgalı ağ bağlantılarında görüşme kalitesini sürdürmek için WebRTC parametrelerinin dinamik olarak optimize edilmesidir.
+* **Akış:** `RTCPeerConnection.getStats()` periyodik olarak sorgulanarak packet loss, jitter ve RTT izlenir. Ağ kalitesi düştüğünde çözünürlük dinamik olarak 720p@30FPS'ten 360p@15FPS seviyesine çekilir, ses önceliklendirilir (SDP priority high) ve Opus ses codec'i 40 kbps seviyesine sınırlanarak kesinti engellenir.
+* **Kullanım Alanı:** Düşük bant genişliğinde kararlı VoIP görüşmeleri.
+

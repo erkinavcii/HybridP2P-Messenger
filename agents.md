@@ -63,7 +63,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 ### 5.2. Modülerleştirme ve Refactoring (Modularization & Refactoring)
 *Tek dosyada biriken ve boyutu aşırı büyüyen web istemcisi (`static/index.html` — 4400+ satır) ve röle sunucusu (`server.py` — 1800+ satır) dosyalarının daha temiz, okunabilir ve yönetilebilir modüllere ayrılması.*
 - [x] **Web İstemcisi Modülerleştirme:** CSS dosyalarının `static/css/styles.css` olarak dışarı aktarılması ve Javascript kısımlarının `db.js`, `crypto.js`, `ws.js`, `voip.js`, `ui.js`, `app.js` şeklinde ES6 modüllerine bölünmesi.
-- [ ] **Sunucu Modülerleştirme:** APIRouter kullanılarak `users.py`, `messages.py`, `groups.py`, `voip.py` olarak ayrılması ve `main.py`, `config.py`, `database.py` şeklinde paket yapısına kavuşturulması.
+- [x] **Sunucu Modülerleştirme:** APIRouter kullanılarak `users.py`, `messages.py`, `groups.py`, `voip.py` olarak ayrılması ve `main.py`, `config.py`, `database.py` şeklinde paket yapısına kavuşturulması.
 
 ### 5.3. Sinyalleşme ve NAT Optimizasyonları
 - [ ] **BitTorrent DHT Prototipi:** `serverless_client.py` içerisinde oda ismi/parolası hash'i üzerinden infohash arayarak otomatik P2P buluşma (rendezvous) prototipi.

@@ -1591,7 +1591,7 @@ def main(page: ft.Page):
         import_key_field.visible = import_key_checkbox.value
         page.update()
 
-    login_btn = ft.ElevatedButton(
+    login_btn = ft.Button(
         content=ft.Row(
             controls=[
                 ft.Icon(ft.Icons.LOGIN, size=20),
@@ -2709,7 +2709,7 @@ def main(page: ft.Page):
                     ft.Row(
                         controls=[
                             ft.TextButton("Cancel", on_click=close_dialog),
-                            ft.ElevatedButton(
+                            ft.Button(
                                 "Start Chat", 
                                 on_click=on_confirm, 
                                 style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff")
@@ -2730,7 +2730,7 @@ def main(page: ft.Page):
                     ft.Text("Create New Group", weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
                     group_name_input,
                     group_members_input,
-                    ft.ElevatedButton(
+                    ft.Button(
                         "Create Group",
                         on_click=on_create_click,
                         style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff")
@@ -3080,7 +3080,7 @@ def main(page: ft.Page):
                         ),
                         priv_key_tf,
                         ft.Container(height=15),
-                        ft.ElevatedButton(
+                        ft.Button(
                             content=ft.Row(
                                 controls=[
                                     ft.Icon(ft.Icons.LOGOUT, size=18, color="#ffffff"),
@@ -3204,8 +3204,8 @@ def main(page: ft.Page):
         caller_status_text = ft.Text("", size=11, color="#8b5cf6")
         caller_prog = ft.ProgressBar(color="#8b5cf6", visible=False)
 
-        caller_copy_btn = ft.ElevatedButton(
-            text="Teklifi Kopyala",
+        caller_copy_btn = ft.Button(
+            content="Teklifi Kopyala",
             icon=ft.Icons.COPY,
             on_click=lambda e: copy_to_clipboard(caller_offer_tf.value) if caller_offer_tf.value else None,
             disabled=True,
@@ -3222,8 +3222,8 @@ def main(page: ft.Page):
             text_size=10,
         )
 
-        p2p_connect_btn = ft.ElevatedButton(
-            text="3. Bağlan ve Görüşmeyi Başlat",
+        p2p_connect_btn = ft.Button(
+            content="3. Bağlan ve Görüşmeyi Başlat",
             icon=ft.Icons.PLAY_ARROW,
             width=300,
             style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff"),
@@ -3321,8 +3321,8 @@ def main(page: ft.Page):
 
             asyncio.run_coroutine_threadsafe(_setup_offer(), state["ws_loop"])
 
-        p2p_gen_offer_btn = ft.ElevatedButton(
-            text="1. Arama Teklifi (Offer) Üret",
+        p2p_gen_offer_btn = ft.Button(
+            content="1. Arama Teklifi (Offer) Üret",
             icon=ft.Icons.WIFI,
             on_click=generate_offer_click,
             width=300,
@@ -3398,8 +3398,8 @@ def main(page: ft.Page):
         callee_status_text = ft.Text("", size=11, color="#8b5cf6")
         callee_prog = ft.ProgressBar(color="#8b5cf6", visible=False)
 
-        callee_copy_btn = ft.ElevatedButton(
-            text="Cevabı Kopyala",
+        callee_copy_btn = ft.Button(
+            content="Cevabı Kopyala",
             icon=ft.Icons.COPY,
             on_click=lambda e: copy_to_clipboard(callee_answer_tf.value) if callee_answer_tf.value else None,
             disabled=True,
@@ -3509,8 +3509,8 @@ def main(page: ft.Page):
 
             asyncio.run_coroutine_threadsafe(_setup_answer(), state["ws_loop"])
 
-        p2p_gen_answer_btn = ft.ElevatedButton(
-            text="2. Kabul Et ve Cevap (Answer) Üret",
+        p2p_gen_answer_btn = ft.Button(
+            content="2. Kabul Et ve Cevap (Answer) Üret",
             icon=ft.Icons.CHECK,
             on_click=generate_answer_click,
             width=300,

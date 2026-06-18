@@ -3557,8 +3557,8 @@ def main(page: ft.Page):
         tabs = ft.Tabs(
             selected_index=0,
             tabs=[
-                ft.Tab(text="Arama Başlat (Caller)", content=caller_tab),
-                ft.Tab(text="Aramaya Cevap Ver (Callee)", content=callee_tab),
+                ft.Tab(label="Arama Başlat (Caller)", content=caller_tab),
+                ft.Tab(label="Aramaya Cevap Ver (Callee)", content=callee_tab),
             ],
             expand=True
         )

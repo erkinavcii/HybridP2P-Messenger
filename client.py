@@ -3556,10 +3556,25 @@ def main(page: ft.Page):
 
         tabs = ft.Tabs(
             selected_index=0,
-            tabs=[
-                ft.Tab(label="Arama Başlat (Caller)", content=caller_tab),
-                ft.Tab(label="Aramaya Cevap Ver (Callee)", content=callee_tab),
-            ],
+            length=2,
+            content=ft.Column(
+                controls=[
+                    ft.TabBar(
+                        tabs=[
+                            ft.Tab(label="Arama Başlat (Caller)"),
+                            ft.Tab(label="Aramaya Cevap Ver (Callee)"),
+                        ]
+                    ),
+                    ft.TabBarView(
+                        controls=[
+                            caller_tab,
+                            callee_tab,
+                        ],
+                        expand=True
+                    )
+                ],
+                expand=True
+            ),
             expand=True
         )
 

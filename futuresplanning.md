@@ -10,9 +10,9 @@
 
 | # | Sorun | Açıklama |
 |---|-------|----------|
-| 1 | **Ephemeral mod cross-client sync** | Desktop'tan ephemeral açınca web bilgilendiriliyor (az önce düzelttik) ama **sunucu tarafında `chat_settings` tablosuna yazmıyor** web client. Desktop'un `sync_chat_settings()` ile açılışta çektiği state güncellenmemiş oluyor. Sunucu restart sonrası state kaybolur. |
-| 2 | **Gönderilen mesajda ephemeral koruması** | Web'de `sendMessage()` her zaman `saveChatToLocalStorage()` çağırıyor — kendi gönderdiğin mesajlar ephemeral olsa bile localStorage'a yazılıyor. Sadece gelen mesajları düzelttik. |
-| 3 | **Secret key backup/restore UX** | Sign out yapınca private key kayboluyor, geri giriş imkansız. Anahtar dışa aktarma/import akışı yok. Şu an sadece ilk girişte üretiliyor ama kullanıcıya "bunu sakla" uyarısı yeterince belirgin değil. |
+| 1 | **Ephemeral mod cross-client sync** | ✅ Tamamlandı — Web arayüzünden Ephemeral modu açıp kapatıldığında sunucuya WebSocket ve REST fallback ile `ephemeral_toggle` mesajı gönderilerek `chat_settings` tablosunun güncellenmesi sağlandı. |
+| 2 | **Gönderilen mesajda ephemeral koruması** | ✅ Tamamlandı — Sohbet ephemeral moddayken gönderilen veya alınan mesajların IndexedDB veritabanında saklanması engellendi. |
+| 3 | **Secret key backup/restore UX** | ✅ Tamamlandı — Kullanıcıların özel anahtarlarını şifreli/şifresiz olarak yedekleyip içe aktarabilmesini (PEM import/export) sağlayan arayüz geliştirildi. |
 
 ### 🟡 Orta — Fonksiyonel Eksikler
 
@@ -567,7 +567,7 @@ Mevcut WebSocket altyapısı sinyal iletimi için yeterli. Yeni mesaj tipleri ek
     ]
   }
   ```
-- [ ] **TURN credential rotasyonu:** Credential'lar 6 saat geçerli, HMAC-SHA1 ile shared secret'tan türetilir (coturn `use-auth-secret` modu). Sunucu asla medya verisi görmez.
+- [x] **TURN credential rotasyonu:** Credential'lar 6 saat geçerli, HMAC-SHA1 ile shared secret'tan türetilir (coturn `use-auth-secret` modu). Sunucu asla medya verisi görmez.
 
 ---
 

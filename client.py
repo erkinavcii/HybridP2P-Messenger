@@ -3191,7 +3191,7 @@ def main(page: ft.Page):
             text_size=10,
         )
 
-        caller_qr_image = ft.Image(width=160, height=160, fit="contain", visible=False)
+        caller_qr_image = ft.Image(src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", width=160, height=160, fit="contain", visible=False)
         caller_qr_container = ft.Container(
             content=ft.Column([
                 ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color="#888888"),
@@ -3385,7 +3385,7 @@ def main(page: ft.Page):
             text_size=10,
         )
 
-        callee_qr_image = ft.Image(width=160, height=160, fit="contain", visible=False)
+        callee_qr_image = ft.Image(src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", width=160, height=160, fit="contain", visible=False)
         callee_qr_container = ft.Container(
             content=ft.Column([
                 ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color="#888888"),

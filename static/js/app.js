@@ -10,7 +10,8 @@ import {
     renderInbox,
     selectChat,
     sendMessage,
-    formatBytes
+    formatBytes,
+    appendSystemMessage
 } from './ui.js';
 import {
     generateKeyPair,
@@ -68,6 +69,8 @@ const newUsernameInput = document.getElementById("new-username-input");
 
 const groupRekeyBtn = document.getElementById("group-rekey-btn");
 const leaveGroupBtn = document.getElementById("leave-group-btn");
+const ephemeralBtn = document.getElementById("ephemeral-btn");
+const viewOnceBtn = document.getElementById("view-once-btn");
 
 // Open Modal
 if (addChatBtn) {
@@ -717,6 +720,68 @@ if (messageInput) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
+        }
+    });
+}
+
+// Toggle Ephemeral Mode button
+if (ephemeralBtn) {
+    ephemeralBtn.addEventListener("click", async () => {
+        state.ephemeral = !state.ephemeral;
+        const newEphemeral = state.ephemeral;
+
+        if (newEphemeral) {
+            ephemeralBtn.classList.add("ephemeral-active");
+            ephemeralBtn.title = "Ephemeral Mode ON (chat history not saved)";
+        } else {
+            ephemeralBtn.classList.remove("ephemeral-active");
+            ephemeralBtn.title = "Ephemeral Mode (Don't save chat history)";
+        }
+
+        // Update chat state
+        if (state.recipient) {
+            if (!state.chats[state.recipient]) {
+                state.chats[state.recipient] = { partner: state.recipient, ephemeral: false, messages: [] };
+            }
+            state.chats[state.recipient].ephemeral = newEphemeral;
+            await persistChats();
+
+            // Send ephemeral_toggle notification to partner via WS
+            const toggleMsg = {
+                type: "ephemeral_toggle",
+                sender: state.username,
+                recipient: state.recipient,
+                ephemeral: newEphemeral,
+                timestamp: new Date().toISOString()
+            };
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify(toggleMsg));
+            } else {
+                // REST fallback
+                const path = "/api/send_ws_fallback";
+                const bodyText = JSON.stringify({ payload: JSON.stringify(toggleMsg) });
+                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+                headers["Content-Type"] = "application/json";
+                await fetch(`${API_URL}${path}`, { method: "POST", headers, body: bodyText });
+            }
+
+            // Show system message in own chat
+            appendSystemMessage(state.recipient, newEphemeral
+                ? "🔒 Ephemeral mode ON — messages will not be saved"
+                : "🔓 Ephemeral mode OFF — message history is now saved"
+            );
+        }
+    });
+}
+
+// Toggle View-Once button
+if (viewOnceBtn) {
+    viewOnceBtn.addEventListener("click", () => {
+        state.viewOnceNext = !state.viewOnceNext;
+        if (state.viewOnceNext) {
+            viewOnceBtn.classList.add("view-once-active");
+        } else {
+            viewOnceBtn.classList.remove("view-once-active");
         }
     });
 }

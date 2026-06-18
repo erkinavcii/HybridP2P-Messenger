@@ -3198,7 +3198,7 @@ def main(page: ft.Page):
                 caller_qr_image
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             visible=False,
-            alignment=ft.alignment.center
+            alignment=ft.Alignment(0, 0)
         )
 
         caller_status_text = ft.Text("", size=11, color="#8b5cf6")
@@ -3392,7 +3392,7 @@ def main(page: ft.Page):
                 callee_qr_image
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             visible=False,
-            alignment=ft.alignment.center
+            alignment=ft.Alignment(0, 0)
         )
 
         callee_status_text = ft.Text("", size=11, color="#8b5cf6")

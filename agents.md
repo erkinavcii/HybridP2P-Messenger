@@ -61,9 +61,10 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 - [ ] **`static/serverless.html`:** Web tarayıcısı için sadece getUserMedia + RTCPeerConnection ile çalışan, sunucu bağlantısı veya IndexedDB gerektirmeyen tek sayfalık HTML/JS P2P arayüzü.
 
 ### 5.2. Modülerleştirme ve Refactoring (Modularization & Refactoring)
-*Tek dosyada biriken ve boyutu aşırı büyüyen web istemcisi (`static/index.html` — 4400+ satır) ve röle sunucusu (`server.py` — 1800+ satır) dosyalarının daha temiz, okunabilir ve yönetilebilir modüllere ayrılması.*
+*Tek dosyada biriken ve boyutu aşırı büyüyen web istemcisi (`static/index.html` — 4400+ satır), röle sunucusu (`server.py` — 1800+ satır) ve masaüstü istemcisi (`client.py` — 4372 satır) dosyalarının daha temiz, okunabilir ve yönetilebilir modüllere ayrılması.*
 - [x] **Web İstemcisi Modülerleştirme:** CSS dosyalarının `static/css/styles.css` olarak dışarı aktarılması ve Javascript kısımlarının `db.js`, `crypto.js`, `ws.js`, `voip.js`, `ui.js`, `app.js` şeklinde ES6 modüllerine bölünmesi.
 - [x] **Sunucu Modülerleştirme:** APIRouter kullanılarak `users.py`, `messages.py`, `groups.py`, `voip.py` olarak ayrılması ve `main.py`, `config.py`, `database.py` şeklinde paket yapısına kavuşturulması.
+- [x] **Masaüstü İstemcisi Modülerleştirme:** `client.py`'deki ~80 iç içe closure, `server/` paketiyle aynı desende bir `desktop/` paketine (10 mixin dosyası + `net_config.py` + `voip_tracks.py`) taşındı. Closure'lar Python'da dosyalar arası bölünemediği için mixin+tek-sınıf yaklaşımı kullanıldı: `client.py` artık sadece `MessengerApp` sınıfını (tüm mixin'leri miras alan) kurup `state` + ~47 paylaşılan UI kontrolünü `self.` özniteliği olarak tanımlayan ince bir giriş noktası. Detaylı plan: `.claude/plans/reflective-splashing-leaf.md`.
 
 ### 5.3. Sinyalleşme ve NAT Optimizasyonları
 - [ ] **BitTorrent DHT Prototipi:** `serverless_client.py` içerisinde oda ismi/parolası hash'i üzerinden infohash arayarak otomatik P2P buluşma (rendezvous) prototipi.

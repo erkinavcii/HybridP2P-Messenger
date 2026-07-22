@@ -221,8 +221,28 @@ For scenarios where both devices are restricted behind strict symmetric NAT fire
 ### File Structure
 ```
 HybridP2P-Messenger/
-├── server.py              # FastAPI server, SQLite DB manager, WebSocket relay
-├── client.py              # Flet UI, WebSocket connection manager, REST client
+├── server.py              # Thin entry point — launches server/main.py
+├── server/                # FastAPI relay server package
+│   ├── main.py            # App instantiation, WebSocket endpoint & dispatch
+│   ├── config.py          # Env vars, CORS/host allowlists, TURN settings
+│   ├── database.py        # SQLite schema & aiosqlite session management
+│   ├── auth.py             # X-Signature request verification
+│   ├── websocket_manager.py # ConnectionManager, online-user tracking
+│   └── routes/            # APIRouters: users, messages, groups, voip
+├── client.py              # Thin entry point — MessengerApp wiring only
+├── desktop/                # Flet desktop client package (mixins on MessengerApp)
+│   ├── net_config.py       # Server URL state, file-type helpers
+│   ├── voip_tracks.py       # MicrophoneTrack/AudioPlayer/CameraTrack (aiortc)
+│   ├── bubbles.py           # Message/file/system chat bubble builders
+│   ├── rest_client.py       # Signed REST requests, key init/registration
+│   ├── chat_logic.py         # Chat data, ephemeral mode, file staging
+│   ├── ws_client.py          # WebSocket listener & dispatch, REST fallback
+│   ├── ui_components.py      # log_status, clipboard, read receipts
+│   ├── login_screen.py       # Login flow & key import
+│   ├── inbox_screen.py       # Chat list, new-chat/group/settings dialogs
+│   ├── chat_screen.py        # Active chat: connect, send, recipient status
+│   ├── pure_p2p.py           # Serverless manual-SDP P2P calling dialog
+│   └── call_screen.py        # Server-mediated VoIP call screen & WebRTC
 ├── crypto_utils.py        # RSA/AES key pair generation, E2EE encryption/decryption
 ├── message_store.py       # Client-side SQLite for message logs and keys
 ├── requirements.txt       # Project dependencies

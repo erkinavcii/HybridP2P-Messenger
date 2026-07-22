@@ -17,16 +17,17 @@ Flet, Python ve Flutter arasında bir WebSocket köprüsü kurarak çalışır. 
 * Ancak, `client.py` içerisindeki giriş işlem (`do_login`) ayrı bir `threading.Thread` içinde, arama sayacı döngüsü (`_call_timer_loop`) ise WebSocket dinleyicisinin event loop'u olan `ws_loop` üzerinde çalışmaktadır.
 * Bu arka plan thread veya harici event loop'lardan doğrudan `page.update()` çağrıldığında, güncelleme verileri kuyruğa eklenir fakat Flutter'ın Win32 penceresine "yeniden çizim (repaint)" sinyali gönderilmez. Bu yüzden arayüz, kullanıcı bir işletim sistemi olayı (tıklama, odaklanma vb.) tetikleyene kadar eski halinde kalır.
 
-### Etkilenen Kod Satırları (`client.py`)
-* **Giriş İşlemi:** `do_login` fonksiyonu (Satır 1605-1655 arası) `threading.Thread` ile başlatılmakta ve içerisinden `show_inbox_screen()` çağrılmaktadır (Satır 1643).
-* **Arama Sayacı:** `_call_timer_loop` coroutine'i (Satır 3646-3657 arası) `ws_loop` üzerinde `asyncio.create_task` ile çalıştırılmakta ve her saniye `page.update()` çağırmaktadır.
+### Etkilenen Kod Satırları (Güncel: `desktop/` paketi — bkz. Bölüm 4)
+* **Giriş İşlemi:** `do_login` artık `desktop/login_screen.py` içinde (`LoginScreenMixin.on_login_click`), `threading.Thread` ile başlatılıyor ve `page.run_task(login_success_ui)` üzerinden `show_inbox_screen()`'e geçiyor.
+* **Arama Sayacı:** `_call_timer_loop` artık `desktop/call_screen.py` içinde (`CallScreenMixin._call_timer_loop`), her adımda `run_on_ui(...)` ile sarmalı çalışıyor.
+* **Durum:** Bu iki nokta da **zaten düzeltilmiş** halde bulundu — 2026-07-22'deki modülerleştirme sırasında yapılan tam kod taramasında hem `do_login`/`login_success_ui` hem `_call_timer_loop`'un `page.run_task`/`run_on_ui` ile doğru şekilde sarmalandığı doğrulandı. Aşağıdaki çözüm önerileri artık tarihsel referans niteliğindedir.
 * **Diğer Potansiyel Noktalar:**
-  - [x] `do_download` (Dosya indirme thread'i)
-  - [x] `do_rest` (API istekleri thread'i)
-  - [x] `do_file_upload_and_send` (Dosya yükleme thread'i)
-  - [x] `do_rekey` (Anahtar yenileme thread'i)
-  - [x] `do_create` (Grup oluşturma thread'i)
-  - [x] `check_recipient_status_loop` (Kullanıcı durum kontrolü)
+  - [x] `do_download` (Dosya indirme thread'i) — `desktop/bubbles.py`
+  - [x] `do_rest` (API istekleri thread'i) — `desktop/ws_client.py`
+  - [x] `do_file_upload_and_send` (Dosya yükleme thread'i) — `desktop/chat_screen.py`
+  - [x] `do_rekey` / `do_create` / `do_leave` (Grup işlemleri thread'leri) — `desktop/inbox_screen.py`
+  - [x] `check_recipient_status_loop` (Kullanıcı durum kontrolü) — `desktop/chat_screen.py`
+  - [x] `_update_ephemeral_ui` — **2026-07-22'de bulunan ve düzeltilen canlı bir örnek**: bu fonksiyon `page.update()`'i doğrudan çağırıyordu ve `sync_chat_settings` üzerinden `background_sync` thread'inden (arka plan thread'i) tetiklenebiliyordu — aynı donma sınıfının belgelenmemiş bir örneğiydi. `desktop/chat_logic.py`'de `run_on_ui(...)` ile sarmalanarak düzeltildi.
 
 ### Çözüm Önerileri ve Strateji
 
@@ -124,3 +125,22 @@ Yeni `websockets` (v14.0+) sürümlerinde `websockets.open` kullanımı kaldır�
 
 ### Çözüm Durumu
 Bu sorun `client.py` içerisinde `websockets.open` çağrısı yerine `websockets.connect` kullanılarak düzeltilmiştir. `requirements.txt` dosyasında `websockets>=13.0` olarak güncellenerek geriye dönük uyumluluk güvenceye alınmıştır.
+
+---
+
+## 4. `client.py` Modülerleştirmesi (2026-07-22) ve Yeni Bulgular
+
+`client.py` (4372 satır, ~80 iç içe closure) `server/` paketiyle aynı desende bir `desktop/` paketine bölündü (bkz. README.md "File Structure" ve `agents.md` §5.2). Python'da closure'lar dosyalar arası bölünemediği için mixin+tek-sınıf yaklaşımı kullanıldı: `client.py` artık sadece `MessengerApp` sınıfını kurup `state` ve ~47 paylaşılan UI kontrolünü `self.` özniteliği olarak tanımlayan ince bir giriş noktası. Detaylı plan ve dosya haritası: `.claude/plans/reflective-splashing-leaf.md`.
+
+Bu iş sırasında tam kod taraması yapılırken iki bulgu ortaya çıktı:
+
+### 4.1 — Düzeltildi: `_update_ephemeral_ui`'da sarmalanmamış `page.update()`
+Bölüm 1'deki not güncellendi, bkz. yukarısı.
+
+### 4.2 — Belgelendi (düzeltilmedi, kapsam dışı): Pure P2P dialogu ile `ws_loop` arasında yarış penceresi
+`desktop/pure_p2p.py` (`open_pure_p2p_dialog`), WebRTC teklif/cevap üretimini `state["ws_loop"]` üzerinde `asyncio.run_coroutine_threadsafe(...)` ile çalıştırır. Bu event loop, `desktop/ws_client.py`'deki `_ws_listen` coroutine'i tarafından `WsClientMixin._run_ws_loop`'un başlattığı arka plan thread'inde kurulur (`self.state["ws_loop"] = asyncio.get_running_loop()`). Pure P2P dialogu sadece giriş yaptıktan sonra (inbox ekranından) açılabildiği ve giriş `background_sync` içinde `start_websocket_listener()`'ı hemen tetiklediği için pratikte bu sorun neredeyse hiç tetiklenmez — ama teorik olarak, kullanıcı giriş yaptıktan hemen sonra, WS thread'i `ws_loop`'u set etmeden önce Pure P2P dialogunu açarsa `state["ws_loop"]` hâlâ `None` olabilir ve `asyncio.run_coroutine_threadsafe(_setup_offer(), None)` hata fırlatır.
+
+**Durum:** Bu modülerleştirme kapsamında davranış değiştirilmedi (agents.md §2.3 gereği, plan onaylanmadan davranış değişikliği yapılmaz) — sadece bulgu olarak belgeleniyor. Düzeltme önerisi: `open_pure_p2p_dialog` başında `if not self.state.get("ws_loop"): log_status("Lütfen birkaç saniye bekleyip tekrar deneyin"); return` gibi bir ön kontrol eklemek.
+
+### 4.3 — Ayrıca belgelenmiş: Pure P2P güvenlik notu
+`open_pure_p2p_dialog`, hiçbir RSA/AES E2EE çağrısı yapmaz (sıfır çağrı `encrypt_message`/`decrypt_message`/`sign_data`/`verify_signature`'a) — güvenliği tamamen WebRTC'nin kendi DTLS-SRTP'sine bırakır ve genel STUN sunucularını sabit kodlar (`/api/ice_servers`'ı kullanmaz). Bu, tasarım gereği (sunucusuz mod E2EE anahtar değişimi altyapısına ihtiyaç duymaz) — bir hata değil, ama README'nin genel E2EE iddialarıyla karıştırılmaması için burada not edildi.

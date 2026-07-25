@@ -128,13 +128,13 @@
 
 ### 🎨 Arayüz ve UX İyileştirmeleri
 - [x] **Çoklu Sohbet Sekmesi**: Birden fazla kişiyle eş zamanlı sohbet (WhatsApp tarzı Inbox / Sohbet Listesi) ✅
-- [ ] **Kişi Listesi / Rehber**: Kayıtlı kullanıcılar arasında arama ve favoriler
+- [x] **Kişi Listesi / Rehber**: Yerel rehber diyaloğu — kişi listesi, isme göre arama, parmak izi kopyalama, sohbet açma, kişi silme (masaüstü) ✅ *(favoriler henüz yok)*
 - [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri
 - [ ] **Tema Seçimi**: Açık/koyu mod geçişi + özel renk temaları
 - [ ] **Profil Fotoğrafı / Avatar**: Kullanıcı fotoğrafı ekleme
-- [ ] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama ("Bugün", "Dün")
+- [x] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama — "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025" (masaüstü) ✅
 - [ ] **Link Önizleme**: URL paylaşıldığında başlık ve küçük resim gösterimi
-- [ ] **Ses ve Titreşim**: Yeni mesaj geldiğinde bildirim sesi
+- [x] **Ses ve Titreşim**: Yeni mesaj/dosya geldiğinde bildirim sesi — sounddevice ile üretilen çift ton, harici ses dosyası gerektirmez, arama sırasında susar (masaüstü) ✅ *(titreşim mobil özelliği, kapsam dışı)*
 
 ### 🌐 Ağ ve Altyapı
 - [ ] **TLS/HTTPS**: Sunucu iletişimini SSL sertifikası ile şifreleme (transit encryption)

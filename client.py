@@ -339,6 +339,11 @@ class MessengerApp(
                                     on_click=lambda e: self.open_new_chat_dialog(e, default_tab_index=1),
                                 ),
                                 ft.IconButton(
+                                    icon=ft.Icons.CONTACTS, icon_color="#8b5cf6",
+                                    icon_size=20, tooltip="Kişi Rehberi",
+                                    on_click=self.open_contacts_dialog,
+                                ),
+                                ft.IconButton(
                                     icon=ft.Icons.ROUTER, icon_color="#8b5cf6",
                                     icon_size=20, tooltip="Pure P2P (Sunucusuz Arama)",
                                     on_click=self.open_pure_p2p_dialog,

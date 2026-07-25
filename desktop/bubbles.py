@@ -438,6 +438,23 @@ class BubblesMixin:
             )
         return bubble_row
 
+    def create_date_separator(self, label: str):
+        """Gün değişimlerinde sohbete eklenen tarih ayracı ("Bugün", "Dün", "12 Haziran")."""
+        return ft.Row(
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                ft.Container(
+                    content=ft.Text(label, size=10, color="#9e9e9e",
+                                    weight=ft.FontWeight.BOLD,
+                                    text_align=ft.TextAlign.CENTER),
+                    bgcolor="#1c1c1f",
+                    padding=ft.Padding(14, 5, 14, 5),
+                    border_radius=12,
+                    border=ft.Border(left=ft.BorderSide(1, "#27272a"), top=ft.BorderSide(1, "#27272a"), right=ft.BorderSide(1, "#27272a"), bottom=ft.BorderSide(1, "#27272a")),
+                ),
+            ],
+        )
+
     def create_system_bubble(self, text: str):
         return ft.Row(
             alignment=ft.MainAxisAlignment.CENTER,

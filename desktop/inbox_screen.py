@@ -632,6 +632,169 @@ class InboxScreenMixin:
 
         threading.Thread(target=load_groups_async, daemon=True).start()
 
+    def open_contacts_dialog(self, e):
+        """Yerel rehber: kayıtlı kişiler, parmak izleri, sohbet açma ve kişi silme."""
+        if not self.state["store"]:
+            self.log_status("Please sign in first!")
+            return
+
+        contacts_column = ft.Column(spacing=6, height=340, scroll=ft.ScrollMode.AUTO)
+
+        def close_dialog(e=None):
+            dialog.open = False
+            self.page.update()
+
+        def on_start_chat(username):
+            close_dialog()
+            self.recipient_field.value = username
+            self.on_connect_recipient(None)
+
+        def on_copy_fingerprint(fp):
+            self.copy_to_clipboard(fp)
+            self.log_status("Fingerprint copied to clipboard!")
+
+        def on_delete_contact(username):
+            self.state["store"].delete_contact(username)
+            self.log_status(f"'{username}' rehberden silindi.")
+            render_contacts()
+            self.page.update()
+
+        contacts_search = ft.TextField(
+            hint_text="Kişilerde ara...",
+            prefix_icon=ft.Icons.SEARCH,
+            border_color="#27272a",
+            focused_border_color="#8b5cf6",
+            cursor_color="#8b5cf6",
+            height=38,
+            text_size=13,
+            content_padding=ft.Padding(10, 0, 10, 0),
+        )
+
+        def render_contacts():
+            contacts_column.controls.clear()
+            contacts = self.state["store"].get_all_contacts()
+
+            query = (contacts_search.value or "").strip().lower()
+            if query:
+                contacts = [c for c in contacts if query in c["username"].lower()]
+
+            if not contacts:
+                if query:
+                    icon, title, subtitle = (
+                        ft.Icons.SEARCH_OFF, "Sonuç bulunamadı",
+                        f"'{contacts_search.value.strip()}' ile eşleşen kişi yok.",
+                    )
+                else:
+                    icon, title, subtitle = (
+                        ft.Icons.CONTACTS_OUTLINED, "Rehber boş.",
+                        "Bir kişiyle ilk kez bağlandığınızda anahtarı burada saklanır.",
+                    )
+                contacts_column.controls.append(
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Icon(icon, size=42, color="#3f3f46"),
+                                ft.Text(title, size=13, color="#9e9e9e"),
+                                ft.Text(subtitle, size=11, color="#666666",
+                                        text_align=ft.TextAlign.CENTER),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=6,
+                        ),
+                        padding=30,
+                        alignment=ft.Alignment(0, 0),
+                    )
+                )
+                return
+
+            for c in contacts:
+                uname = c["username"]
+                fp = c.get("fingerprint", "")
+                # Parmak izini iki satıra sığacak şekilde kısalt
+                fp_short = " ".join(fp.split()[:8]) + " …" if fp else "—"
+
+                contacts_column.controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            controls=[
+                                ft.CircleAvatar(
+                                    content=ft.Icon(ft.Icons.PERSON, color="#ffffff", size=16),
+                                    bgcolor="#007acc",
+                                    radius=16,
+                                ),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(uname, weight=ft.FontWeight.BOLD, size=13, color="#ffffff"),
+                                        ft.Text(fp_short, size=9, color="#888888",
+                                                max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                    ],
+                                    spacing=1, tight=True, expand=True,
+                                ),
+                                ft.IconButton(
+                                    icon=ft.Icons.CHAT, icon_size=16, icon_color="#8b5cf6",
+                                    tooltip="Sohbet Aç",
+                                    on_click=lambda e, u=uname: on_start_chat(u),
+                                ),
+                                ft.IconButton(
+                                    icon=ft.Icons.FINGERPRINT, icon_size=16, icon_color="#22c55e",
+                                    tooltip="Parmak İzini Kopyala",
+                                    on_click=lambda e, f=fp: on_copy_fingerprint(f),
+                                ),
+                                ft.IconButton(
+                                    icon=ft.Icons.DELETE_OUTLINE, icon_size=16, icon_color="#ef4444",
+                                    tooltip="Rehberden Sil",
+                                    on_click=lambda e, u=uname: on_delete_contact(u),
+                                ),
+                            ],
+                            spacing=4,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        padding=ft.Padding(8, 6, 8, 6),
+                        border_radius=8,
+                        bgcolor="#27272a",
+                    )
+                )
+
+        def on_contacts_search(e):
+            render_contacts()
+            self.page.update()
+
+        contacts_search.on_change = on_contacts_search
+        render_contacts()
+
+        dialog = ft.AlertDialog(
+            title=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.CONTACTS, color="#8b5cf6"),
+                    ft.Text("Kişi Rehberi", size=16, color="#ffffff", weight=ft.FontWeight.BOLD),
+                    ft.Container(expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE, icon_size=18, icon_color="#888888",
+                        on_click=close_dialog,
+                    ),
+                ],
+                spacing=8,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Doğrulanmış kişilerin yerel anahtar kayıtları.",
+                                size=11, color="#9e9e9e"),
+                        contacts_search,
+                        ft.Divider(color="#27272a", height=8),
+                        contacts_column,
+                    ],
+                    spacing=6, tight=True,
+                ),
+                width=380,
+            ),
+            bgcolor="#18181b",
+        )
+
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
+
     def on_search_change(self, e):
         query = self.search_field.value.strip()
         self.load_inbox_chats(query)

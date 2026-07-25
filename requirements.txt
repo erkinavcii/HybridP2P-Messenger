@@ -24,3 +24,8 @@ opencv-python>=4.12.0
 numpy>=1.26.0
 slowapi>=0.1.9
 python-dotenv>=1.0.1
+
+# Pure P2P — SDP takası için QR kod üretimi
+# (desktop/pure_p2p.py QR üretir; Pillow olmadan qrcode PNG üretemez)
+qrcode>=8.0
+Pillow>=10.0

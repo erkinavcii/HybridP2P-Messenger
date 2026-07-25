@@ -144,3 +144,28 @@ Bölüm 1'deki not güncellendi, bkz. yukarısı.
 
 ### 4.3 — Ayrıca belgelenmiş: Pure P2P güvenlik notu
 `open_pure_p2p_dialog`, hiçbir RSA/AES E2EE çağrısı yapmaz (sıfır çağrı `encrypt_message`/`decrypt_message`/`sign_data`/`verify_signature`'a) — güvenliği tamamen WebRTC'nin kendi DTLS-SRTP'sine bırakır ve genel STUN sunucularını sabit kodlar (`/api/ice_servers`'ı kullanmaz). Bu, tasarım gereği (sunucusuz mod E2EE anahtar değişimi altyapısına ihtiyaç duymaz) — bir hata değil, ama README'nin genel E2EE iddialarıyla karıştırılmaması için burada not edildi.
+
+---
+
+## 5. Birebir Mesaj İmzalama — Web İstemcisi Paritesi Eksik (2026-07-25)
+
+Masaüstü istemcisi artık birebir mesajları RSA-PSS ile imzalıyor ve doğruluyor (bkz. README "Message Authenticity"). **Web istemcisi (`static/js/`) henüz imzalamıyor.**
+
+### Bunun pratik sonucu
+Doğrulama üç durumlu çalışıyor:
+
+| Gönderenin durumu | Davranış |
+|---|---|
+| Geçerli imza | Kabul + kişi "imzalıyor" olarak işaretlenir |
+| Geçersiz imza | **Reddedilir** + sohbet geçmişine kalıcı uyarı yazılır |
+| İmza yok, kişi daha önce hiç imzalamamış | Kabul (eski masaüstü sürümleri ve web istemcisi için geriye dönük uyumluluk) |
+| İmza yok, kişi daha önce imzalamış | **Reddedilir** (downgrade saldırısı) |
+
+Yani web istemcisinden yazan bir kişi, siz ondan hiç imzalı mesaj almadığınız sürece imzasız kabul edilir. Bu pencere kapanana kadar, ele geçirilmiş bir sunucu **yalnızca hiç masaüstü kullanmamış bir kişinin adına** sahte mesaj enjekte edebilir. Kişi bir kez masaüstünden yazdığı anda bu kapı kapanır.
+
+### Kapatmak için yapılacaklar
+1. `static/js/ws.js` gönderim yolunda `signDataJS` ile `{sender}:{recipient}:{encrypted_payload}` imzalanıp `signature` alanı eklenmeli (`crypto.js` içinde `signDataJS`/`verifySignatureJS` zaten mevcut).
+2. `ws.js`'in `message` dalında ve `fetchOfflineMessages` içinde doğrulama yapılmalı; IndexedDB'de kişi başına `signsMessages` bayrağı tutulmalı (masaüstündeki `contacts.signs_messages` karşılığı).
+3. Her iki istemci de imzaladıktan sonra "imza yoksa kabul et" kuralı tamamen kaldırılıp doğrulama zorunlu hale getirilebilir.
+
+**Not:** Grup mesajlarında imza zaten **zorunlu** (imzasız/geçersiz grup mesajı her zaman reddediliyor) — bu gevşeklik yalnızca birebir mesajlar için ve yalnızca geçiş dönemine özgü.

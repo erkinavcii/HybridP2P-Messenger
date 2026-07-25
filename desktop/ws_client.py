@@ -95,6 +95,12 @@ class WsClientMixin:
                                 enc       = data.get("encrypted_payload", "")
                                 ts        = data.get("timestamp", "")
                                 vo        = bool(data.get("view_once", False))
+                                sig       = data.get("signature", "")
+
+                                if not self.verify_direct_message(sender, enc, sig):
+                                    self.warn_blocked_message(sender)
+                                    continue
+
                                 try:
                                     pt = decrypt_message(enc, self.state["private_key"])
                                     self._on_incoming_message(sender, pt, ts, vo, enc)
@@ -143,16 +149,7 @@ class WsClientMixin:
                                 from crypto_utils import verify_signature
                                 verified = False
                                 if sig_b64:
-                                    local_contact = self.state["store"].get_contact(sender)
-                                    if local_contact:
-                                        pub_key = pem_string_to_public_key(local_contact["public_key"])
-                                    else:
-                                        pub_key = self.fetch_recipient_pub_key(sender)
-                                        if pub_key:
-                                            pub_key_pem = public_key_to_pem_string(pub_key)
-                                            fingerprint = get_public_key_fingerprint(pub_key)
-                                            self.state["store"].save_contact(sender, pub_key_pem, fingerprint)
-
+                                    pub_key = self._resolve_sender_public_key(sender)
                                     if pub_key:
                                         try:
                                             sig_bytes = base64.b64decode(sig_b64)
@@ -350,6 +347,72 @@ class WsClientMixin:
             except Exception as ex:
                 print(f"[REST] Thread baslatma hatasi: {ex}")
 
+    def _resolve_sender_public_key(self, sender: str):
+        """Gönderenin public key'ini yerel rehberden, yoksa sunucudan alır.
+
+        Sunucudan alındıysa rehbere kaydeder (mevcut TOFU davranışı).
+        İmza doğrulaması hem grup hem birebir mesajlarda bunu kullanır.
+        """
+        local_contact = self.state["store"].get_contact(sender)
+        if local_contact:
+            return pem_string_to_public_key(local_contact["public_key"])
+
+        pub_key = self.fetch_recipient_pub_key(sender)
+        if pub_key:
+            self.state["store"].save_contact(
+                sender,
+                public_key_to_pem_string(pub_key),
+                get_public_key_fingerprint(pub_key),
+            )
+        return pub_key
+
+    def _sign_direct_message(self, recipient: str, encrypted_payload: str) -> str:
+        """Birebir mesaj için RSA-PSS imzası üretir (base64).
+
+        İmzalanan veri alıcıyı da içerir; böylece ele geçirilmiş bir sunucu
+        aynı mesajı başka birine yeniden yönlendiremez.
+        """
+        from crypto_utils import sign_data
+        data = f"{self.state['username']}:{recipient}:{encrypted_payload}".encode("utf-8")
+        return base64.b64encode(sign_data(self.state["private_key"], data)).decode("ascii")
+
+    def verify_direct_message(self, sender: str, encrypted_payload: str, signature_b64: str) -> bool:
+        """Gelen birebir mesajın imzasını doğrular.
+
+        Dönüş: True = kabul edilebilir, False = reddedilmeli.
+
+        Kurallar:
+          • İmza varsa doğrulanır; geçersizse reddedilir (taklit girişimi).
+          • İlk geçerli imzada kişi "imzalıyor" olarak işaretlenir.
+          • İmza yoksa: kişi daha önce imzalamışsa reddedilir (downgrade
+            saldırısı), hiç imzalamamışsa kabul edilir (eski/web istemcisi).
+        """
+        from crypto_utils import verify_signature
+        store = self.state["store"]
+
+        if signature_b64:
+            pub_key = self._resolve_sender_public_key(sender)
+            if not pub_key:
+                print(f"[Signature] '{sender}' public key'i alinamadi, imza dogrulanamadi.")
+                return False
+            try:
+                data = f"{sender}:{self.state['username']}:{encrypted_payload}".encode("utf-8")
+                if verify_signature(pub_key, base64.b64decode(signature_b64), data):
+                    if not store.contact_signs_messages(sender):
+                        store.mark_contact_signs_messages(sender)
+                    return True
+                print(f"[Signature] '{sender}' imzasi GECERSIZ — mesaj reddedildi.")
+                return False
+            except Exception as ex:
+                print(f"[Signature] '{sender}' imza dogrulama hatasi: {ex}")
+                return False
+
+        # İmza yok — kişi daha önce imza attıysa bu bir downgrade denemesidir
+        if store.contact_signs_messages(sender):
+            print(f"[Signature] '{sender}' normalde imzaliyor ama bu mesaj IMZASIZ — reddedildi.")
+            return False
+        return True
+
     def send_message_via_ws(self, recipient: str, encrypted_payload: str, view_once: bool, timestamp: str = None):
         from datetime import timezone
         if not timestamp:
@@ -360,6 +423,7 @@ class WsClientMixin:
             "recipient":         recipient,
             "encrypted_payload": encrypted_payload,
             "view_once":         view_once,
+            "signature":         self._sign_direct_message(recipient, encrypted_payload),
             "timestamp":         timestamp,
         }
         self.send_ws_message_with_fallback(msg)

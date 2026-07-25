@@ -128,6 +128,29 @@ class ChatLogicMixin:
         try: self.page.update()
         except: pass
 
+    def warn_blocked_message(self, sender: str):
+        """İmza doğrulamasından geçemeyen bir mesaj engellendiğinde kullanıcıyı uyarır.
+
+        Uyarı hem durum çubuğunda gösterilir hem de ilgili sohbetin geçmişine
+        kalıcı olarak yazılır. Kalıcı olması önemli: engelleme çoğu zaman
+        kullanıcı başka bir ekrandayken (örn. girişte çevrimdışı mesajlar
+        alınırken) gerçekleşir; aksi halde uyarı hiç görülmezdi.
+        """
+        text = (f"UYARI: '{sender}' adina gelen bir mesaj kimlik dogrulamasindan "
+                f"gecemedi ve engellendi!")
+
+        def _apply():
+            self.log_status(f"'{sender}' adina gelen dogrulanamayan mesaj engellendi!")
+            if self.state.get("store"):
+                self.state["store"].save_system_event(sender, text)
+            # Canlı baloncuk yalnızca o sohbet o an açıksa eklenir
+            if self.state.get("recipient") == sender:
+                self.chat_list.controls.append(self.create_system_bubble(text))
+                try: self.page.update()
+                except: pass
+
+        self.run_on_ui(_apply)
+
     def _notify_incoming(self):
         """Gelen mesaj/dosya için bildirim sesi. Aktif arama sırasında çalınmaz."""
         if self.state.get("call_state") in ("ringing", "calling", "connected"):

@@ -105,7 +105,7 @@
 - [ ] **Signal Protokolü (Double Ratchet)**: Her mesajda yeni anahtar türetme → tam Forward Secrecy. Bir anahtar ele geçirilse bile geçmiş/gelecek mesajlar korunur
 - [ ] **Anahtar Doğrulama (Key Verification)**: QR kod veya güvenlik numarası ile karşı tarafın anahtarını yüz yüze doğrulama (MITM koruması)
 - [x] **Private Key Şifreleme**: Yerel private key'i kullanıcı parolası ile AES şifreleme (cihaz çalınsa bile anahtar güvende) (IndexedDB + Parola korumalı E2EE yedek) ✅
-- [ ] **Mesaj İmzalama (Digital Signature)**: RSA-PSS ile her mesaja dijital imza → gönderici kimlik doğrulama
+- [x] **Mesaj İmzalama (Digital Signature)**: Birebir mesajlara RSA-PSS imza + alıcı bağlama + ilk-imzada-güven (downgrade koruması); hem WebSocket hem çevrimdışı yolda doğrulanıyor (masaüstü) ✅ *(web istemcisi henüz imzalamıyor — bkz. KNOWN_ISSUES.md §5)*
 - [ ] **Anahtar Yenileme (Key Rotation)**: Belirli aralıklarla otomatik yeni anahtar çifti üretme ve dağıtma
 - [x] **Sunucu Tarafı Rate Limiting**: Brute-force ve spam saldırılarına karşı istek sınırlama ✅
 

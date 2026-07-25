@@ -153,6 +153,14 @@ class RestClientMixin:
                 else:
                     print("[REST] Cevrimdisi mesaj yok.")
                 for msg in data["messages"]:
+                    # Çevrimdışı yol da WebSocket yoluyla aynı imza kontrolünden geçer;
+                    # aksi halde saldırgan alıcı çevrimdışıyken göndererek kontrolü atlardı.
+                    if not self.verify_direct_message(
+                        msg["sender"], msg["encrypted_payload"], msg.get("signature", "")
+                    ):
+                        print(f"[REST] '{msg['sender']}' imza dogrulamasi basarisiz — mesaj atlandi.")
+                        self.warn_blocked_message(msg["sender"])
+                        continue
                     try:
                         pt = decrypt_message(msg["encrypted_payload"], self.state["private_key"])
                         print(f"[REST] '{msg['sender']}' kullanicisindan gelen cevrimdisi mesaj basariyla cozuldu.")

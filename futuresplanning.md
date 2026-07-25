@@ -830,7 +830,8 @@ Kullanıcıların fiziki olarak kod taşımak istemediği durumlarda, merkeziyet
 
 - [x] **Arayüz Tasarımı:** `client.py` içerisine "P2P Bağlantı Modu" sekmesi/paneli ekle.
 - [x] **SDP / ICE Paketleme:** Yerel SDP ve toplanan ICE adaylarını tek bir sıkıştırılmış JSON dizesi haline getirip base64 formatına çeviren serialize modülü yaz.
-- [ ] **QR Kod Modülü:** Base64 kodlu SDP verisini göstermek için arayüze dinamik QR kod üreteci (`qrcode` kütüphanesi) entegre et. QR kod taramak için ise kamerayı açıp çözümleyen bir tarayıcı modülü ekle.
+- [x] **QR Kod Üretimi:** Base64 kodlu SDP verisi `desktop/pure_p2p.py` içinde dinamik QR kod olarak gösteriliyor. ✅ *(2026-07-25: `qrcode` bağımlılığı `requirements.txt`'te eksik olduğu için özellik sessizce devre dışıydı — eklendi ve doğrulandı.)*
+- [ ] **QR Kod Okuma:** Kamerayı açıp QR kodu çözümleyen tarayıcı modülü (henüz yok — kod yalnızca üretiyor, okumuyor; karşı taraf kodu elle yapıştırmak zorunda).
 - [x] **Manuel Giriş Alanları:** QR kod kamerası olmayan masaüstü kullanıcıları için SDP yapıştırma textbox'ları ekle.
 - [ ] **DHT Entegrasyonu:** Python tarafında hafif bir DHT kütüphanesi (örn. `bittorrent-dht` veya `kademlia` türevi) kullanarak eş bulma ve sinyalleşme mekanizmasını prototiple.
 - [x] **STUN Entegrasyonu:** Pure P2P modunda sadece ücretsiz ve güvenilir genel STUN sunucularını (Google, Cloudflare) kullanacak şekilde WebRTC yapılandırmasını kısıtla.

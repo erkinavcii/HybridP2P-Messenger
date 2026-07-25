@@ -475,6 +475,32 @@ class MessageStore:
         finally:
             conn.close()
 
+    def get_all_contacts(self) -> list:
+        """Yerel rehberdeki tüm kişileri alfabetik sırayla döndürür."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT * FROM contacts ORDER BY username COLLATE NOCASE ASC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def delete_contact(self, username: str):
+        """Kişiyi yerel rehberden siler.
+
+        NOT: Yalnızca kayıtlı public key'i siler; sohbet geçmişi korunur.
+        Kişi silindikten sonra tekrar bağlanılırsa TOFU doğrulama diyaloğu
+        yeniden gösterilir (ilk bağlantı gibi davranılır).
+        """
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("DELETE FROM contacts WHERE username = ?", (username,))
+            conn.commit()
+        finally:
+            conn.close()
+
     def save_group_message(
         self,
         group_id: str,

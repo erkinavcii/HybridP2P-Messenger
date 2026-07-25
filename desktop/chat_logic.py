@@ -20,19 +20,63 @@ from datetime import datetime
 import flet as ft
 
 from desktop.net_config import _guess_file_type
+from desktop.notify import play_notification
+
+# Tarih ayracı etiketleri için Türkçe ay adları
+_TR_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+              "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
 
 
 class ChatLogicMixin:
 
-    def _fmt_time(self, ts: str) -> str:
+    def _parse_ts(self, ts: str):
+        """ISO timestamp'i yerel saat dilimine çevrilmiş datetime'a dönüştürür (yoksa None)."""
         try:
             ts_norm = ts.replace("Z", "+00:00").replace(" ", "T")
             dt = datetime.fromisoformat(ts_norm)
             if dt.tzinfo is None:
                 from datetime import timezone
                 dt = dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone().strftime("%H:%M")
-        except: return ts[:5] if ts else ""
+            return dt.astimezone()
+        except Exception:
+            return None
+
+    def _fmt_time(self, ts: str) -> str:
+        dt = self._parse_ts(ts)
+        if dt is None:
+            return ts[:5] if ts else ""
+        return dt.strftime("%H:%M")
+
+    def _day_key(self, ts: str):
+        """Mesajın yerel takvim gününü döndürür (ayraç karşılaştırması için)."""
+        dt = self._parse_ts(ts)
+        return dt.date() if dt else None
+
+    def _fmt_day_label(self, ts: str) -> str:
+        """Tarih ayracı etiketi: "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025"."""
+        dt = self._parse_ts(ts)
+        if dt is None:
+            return ""
+        today = datetime.now().astimezone().date()
+        d = dt.date()
+        delta = (today - d).days
+        if delta == 0:
+            return "Bugün"
+        if delta == 1:
+            return "Dün"
+        if d.year == today.year:
+            return f"{d.day} {_TR_MONTHS[d.month - 1]}"
+        return f"{d.day} {_TR_MONTHS[d.month - 1]} {d.year}"
+
+    def _append_day_separator_if_needed(self, ts: str):
+        """Sohbetteki son baloncuktan farklı bir güne geçildiyse tarih ayracı ekler."""
+        day = self._day_key(ts)
+        if day is None:
+            return
+        if getattr(self, "_last_chat_day", None) == day:
+            return
+        self._last_chat_day = day
+        self.chat_list.controls.append(self.create_date_separator(self._fmt_day_label(ts)))
 
     def add_message_to_chat(self, sender: str, text: str, is_mine: bool,
                              time_str: str = "", save: bool = True,
@@ -50,6 +94,7 @@ class ChatLogicMixin:
         else:
             bubble = self.create_message_bubble(sender, text, display_ts, is_mine, is_read=is_read)
 
+        self._append_day_separator_if_needed(raw_ts)
         self.chat_list.controls.append(bubble)
 
         if save and self.state["recipient"] and self.state["store"] and not view_once:
@@ -66,10 +111,12 @@ class ChatLogicMixin:
         from datetime import timezone
         if not time_str:
             time_str = datetime.now(timezone.utc).isoformat()
+        raw_ts = time_str
         time_str = self._fmt_time(time_str)
 
         bubble = self.create_file_bubble(sender, file_uuid, original_name,
                                      file_type, time_str, is_mine, view_once)
+        self._append_day_separator_if_needed(raw_ts)
         self.chat_list.controls.append(bubble)
         try: self.page.update()
         except: pass
@@ -81,9 +128,16 @@ class ChatLogicMixin:
         try: self.page.update()
         except: pass
 
+    def _notify_incoming(self):
+        """Gelen mesaj/dosya için bildirim sesi. Aktif arama sırasında çalınmaz."""
+        if self.state.get("call_state") in ("ringing", "calling", "connected"):
+            return
+        play_notification()
+
     def _on_incoming_message(self, sender: str, plaintext: str, timestamp: str = "",
                               view_once: bool = False, encrypted_payload: str = ""):
         def _update():
+            self._notify_incoming()
             if self.state["recipient"] and sender == self.state["recipient"]:
                 self.add_message_to_chat(sender, plaintext, is_mine=False,
                                      time_str=timestamp, save=True,
@@ -104,6 +158,7 @@ class ChatLogicMixin:
     def _on_incoming_file(self, sender: str, file_uuid: str, original_name: str,
                            file_type: str, timestamp: str, view_once: bool):
         def _update():
+            self._notify_incoming()
             if self.state["recipient"] and sender == self.state["recipient"]:
                 self.add_file_to_chat(sender, file_uuid, original_name,
                                   file_type, is_mine=False, time_str=timestamp,
@@ -116,7 +171,10 @@ class ChatLogicMixin:
     def load_history_to_chat(self):
         if not self.state["recipient"] or not self.state["store"]: return
         self.chat_list.controls.clear()
+        # Sohbet sıfırdan çiziliyor — tarih ayracı takibi de sıfırlanmalı
+        self._last_chat_day = None
         for m in self.state["store"].get_messages(self.state["recipient"]):
+            self._append_day_separator_if_needed(m["timestamp"])
             if m["msg_type"] == "system":
                 self.chat_list.controls.append(self.create_system_bubble(m["content"]))
             else:

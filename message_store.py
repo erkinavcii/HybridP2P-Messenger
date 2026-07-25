@@ -108,6 +108,14 @@ class MessageStore:
         except sqlite3.OperationalError:
             pass
 
+        # 1:1 mesaj imzalama — kişiden en az bir kez geçerli imza görüldüyse 1 olur.
+        # Bu bayrak "downgrade" saldırısını engeller: imza atmayı bilen bir kişiden
+        # sonradan imzasız mesaj gelirse (araya giren imzayı sildiyse) reddedilir.
+        try:
+            cursor.execute("ALTER TABLE contacts ADD COLUMN signs_messages INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
         conn.close()
 
@@ -472,6 +480,32 @@ class MessageStore:
                 "SELECT * FROM contacts WHERE username = ?", (username,)
             ).fetchone()
             return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def contact_signs_messages(self, username: str) -> bool:
+        """Bu kişiden daha önce geçerli imzalı bir mesaj görüldü mü?
+
+        True dönüyorsa, aynı kişiden gelen imzasız mesajlar reddedilmelidir —
+        aksi halde araya giren biri imzayı silerek doğrulamayı atlatabilirdi.
+        """
+        conn = sqlite3.connect(self.db_path)
+        try:
+            row = conn.execute(
+                "SELECT signs_messages FROM contacts WHERE username = ?", (username,)
+            ).fetchone()
+            return bool(row[0]) if row and row[0] is not None else False
+        finally:
+            conn.close()
+
+    def mark_contact_signs_messages(self, username: str):
+        """Kişiyi 'mesajlarını imzalıyor' olarak işaretler (ilk geçerli imzada)."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "UPDATE contacts SET signs_messages = 1 WHERE username = ?", (username,)
+            )
+            conn.commit()
         finally:
             conn.close()
 

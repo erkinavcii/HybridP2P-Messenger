@@ -288,14 +288,17 @@ async def send_ws_fallback(
         recipient = message.get("recipient", "")
         encrypted_payload = message.get("encrypted_payload", "")
         view_once = bool(message.get("view_once", False))
+        # 1:1 mesaj imzası — WS yolundaki ile aynı şekilde aynen taşınır.
+        signature = message.get("signature", "")
         timestamp = message.get("timestamp") or ts
-        
+
         if manager.is_online(recipient):
             await manager.send_to_user(recipient, {
                 "type": "message",
                 "sender": x_username,
                 "encrypted_payload": encrypted_payload,
                 "view_once": view_once,
+                "signature": signature,
                 "timestamp": timestamp,
             })
         else:
@@ -304,7 +307,7 @@ async def send_ws_fallback(
                     """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                        VALUES (?, ?, ?, 'message', ?, ?)""",
                     (x_username, recipient, encrypted_payload,
-                     json.dumps({"view_once": view_once}), timestamp)
+                     json.dumps({"view_once": view_once, "signature": signature}), timestamp)
                 )
                 await db.commit()
                 
@@ -500,6 +503,7 @@ async def fetch_offline_messages(
                 "sender": r["sender"],
                 "encrypted_payload": r["encrypted_payload"],
                 "view_once": extra.get("view_once", False),
+                "signature": extra.get("signature", ""),
                 "timestamp": r["timestamp"],
             })
 

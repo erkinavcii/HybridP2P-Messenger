@@ -94,7 +94,19 @@ All state-modifying or sensitive REST API calls require signature headers to pre
 * **Anti-Spoofing**: The server completely overrides the `sender` field in all incoming WebSocket packet payloads to the authenticated connection username.
 * **Group Broadcast Membership Checks**: The server verifies that the sending username is a registered member of the target group before BroadCasting or queueing any group message.
 
-### 4. Out-of-Band Contact Cards & MITM Detection
+### 4. Message Authenticity — Signed Direct Messages (RSA-PSS)
+
+E2EE guarantees **confidentiality** (nobody can read the message) but not **authenticity** (that the message really came from who it claims). Without signatures, a compromised relay server could inject a fabricated message that appears to come from one of your contacts — it could not read your conversation, but it could put words in someone's mouth.
+
+Direct (1:1) messages are therefore signed with the sender's RSA private key, using the same RSA-PSS scheme already applied to group messages:
+
+* **Signed data**: `{sender}:{recipient}:{encrypted_payload}` — the recipient is included so a hostile server cannot re-target the same signed message at a different user.
+* **Verification**: the receiving client resolves the sender's public key (from the local contacts store, or fetching and pinning it on first use) and verifies before decrypting. A message carrying an **invalid** signature is discarded and a warning is written into the chat history.
+* **Downgrade protection (trust-on-first-signature)**: the first time a valid signature is seen from a contact, that contact is flagged as signing (`contacts.signs_messages`). From then on, an **unsigned** message from that contact is rejected as well. Without this, an attacker could simply strip the signature to bypass verification.
+* **Backwards compatibility**: contacts that have never sent a signature (older desktop builds and the current web client) are still accepted unsigned, so existing conversations keep working. Once every client signs, this fallback can be removed and verification made mandatory.
+* Verification is applied on **both** delivery paths — live WebSocket and the offline/REST queue — so an attacker cannot bypass it by sending while the recipient is offline.
+
+### 5. Out-of-Band Contact Cards & MITM Detection
 Users can share their **Contact Cards** (containing username, public key PEM, and a SHA-256 fingerprint) out-of-band:
 * **Contact Cards**: Clicking the **Kimliği Kopyala (Contact Card)** button copies a structured JSON contact card. Pasting this JSON directly into the recipient field imports and saves the contact locally.
 * **First-Time Connection Alert (TOFU)**: If a user connects to a recipient for the first time without their contact card, the client fetches the public key from the server and prompts the user with a dialog to verify the key fingerprint.

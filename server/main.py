@@ -115,6 +115,7 @@ async def _deliver_pending_messages(username: str):
                     "sender": row["sender"],
                     "encrypted_payload": row["encrypted_payload"],
                     "view_once": extra.get("view_once", False),
+                    "signature": extra.get("signature", ""),
                     "timestamp": row["timestamp"],
                 })
             elif row_type == "file_message":
@@ -242,6 +243,9 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 sender = username
                 encrypted_payload = message.get("encrypted_payload", "")
                 view_once = bool(message.get("view_once", False))
+                # 1:1 mesaj imzası (RSA-PSS). Eski istemciler göndermez → boş string.
+                # Sunucu imzayı doğrulamaz, sadece aynen taşır (zero-knowledge).
+                signature = message.get("signature", "")
                 timestamp = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
 
                 if manager.is_online(recipient):
@@ -250,6 +254,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                         "sender": sender,
                         "encrypted_payload": encrypted_payload,
                         "view_once": view_once,
+                        "signature": signature,
                         "timestamp": timestamp,
                     })
                     await manager.send_to_user(sender, {
@@ -264,7 +269,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                                (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
                                VALUES (?, ?, ?, 'message', ?, ?)""",
                             (sender, recipient, encrypted_payload,
-                             json.dumps({"view_once": view_once}),
+                             json.dumps({"view_once": view_once, "signature": signature}),
                              timestamp)
                         )
                         await db.commit()

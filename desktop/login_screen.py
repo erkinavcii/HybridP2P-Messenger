@@ -5,10 +5,13 @@ on_login_click (iç içe do_login/login_success_ui/login_failed_ui/background_sy
 ile birlikte).
 """
 
+import re
 import threading
 
 from message_store import MessageStore
 from desktop.net_config import update_server_urls
+
+USERNAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 
 
 class LoginScreenMixin:
@@ -25,8 +28,11 @@ class LoginScreenMixin:
 
     def on_login_click(self, e):
         username = self.username_field.value.strip().lower()
-        if not username or len(username) < 2:
-            self.username_field.error_text = "At least 2 characters required!"
+        # Sunucudaki kuralın aynısı (server/routes/users.py USERNAME_RE).
+        # Burada ayrıca kontrol etmek zorunlu: kullanıcı adı anahtar klasörünün
+        # adı olarak diske yazılıyor ve bu, sunucuya gitmeden ÖNCE oluyor.
+        if not USERNAME_RE.fullmatch(username):
+            self.username_field.error_text = "2-32 karakter; yalnızca a-z, 0-9 ve _"
             self.page.update()
             return
         self.username_field.error_text = None

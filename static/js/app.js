@@ -512,6 +512,11 @@ if (loginBtn) {
     loginBtn.addEventListener("click", async () => {
         const username = usernameInput.value.trim().toLowerCase();
         if (!username) return;
+        // Sunucudaki kuralın aynısı (server/routes/users.py USERNAME_RE)
+        if (!/^[a-z0-9_]{2,32}$/.test(username)) {
+            alert("Geçersiz kullanıcı adı: 2-32 karakter, yalnızca a-z, 0-9 ve _ kullanılabilir.");
+            return;
+        }
         
         loginBtn.disabled = true;
         loginBtn.innerHTML = `<div class="spinner"></div> Signing In...`;

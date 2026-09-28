@@ -90,6 +90,9 @@ All state-modifying or sensitive REST API calls require signature headers to pre
   ```
   The server hashes the incoming request body, concatenates it with the method, path, and timestamp, and verifies the signature against the database public key.
 
+### Username Format
+Usernames must match `^[a-z0-9_]{2,32}$` (lowercase letters, digits, underscore; 2–32 chars). The rule is enforced by the server at `/api/register` and repeated in both clients for immediate feedback. The desktop check is mandatory on its own, not just cosmetic: the username becomes the local key directory name (`~/.hybridp2p_messenger/{username}/`) *before* the server is contacted, so an unchecked name could write key material under an arbitrary path or leak pasted secrets into a folder name.
+
 ### 3. Server-Side Sender & Group Broadcast Enforcement
 * **Anti-Spoofing**: The server completely overrides the `sender` field in all incoming WebSocket packet payloads to the authenticated connection username.
 * **Group Broadcast Membership Checks**: The server verifies that the sending username is a registered member of the target group before BroadCasting or queueing any group message.

@@ -1,4 +1,5 @@
 import base64
+import re
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, Header
 from pydantic import BaseModel
@@ -9,6 +10,12 @@ from server.websocket_manager import manager
 from server.limiter import limiter
 
 router = APIRouter()
+
+# Kullanıcı adı kuralı: küçük harf, rakam, alt çizgi; 2-32 karakter.
+# Kullanıcı adı istemcide klasör adı, URL yolu (/ws/{username}) ve imzalanan
+# veri parçası olarak kullanıldığı için serbest metin kabul edilmez.
+# İstemciler aynı kuralı UX için tekrarlar ama bağlayıcı olan buradaki kontroldür.
+USERNAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 
 class UserRegisterRequest(BaseModel):
     """Kullanıcı kayıt isteği — username, public key PEM, timestamp ve imza."""
@@ -24,6 +31,12 @@ async def register_user(request: Request, req: UserRegisterRequest):
     """
     Yeni kullanıcı kaydeder veya mevcut kullanıcının public key'ini günceller.
     """
+    if not USERNAME_RE.fullmatch(req.username):
+        raise HTTPException(
+            status_code=400,
+            detail="Geçersiz kullanıcı adı: 2-32 karakter, yalnızca küçük harf, rakam ve alt çizgi (_).",
+        )
+
     try:
         req_dt = datetime.fromisoformat(req.timestamp.replace("Z", "+00:00"))
         if req_dt.tzinfo is None:

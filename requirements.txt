@@ -10,7 +10,7 @@ aiosqlite>=0.20.0
 cryptography>=43.0.0
 
 # Frontend (İstemci Arayüzü)
-flet>=0.25.0
+flet>=0.85,<0.86  # kod 0.85 API'sine bağlı (ft.Button, ft.TabBar); bilinçli güncelleme gerekir
 
 # Ağ İletişimi
 websockets>=13.0

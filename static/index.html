@@ -18,6 +18,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="./css/styles.css">
+    <script>
+        try {
+            var p = JSON.parse(localStorage.getItem("hybridp2p_prefs") || "{}");
+            document.documentElement.dataset.theme = p.theme === "light" ? "light" : "dark";
+        } catch (e) { document.documentElement.dataset.theme = "dark"; }
+    </script>
 </head>
 <body>
 
@@ -54,7 +60,7 @@
                     <div id="import-key-section" class="input-group hidden">
                         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
                             <label for="import-key-file" style="font-size: 12px; font-weight: bold; text-transform: uppercase;">Or Upload Backup File (.txt / .pem)</label>
-                            <input type="file" id="import-key-file" accept=".pem,.txt" style="font-size: 12px; color: var(--text-muted); background: #09090b; padding: 6px; border: 1px dashed var(--border-color); border-radius: 4px; cursor: pointer;">
+                            <input type="file" id="import-key-file" accept=".pem,.txt" style="font-size: 12px; color: var(--text-muted); background: var(--surface-deep); padding: 6px; border: 1px dashed var(--border-color); border-radius: 4px; cursor: pointer;">
                         </div>
                         
                         <label for="private-key-input">Private Key PEM</label>
@@ -97,6 +103,12 @@
                         </button>
                         <button id="pure-p2p-btn" class="action-icon-btn" title="Pure P2P (Sunucusuz Bağlantı)">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                        </button>
+                        <button id="theme-toggle-btn" class="action-icon-btn" title="Tema değiştir (açık / koyu)">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                        </button>
+                        <button id="sound-toggle-btn" class="action-icon-btn" title="Bildirim sesi">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
                         </button>
                         <button id="logout-btn" class="action-icon-btn" title="Sign Out">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
@@ -173,7 +185,7 @@
                                 🔑
                             </button>
                             <!-- Leave Group -->
-                            <button id="leave-group-btn" class="action-icon-btn hidden" title="Leave Group" style="color: #ef4444;">
+                            <button id="leave-group-btn" class="action-icon-btn hidden" title="Leave Group" style="color: var(--danger);">
                                 ✕
                             </button>
                         </div>
@@ -202,7 +214,7 @@
                                 <span id="upload-status-text">Encrypting and uploading...</span>
                                 <span id="upload-percentage-text">0%</span>
                             </div>
-                            <div style="width: 100%; height: 4px; background-color: #27272a; border-radius: 2px; overflow: hidden;">
+                            <div style="width: 100%; height: 4px; background-color: var(--surface-alt); border-radius: 2px; overflow: hidden;">
                                 <div id="upload-progress-bar" style="width: 0%; height: 100%; background-color: var(--accent-color); transition: width 0.2s;"></div>
                             </div>
                         </div>
@@ -210,7 +222,7 @@
                         <!-- Controls Row -->
                         <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
                             <input type="file" id="file-input" class="hidden">
-                            <button id="attach-btn" class="action-icon-btn" style="padding: 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: #09090b; border: 1px solid var(--border-color);" title="Attach file (Max 10MB)">
+                            <button id="attach-btn" class="action-icon-btn" style="padding: 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: var(--surface-deep); border: 1px solid var(--border-color);" title="Attach file (Max 10MB)">
                                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                 </svg>
@@ -323,7 +335,7 @@
             
             <!-- Tab Headers -->
             <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
-                <button id="p2p-tab-caller" class="tab-btn active" style="flex: 1; padding: 8px; background: transparent; border: none; color: #fff; border-bottom: 2px solid var(--accent-color); font-weight: 600; cursor: pointer;">Arama Başlat (Caller)</button>
+                <button id="p2p-tab-caller" class="tab-btn active" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-color); border-bottom: 2px solid var(--accent-color); font-weight: 600; cursor: pointer;">Arama Başlat (Caller)</button>
                 <button id="p2p-tab-callee" class="tab-btn" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-muted); border-bottom: 2px solid transparent; font-weight: 600; cursor: pointer;">Aramaya Cevap Ver (Callee)</button>
             </div>
 
@@ -331,7 +343,7 @@
             <div id="p2p-content-caller" class="tab-content">
                 <div class="input-group" style="margin-bottom: 10px;">
                     <label for="p2p-call-type">Görüşme Tipi</label>
-                    <select id="p2p-call-type" class="input-control" style="background-color: #09090b; border: 1px solid var(--border-color); color: white; padding: 10px; border-radius: 4px; width: 100%;">
+                    <select id="p2p-call-type" class="input-control" style="background-color: var(--surface-deep); border: 1px solid var(--border-color); color: var(--text-color); padding: 10px; border-radius: 4px; width: 100%;">
                         <option value="audio">🎙️ Sesli Arama (Audio)</option>
                         <option value="video">📹 Görüntülü Arama (Video)</option>
                     </select>
@@ -345,13 +357,13 @@
                 
                 <div class="input-group" style="margin-bottom: 8px;">
                     <label for="p2p-offer-code">Sizin Teklifiniz (Offer Kodu)</label>
-                    <textarea id="p2p-offer-code" class="input-control" rows="4" readonly placeholder="Burada kod üretilecek..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                    <textarea id="p2p-offer-code" class="input-control" rows="4" readonly placeholder="Burada kod üretilecek..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
                 <button id="p2p-copy-offer-btn" class="btn" style="background-color: var(--border-color); margin-bottom: 15px;" disabled>Teklifi Kopyala</button>
 
                 <div class="input-group" style="margin-bottom: 8px;">
                     <label for="p2p-caller-answer-code">2. Karşı Tarafın Cevabı (Answer Kodu)</label>
-                    <textarea id="p2p-caller-answer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Answer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                    <textarea id="p2p-caller-answer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Answer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
                 <button id="p2p-connect-btn" class="btn" style="background-color: var(--accent-color);" disabled>3. Bağlan ve Görüşmeyi Başlat</button>
             </div>
@@ -360,7 +372,7 @@
             <div id="p2p-content-callee" class="tab-content hidden">
                 <div class="input-group" style="margin-bottom: 10px;">
                     <label for="p2p-callee-offer-code">1. Karşı Tarafın Teklifi (Offer Kodu)</label>
-                    <textarea id="p2p-callee-offer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Offer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                    <textarea id="p2p-callee-offer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Offer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
                 <button id="p2p-gen-answer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">2. Kabul Et ve Cevap (Answer) Üret</button>
                 
@@ -371,7 +383,7 @@
                 
                 <div class="input-group" style="margin-bottom: 8px;">
                     <label for="p2p-answer-code">Kabul Cevabınız (Answer Kodu)</label>
-                    <textarea id="p2p-answer-code" class="input-control" rows="4" readonly placeholder="Cevap kodunuz burada üretilecek..." style="font-family: monospace; font-size: 10px; background-color: #09090b; color: white; border-color: var(--border-color); resize: none;"></textarea>
+                    <textarea id="p2p-answer-code" class="input-control" rows="4" readonly placeholder="Cevap kodunuz burada üretilecek..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
                 <button id="p2p-copy-answer-btn" class="btn" style="background-color: var(--border-color);" disabled>Cevabı Kopyala</button>
             </div>
@@ -385,15 +397,15 @@
                 <span class="modal-title">Backup Private Key</span>
                 <button id="backup-key-close-btn" class="action-icon-btn">✕</button>
             </div>
-            <p style="font-size: 12px; color: #ef4444; font-weight: 500;">WARNING: Keep this private key secret! Anyone with access to this key can read your messages and impersonate you.</p>
+            <p style="font-size: 12px; color: var(--danger); font-weight: 500;">WARNING: Keep this private key secret! Anyone with access to this key can read your messages and impersonate you.</p>
             <div class="input-group" style="margin-bottom: 12px;">
                 <label for="backup-key-textarea">Your Private Key PEM</label>
-                <textarea id="backup-key-textarea" class="input-control" rows="6" readonly style="font-family: monospace; font-size: 10px; resize: none; background-color: #09090b; color: var(--text-color); border-color: var(--border-color);"></textarea>
+                <textarea id="backup-key-textarea" class="input-control" rows="6" readonly style="font-family: monospace; font-size: 10px; resize: none; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color);"></textarea>
             </div>
             <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-bottom: 12px; text-align: left;">
                 <label style="font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 6px; display: block;">🔒 Encrypt Backup with Password (Highly Recommended)</label>
                 <div style="display: flex; gap: 8px;">
-                    <input type="password" id="backup-password-input" class="input-control" placeholder="Choose a password for backup" style="margin-bottom: 0; background-color: #09090b; border: 1px solid var(--border-color); color: white; border-radius: 4px; padding: 10px;">
+                    <input type="password" id="backup-password-input" class="input-control" placeholder="Choose a password for backup" style="margin-bottom: 0; background-color: var(--surface-deep); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 10px;">
                     <button id="backup-key-encrypt-download-btn" class="btn" style="width: auto; padding: 10px 16px; font-size: 13px; white-space: nowrap; background-color: var(--accent-color);">Encrypt & Download</button>
                 </div>
             </div>
@@ -407,16 +419,16 @@
     <div id="view-once-modal" class="modal-overlay">
         <div class="modal" style="max-width: 400px; text-align: center;">
             <div class="modal-header" style="justify-content: center;">
-                <span class="modal-title" style="color: #ef4444; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+                <span class="modal-title" style="color: var(--danger); font-weight: 700; display: flex; align-items: center; gap: 6px;">
                     👁️ View-Once Message
                 </span>
             </div>
-            <div style="background-color: #09090b; border: 1px solid var(--border-color); border-radius: 8px; padding: 24px; margin: 8px 0; font-size: 15px; word-wrap: break-word; color: #ffffff; min-height: 80px; display: flex; align-items: center; justify-content: center; line-height: 1.5;">
+            <div style="background-color: var(--surface-deep); border: 1px solid var(--border-color); border-radius: 8px; padding: 24px; margin: 8px 0; font-size: 15px; word-wrap: break-word; color: var(--text-color); min-height: 80px; display: flex; align-items: center; justify-content: center; line-height: 1.5;">
                 <span id="view-once-modal-content"></span>
             </div>
             <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Closing this window will permanently destroy the message.</p>
             <div class="modal-footer" style="justify-content: center;">
-                <button id="view-once-modal-close-btn" class="btn" style="width: auto; padding: 10px 32px; background-color: #ef4444;">Close & Destroy</button>
+                <button id="view-once-modal-close-btn" class="btn" style="width: auto; padding: 10px 32px; background-color: var(--danger);">Close & Destroy</button>
             </div>
         </div>
     </div>

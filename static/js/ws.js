@@ -27,6 +27,19 @@ import {
     handleCallEnded,
     handleIceCandidate
 } from './voip.js';
+import { playNotification } from './prefs.js';
+
+// Yeni mesaj sesi (görüşme sırasında çalmaz; tercih kapalıysa prefs.js susturur)
+function notifyIncoming() {
+    if (!state.voip.callId) playNotification();
+}
+
+// "yazıyor…" sinyali: yalnızca canlı WebSocket üzerinden, kalıcı değildir
+// (çevrimdışı kuyruğa ya da REST fallback'e düşmez — gecikmiş bir "yazıyor" anlamsız).
+export function sendTyping(recipient, isTyping) {
+    if (!recipient || state.isGroup || !state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+    state.ws.send(JSON.stringify({ type: "typing", recipient, is_typing: !!isTyping }));
+}
 
 // Send read receipt
 export async function sendReadReceipt(recipient, timestamp) {
@@ -216,8 +229,12 @@ export function connectWebSocket() {
                     const exists = state.chats[sender].messages.some(
                         m => m.timestamp === msgObj.timestamp && m.content === msgObj.content
                     );
-                    if (!exists) state.chats[sender].messages.push(msgObj);
+                    if (!exists) {
+                        state.chats[sender].messages.push(msgObj);
+                        notifyIncoming();
+                    }
                     await persistChats();
+                    window.dispatchEvent(new CustomEvent('typing-updated', { detail: { partner: sender, isTyping: false } }));
 
                     if (isActive) {
                         window.dispatchEvent(new CustomEvent('messages-updated'));
@@ -229,6 +246,13 @@ export function connectWebSocket() {
                 }
             }
             
+            // Karşı taraf yazıyor / yazmayı bıraktı
+            else if (data.type === "typing") {
+                window.dispatchEvent(new CustomEvent('typing-updated', {
+                    detail: { partner: data.sender, isTyping: !!data.is_typing }
+                }));
+            }
+
             // E2E Chat File Message received
             else if (data.type === "file_message") {
                 const sender = data.sender;
@@ -253,7 +277,10 @@ export function connectWebSocket() {
                 const exists = state.chats[sender].messages.some(
                     m => m.is_file && m.file_uuid === data.file_uuid
                 );
-                if (!exists) state.chats[sender].messages.push(msgObj);
+                if (!exists) {
+                    state.chats[sender].messages.push(msgObj);
+                    notifyIncoming();
+                }
                 await persistChats();
                 
                 if (isActive) {
@@ -365,6 +392,7 @@ export function connectWebSocket() {
                 if (groupKeyHex) {
                     try {
                         const plaintext = await decryptSymmetricJS(encPayload, groupKeyHex);
+                        if (sender !== state.username) notifyIncoming();
                         
                         const msgObj = {
                             sender: sender,

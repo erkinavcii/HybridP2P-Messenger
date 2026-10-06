@@ -114,7 +114,7 @@
 - [x] **Dosya/Resim Gonderimi** — AES-256-GCM sifreleme, sunucu Zero-Knowledge, inline resim ✅
 - [x] **Sesli Mesaj**: Mikrofon kaydi → Opus/Ogg (~4 KB/sn) → mevcut E2EE dosya yolu; alici hemen indirip yerelde saklar, yeniden baslatinca da dinlenebilir, ephemeral sohbette diske yazilmaz (masaustu) ✅ *(grup sohbetlerinde yok)*
 - [x] **Grup Sohbeti**: Birden fazla aliciya sifreli simetrik mesaj (Shared Group Key + Rekeying) ✅
-- [ ] **Mesaj Duzenleme/Silme**: Gonderilenin her iki taraftan silinmesi
+- [x] **Mesaj Duzenleme/Silme**: Kendi mesajini duzenle / herkesten sil — imzali msg_uid (sunucu kimlikleri degistiremez), imzali message_edit/message_delete, yalnizca yazar (masaustu, birebir) ✅ *(grup ve ephemeral sohbetlerde, msg_uid oncesi eski mesajlarda yok)*
 - [x] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi (masaüstü & web tarafında çift yeşil tik) ✅
 - [x] **Yaziyor... Gostergesi**: Karsi tarafin yazma durumu — birebir sohbetlerde, debounce'lu, yalnizca canli relay (masaustu) ✅
 - [x] **Mesaj Arama**: Yerel gecmiste arama (Sohbet ve Mesaj Gövdesi Arama) ✅

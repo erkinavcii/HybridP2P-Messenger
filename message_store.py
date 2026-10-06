@@ -332,7 +332,9 @@ class MessageStore:
         try:
             rows = conn.execute(
                 """SELECT c.chat_id, c.partner, c.ephemeral, c.changed_at, c.is_group,
-                          m.content as last_message, m.timestamp as last_time,
+                          CASE WHEN m.msg_type = 'voice' THEN '🎤 Sesli mesaj'
+                               ELSE m.content END as last_message,
+                          m.timestamp as last_time,
                           (SELECT COUNT(*) FROM messages WHERE chat_id = c.chat_id AND is_mine = 0 AND is_read = 0) as unread_count
                    FROM chats c
                    LEFT JOIN messages m ON m.id = (
@@ -370,7 +372,7 @@ class MessageStore:
                 """SELECT c.partner, c.is_group, m.sender, m.content, m.timestamp
                    FROM messages m
                    JOIN chats c ON m.chat_id = c.chat_id
-                   WHERE m.content LIKE ? AND m.msg_type NOT IN ('system', 'file')
+                   WHERE m.content LIKE ? AND m.msg_type NOT IN ('system', 'file', 'voice')
                    ORDER BY m.timestamp DESC
                    LIMIT 50""",
                 (f"%{query}%",)

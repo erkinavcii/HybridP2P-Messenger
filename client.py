@@ -19,6 +19,8 @@ import asyncio
 import threading
 
 import flet as ft
+from desktop.theme import C
+from desktop import settings_store
 
 from desktop.bubbles import BubblesMixin
 from desktop.rest_client import RestClientMixin
@@ -48,12 +50,12 @@ class MessengerApp(
         # ── Sayfa Ayarları ────────────────────────────────────────────
         self.page = page
         page.title       = "HybridP2P Messenger"
-        page.theme_mode  = ft.ThemeMode.DARK
         page.window.width  = 480
         page.window.height = 820
         page.padding     = 0
-        page.bgcolor     = "#09090b"
-        page.theme       = ft.Theme(color_scheme_seed="#8b5cf6", font_family="Inter, sans-serif")
+        # Kayıtlı tema tercihi (giriş ekranı dahil her yerde geçerli)
+        C.apply(settings_store.get("theme"))
+        self._apply_page_theme()
 
         # ── Uygulama Durumu ──────────────────────────────────────────
         self.state = {
@@ -82,11 +84,72 @@ class MessengerApp(
             "remote_sdp":        None,
         }
 
+        # Dosya seçici — Flet 0.85'te bir "servis"; yalnızca bir kez oluşturulur
+        # (page.overlay'e eklenmez, tema değişiminde yeniden kurulmaz).
+        self.file_picker = ft.FilePicker()
+
+        self._build_controls()
+
+        # Kullanıcı durumu (online/offline) periyodik kontrol thread'i — tek sefer.
+        # NOT: Orijinalinde de app init'te (giriş öncesi) koşulsuz başlar.
+        threading.Thread(target=self.check_recipient_status_loop, daemon=True, name="status-checker").start()
+
+        self.show_login_screen()
+
+    def _apply_page_theme(self):
+        self.page.theme_mode = ft.ThemeMode.DARK if C.is_dark else ft.ThemeMode.LIGHT
+        self.page.bgcolor = C.bg
+        self.page.theme = ft.Theme(color_scheme_seed=C.accent, font_family="Inter, sans-serif")
+
+    def set_theme(self, name: str):
+        """Temayı değiştirir, tercihi kaydeder ve UI'ı yeni paletle yeniden kurar.
+
+        Widget'lar renklerini kurulurken okuduğu için tüm paylaşılan kontroller
+        _build_controls() ile yeniden oluşturulur, ardından aktif ekran yeniden
+        gösterilir. Uygulama durumu (self.state) korunur.
+        """
+        settings_store.set("theme", name)
+        C.apply(name)
+        self._apply_page_theme()
+
+        # Açık diyaloglar eski paletle kurulmuştu; kapat
+        for ctrl in list(self.page.overlay):
+            if isinstance(ctrl, ft.AlertDialog):
+                ctrl.open = False
+
+        self._build_controls()
+        # Yeni kurulan durum göstergeleri varsayılan ("Offline") değerle gelir;
+        # gerçek bağlantı durumunu geri yükle
+        self.update_connection_status(self.is_ws_connected())
+
+        if not self.state.get("logged_in"):
+            self.show_login_screen()
+        elif self.state.get("recipient"):
+            # Kontroller yeni olduğundan yarım kalmış dosya/tek-görünüm seçimleri sıfırlanır
+            self.state["staged_file"] = None
+            self.state["view_once_mode"] = False
+            if not self.state.get("is_group", False):
+                self.recipient_field.value = self.state["recipient"]
+            self._update_ephemeral_ui()
+            self.load_history_to_chat()
+            self.show_chat_screen()
+        else:
+            self.show_inbox_screen()
+
+    def _build_controls(self):
+        """Paylaşılan tüm UI kontrollerini aktif paletle (C) kurar.
+
+        __init__'te bir kez, tema değişiminde (set_theme) tekrar çağrılır.
+        Burada yalnızca widget oluşturulur; thread başlatma, durum değişikliği
+        veya ekran gösterimi yapılmamalıdır.
+        """
+        page = self.page
+
         # ╔═══════════════════════════════════════════════════════════╗
         # ║                     UI BİLEŞENLERİ                         ║
         # ╚═══════════════════════════════════════════════════════════╝
 
-        self.status_text = ft.Text("Welcome!", size=11, color="#9e9e9e",
+        self.status_text = ft.Text("Welcome!", size=11, color=C.text_secondary,
                                max_lines=2, overflow=ft.TextOverflow.ELLIPSIS)
 
         self.chat_list = ft.ListView(expand=True, spacing=8,
@@ -95,37 +158,34 @@ class MessengerApp(
 
         # Ephemeral toggle (chat seviyesi)
         self.ephemeral_btn = ft.IconButton(
-            icon=ft.Icons.VISIBILITY, icon_color="#8b5cf6", icon_size=20,
+            icon=ft.Icons.VISIBILITY, icon_color=C.accent, icon_size=20,
             tooltip="Switch to Ephemeral Chat", on_click=self.toggle_ephemeral,
         )
 
         # VoIP call icon buttons
         self.call_icon_btn = ft.IconButton(
-            icon=ft.Icons.CALL, icon_color="#8b5cf6", icon_size=20,
+            icon=ft.Icons.CALL, icon_color=C.accent, icon_size=20,
             tooltip="Voice Call (E2EE)", on_click=lambda e: self.start_voip_call(video=False),
             visible=False
         )
         self.video_call_icon_btn = ft.IconButton(
-            icon=ft.Icons.VIDEOCAM, icon_color="#8b5cf6", icon_size=20,
+            icon=ft.Icons.VIDEOCAM, icon_color=C.accent, icon_size=20,
             tooltip="Video Call (E2EE)", on_click=lambda e: self.start_voip_call(video=True),
             visible=False
         )
 
         # View-once toggle (mesaj seviyesi — input yanında)
         self.view_once_msg_btn = ft.IconButton(
-            icon=ft.Icons.VISIBILITY, icon_color="#888888", icon_size=18,
+            icon=ft.Icons.VISIBILITY, icon_color=C.text_muted, icon_size=18,
             tooltip="Send as view-once", on_click=self.toggle_view_once_msg,
         )
 
         # Dosya ekleme butonu
         self.attach_btn = ft.IconButton(
-            icon=ft.Icons.ATTACH_FILE, icon_color="#888888", icon_size=20,
+            icon=ft.Icons.ATTACH_FILE, icon_color=C.text_muted, icon_size=20,
             tooltip="Send File / Image", on_click=self.on_attach_click,
         )
 
-        # Dosya seçici
-        self.file_picker = ft.FilePicker()
-        # page.overlay.append(file_picker)  # Flet 0.23+ treats this as a Service, appending causes Unknown Control
 
         # ╔═══════════════════════════════════════════════════════════╗
         # ║                     GİRİŞ EKRANI                           ║
@@ -135,15 +195,15 @@ class MessengerApp(
             label="Server Address", value="127.0.0.1:8000",
             hint_text="Example: 127.0.0.1:8000 or server.com:8000",
             prefix_icon=ft.Icons.COMPUTER,
-            border_color="#8b5cf6", focused_border_color="#a78bfa",
-            cursor_color="#8b5cf6", text_size=15, height=55,
+            border_color=C.accent, focused_border_color=C.accent_light,
+            cursor_color=C.accent, text_size=15, height=55,
         )
 
         self.username_field = ft.TextField(
             label="Username", hint_text="Example: alice",
             prefix_icon=ft.Icons.PERSON,
-            border_color="#8b5cf6", focused_border_color="#a78bfa",
-            cursor_color="#8b5cf6", text_size=15, height=55,
+            border_color=C.accent, focused_border_color=C.accent_light,
+            cursor_color=C.accent, text_size=15, height=55,
         )
 
         self.import_key_checkbox = ft.Checkbox(
@@ -159,9 +219,9 @@ class MessengerApp(
             min_lines=3,
             max_lines=6,
             visible=False,
-            border_color="#8b5cf6",
-            focused_border_color="#a78bfa",
-            cursor_color="#8b5cf6",
+            border_color=C.accent,
+            focused_border_color=C.accent_light,
+            cursor_color=C.accent,
             text_size=12,
         )
 
@@ -175,7 +235,7 @@ class MessengerApp(
             ),
             on_click=lambda e: self.on_login_click(e),
             style=ft.ButtonStyle(
-                bgcolor="#8b5cf6", color="#ffffff",
+                bgcolor=C.accent, color=C.on_accent,
                 padding=ft.Padding(32, 16, 32, 16),
                 shape=ft.RoundedRectangleBorder(radius=8),
                 elevation=4,
@@ -190,12 +250,12 @@ class MessengerApp(
                     ft.Container(
                         content=ft.Column(
                             controls=[
-                                ft.Icon(ft.Icons.LOCK_OUTLINE, size=64, color="#8b5cf6"),
-                                ft.Text("HybridP2P", size=32, weight=ft.FontWeight.BOLD, color="#ffffff"),
-                                ft.Text("Messenger", size=18, weight=ft.FontWeight.W_300, color="#8b5cf6"),
+                                ft.Icon(ft.Icons.LOCK_OUTLINE, size=64, color=C.accent),
+                                ft.Text("HybridP2P", size=32, weight=ft.FontWeight.BOLD, color=C.text),
+                                ft.Text("Messenger", size=18, weight=ft.FontWeight.W_300, color=C.accent),
                                 ft.Container(height=4),
                                 ft.Text("End-to-End Encrypted Messaging", size=13,
-                                        color="#9e9e9e", text_align=ft.TextAlign.CENTER),
+                                        color=C.text_secondary, text_align=ft.TextAlign.CENTER),
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2,
                         ),
@@ -222,8 +282,8 @@ class MessengerApp(
                     ft.Container(
                         content=ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.SHIELD, size=14, color="#22c55e"),
-                                ft.Text("RSA-4096 + AES-256-GCM + E2EE Dosya", size=11, color="#22c55e"),
+                                ft.Icon(ft.Icons.SHIELD, size=14, color=C.success),
+                                ft.Text("RSA-4096 + AES-256-GCM + E2EE Dosya", size=11, color=C.success),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER, spacing=6,
                         ),
@@ -235,7 +295,7 @@ class MessengerApp(
             expand=True,
             gradient=ft.LinearGradient(
                 begin=ft.Alignment(0, -1), end=ft.Alignment(0, 1),
-                colors=["#09090b", "#18181b", "#09090b"],
+                colors=[C.bg, C.surface, C.bg],
             ),
         )
 
@@ -246,14 +306,14 @@ class MessengerApp(
         self.recipient_field = ft.TextField(
             label="Recipient", hint_text="Example: bob",
             prefix_icon=ft.Icons.PERSON_SEARCH,
-            border_color="#8b5cf6", focused_border_color="#a78bfa",
-            cursor_color="#8b5cf6", text_size=14, height=48, expand=True,
+            border_color=C.accent, focused_border_color=C.accent_light,
+            cursor_color=C.accent, text_size=14, height=48, expand=True,
         )
 
         self.message_input = ft.TextField(
             hint_text="Type your message...",
-            border_color="#3f3f46", focused_border_color="#8b5cf6",
-            cursor_color="#8b5cf6", text_size=14,
+            border_color=C.border, focused_border_color=C.accent,
+            cursor_color=C.accent, text_size=14,
             min_lines=1, max_lines=3, expand=True,
             # Normal kullanımda sunucu sınırına (256 KB) asla yaklaşılmasın:
             # 8000 karakter şifrelenip base64'lenince ~30 KB eder.
@@ -265,17 +325,17 @@ class MessengerApp(
         )
 
         # "yazıyor…" göstergesi (sohbet başlığında, alıcı durumunun altında)
-        self.typing_text = ft.Text("yazıyor…", size=10, color="#a78bfa",
+        self.typing_text = ft.Text("yazıyor…", size=10, color=C.accent_light,
                                    italic=True, visible=False)
 
-        self.username_text = ft.Text("", size=11, color="#9e9e9e")
-        self.status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ef4444")
-        self.status_label = ft.Text("Server: Offline", size=10, color="#ef4444", weight=ft.FontWeight.BOLD)
+        self.username_text = ft.Text("", size=11, color=C.text_secondary)
+        self.status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=C.danger)
+        self.status_label = ft.Text("Server: Offline", size=10, color=C.danger, weight=ft.FontWeight.BOLD)
 
         self.username_subtitle = ft.Row(
             controls=[
                 self.username_text,
-                ft.Text("|", size=10, color="#3f3f46"),
+                ft.Text("|", size=10, color=C.border),
                 self.status_dot,
                 self.status_label
             ],
@@ -283,8 +343,8 @@ class MessengerApp(
             vertical_alignment=ft.CrossAxisAlignment.CENTER
         )
 
-        self.recipient_status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ef4444")
-        self.recipient_status_label = ft.Text("Offline", size=10, color="#ef4444", weight=ft.FontWeight.BOLD)
+        self.recipient_status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=C.danger)
+        self.recipient_status_label = ft.Text("Offline", size=10, color=C.danger, weight=ft.FontWeight.BOLD)
 
         self.recipient_status_row = ft.Row(
             controls=[
@@ -296,17 +356,13 @@ class MessengerApp(
             visible=False
         )
 
-        # Kullanıcı durumu (online/offline) periyodik kontrol thread'i.
-        # NOT: Orijinalinde de app init'te (giriş öncesi) koşulsuz başlar.
-        threading.Thread(target=self.check_recipient_status_loop, daemon=True, name="status-checker").start()
-
-        self.chat_title_text = ft.Text("No active chat", size=16, weight=ft.FontWeight.BOLD, color="#ffffff")
+        self.chat_title_text = ft.Text("No active chat", size=16, weight=ft.FontWeight.BOLD, color=C.text)
         self.inbox_list = ft.ListView(expand=True, spacing=4, padding=8)
 
         # Define a single floating action button
         self.fab = ft.FloatingActionButton(
             icon=ft.Icons.CHAT,
-            bgcolor="#8b5cf6",
+            bgcolor=C.accent,
             on_click=lambda e: self.open_new_chat_dialog(e, 0),
             tooltip="Start New Chat / Group",
             visible=False,
@@ -316,9 +372,9 @@ class MessengerApp(
         self.search_field = ft.TextField(
             hint_text="Search chats and messages...",
             prefix_icon=ft.Icons.SEARCH,
-            border_color="#27272a",
-            focused_border_color="#8b5cf6",
-            cursor_color="#8b5cf6",
+            border_color=C.surface_alt,
+            focused_border_color=C.accent,
+            cursor_color=C.accent,
             height=38,
             text_size=13,
             content_padding=ft.Padding(10, 0, 10, 0),
@@ -332,65 +388,65 @@ class MessengerApp(
                     ft.Container(
                         content=ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.LOCK, size=20, color="#8b5cf6"),
+                                ft.Icon(ft.Icons.LOCK, size=20, color=C.accent),
                                 ft.Column(
                                     controls=[
                                         ft.Text("Chats", size=18,
-                                                 weight=ft.FontWeight.BOLD, color="#ffffff"),
+                                                 weight=ft.FontWeight.BOLD, color=C.text),
                                         self.username_subtitle,
                                     ],
                                     spacing=0, tight=True,
                                 ),
                                 ft.Container(expand=True),
                                 ft.IconButton(
-                                    icon=ft.Icons.GROUP, icon_color="#8b5cf6",
+                                    icon=ft.Icons.GROUP, icon_color=C.accent,
                                     icon_size=20, tooltip="Group Management",
                                     on_click=lambda e: self.open_new_chat_dialog(e, default_tab_index=1),
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.CONTACTS, icon_color="#8b5cf6",
+                                    icon=ft.Icons.CONTACTS, icon_color=C.accent,
                                     icon_size=20, tooltip="Kişi Rehberi",
                                     on_click=self.open_contacts_dialog,
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.ROUTER, icon_color="#8b5cf6",
+                                    icon=ft.Icons.ROUTER, icon_color=C.accent,
                                     icon_size=20, tooltip="Pure P2P (Sunucusuz Arama)",
                                     on_click=self.open_pure_p2p_dialog,
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.REFRESH, icon_color="#8b5cf6",
+                                    icon=ft.Icons.REFRESH, icon_color=C.accent,
                                     icon_size=20, tooltip="Refresh",
                                     on_click=lambda e: self.refresh_inbox_and_messages(),
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.SETTINGS, icon_color="#8b5cf6",
+                                    icon=ft.Icons.SETTINGS, icon_color=C.accent,
                                     icon_size=20, tooltip="Settings",
                                     on_click=self.open_settings_dialog,
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        bgcolor="#18181b",
+                        bgcolor=C.surface,
                         padding=ft.Padding(16, 10, 16, 10),
-                        border=ft.Border(bottom=ft.BorderSide(1, "#27272a")),
+                        border=ft.Border(bottom=ft.BorderSide(1, C.surface_alt)),
                     ),
 
                     # Search Bar
                     ft.Container(
                         content=self.search_field,
                         padding=ft.Padding(12, 6, 12, 6),
-                        bgcolor="#18181b",
-                        border=ft.Border(bottom=ft.BorderSide(1, "#27272a")),
+                        bgcolor=C.surface,
+                        border=ft.Border(bottom=ft.BorderSide(1, C.surface_alt)),
                     ),
 
                     # Chat List
-                    ft.Container(content=self.inbox_list, expand=True, bgcolor="#09090b"),
+                    ft.Container(content=self.inbox_list, expand=True, bgcolor=C.bg),
 
                     # Durum çubuğu
                     ft.Container(
                         content=self.status_text,
                         padding=ft.Padding(16, 4, 16, 4),
-                        bgcolor="#18181b",
+                        bgcolor=C.surface,
                     ),
                 ],
                 spacing=0, expand=True,
@@ -399,19 +455,19 @@ class MessengerApp(
         )
 
         # staged file controls
-        self.staged_file_name_text = ft.Text("", size=12, color="#ffffff", weight=ft.FontWeight.BOLD)
+        self.staged_file_name_text = ft.Text("", size=12, color=C.text, weight=ft.FontWeight.BOLD)
 
-        self.upload_progress = ft.ProgressBar(color="#8b5cf6", height=2, visible=False)
+        self.upload_progress = ft.ProgressBar(color=C.accent, height=2, visible=False)
 
         self.staged_file_container = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.ATTACH_FILE, color="#8b5cf6", size=16),
+                    ft.Icon(ft.Icons.ATTACH_FILE, color=C.accent, size=16),
                     self.staged_file_name_text,
                     ft.Container(expand=True),
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
-                        icon_color="#ef4444",
+                        icon_color=C.danger,
                         icon_size=14,
                         on_click=self.remove_staged_file,
                         tooltip="Remove file",
@@ -420,7 +476,7 @@ class MessengerApp(
                 spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            bgcolor="#27272a",
+            bgcolor=C.surface_alt,
             padding=ft.Padding(8, 4, 8, 4),
             border_radius=6,
             visible=False,
@@ -434,7 +490,7 @@ class MessengerApp(
                         content=ft.Row(
                             controls=[
                                 ft.IconButton(
-                                    icon=ft.Icons.ARROW_BACK, icon_color="#ffffff",
+                                    icon=ft.Icons.ARROW_BACK, icon_color=C.text,
                                     icon_size=20, on_click=lambda e: self.show_inbox_screen(),
                                 ),
                                 ft.Column(
@@ -450,31 +506,31 @@ class MessengerApp(
                                 self.call_icon_btn,
                                 self.video_call_icon_btn,
                                 ft.IconButton(
-                                    icon=ft.Icons.COPY, icon_color="#8b5cf6",
+                                    icon=ft.Icons.COPY, icon_color=C.accent,
                                     icon_size=20, tooltip="Copy Contact Card",
                                     on_click=self.copy_public_key,
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.REFRESH, icon_color="#8b5cf6",
+                                    icon=ft.Icons.REFRESH, icon_color=C.accent,
                                     icon_size=20, tooltip="Fetch Offline Messages",
                                     on_click=lambda e: threading.Thread(target=self.fetch_offline_messages, daemon=True).start(),
                                 ),
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        bgcolor="#18181b",
+                        bgcolor=C.surface,
                         padding=ft.Padding(16, 10, 16, 10),
-                        border=ft.Border(bottom=ft.BorderSide(1, "#27272a")),
+                        border=ft.Border(bottom=ft.BorderSide(1, C.surface_alt)),
                     ),
 
                     # Chat listesi
-                    ft.Container(content=self.chat_list, expand=True, bgcolor="#09090b"),
+                    ft.Container(content=self.chat_list, expand=True, bgcolor=C.bg),
 
                     # Durum çubuğu
                     ft.Container(
                         content=self.status_text,
                         padding=ft.Padding(16, 4, 16, 4),
-                        bgcolor="#18181b",
+                        bgcolor=C.surface,
                     ),
 
                     # Mesaj giriş alanı — view-once + attach + send
@@ -489,7 +545,7 @@ class MessengerApp(
                                         self.attach_btn,
                                         self.message_input,
                                         ft.FloatingActionButton(
-                                            icon=ft.Icons.SEND_ROUNDED, bgcolor="#8b5cf6",
+                                            icon=ft.Icons.SEND_ROUNDED, bgcolor=C.accent,
                                             mini=True, on_click=self.on_send_click,
                                             tooltip="Send (E2EE)",
                                         ),
@@ -501,9 +557,9 @@ class MessengerApp(
                             spacing=6,
                             tight=True,
                         ),
-                        bgcolor="#18181b",
+                        bgcolor=C.surface,
                         padding=ft.Padding(12, 10, 12, 10),
-                        border=ft.Border(top=ft.BorderSide(1, "#27272a")),
+                        border=ft.Border(top=ft.BorderSide(1, C.surface_alt)),
                     ),
                 ],
                 spacing=0, expand=True,
@@ -516,13 +572,13 @@ class MessengerApp(
         # ╚═══════════════════════════════════════════════════════════╝
 
         self.call_avatar = ft.CircleAvatar(
-            content=ft.Text("?", size=40, color="#ffffff"),
+            content=ft.Text("?", size=40, color=C.on_accent),
             radius=60,
-            bgcolor="#8b5cf6",
+            bgcolor=C.accent,
         )
-        self.call_name_text = ft.Text("Username", size=24, weight=ft.FontWeight.BOLD, color="#ffffff")
-        self.call_status_text = ft.Text("Calling...", size=14, color="#a1a1aa")
-        self.call_timer_text = ft.Text("00:00", size=14, color="#8b5cf6", visible=False)
+        self.call_name_text = ft.Text("Username", size=24, weight=ft.FontWeight.BOLD, color=C.text)
+        self.call_status_text = ft.Text("Calling...", size=14, color=C.text_subtle)
+        self.call_timer_text = ft.Text("00:00", size=14, color=C.accent, visible=False)
 
         self.transparent_placeholder = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
         self.local_video_preview = ft.Image(src=self.transparent_placeholder, width=100, height=140, fit="cover", border_radius=8, visible=False, right=10, bottom=10)
@@ -539,22 +595,22 @@ class MessengerApp(
 
         self.mic_btn = ft.IconButton(
             icon=ft.Icons.MIC,
-            icon_color="#ffffff",
-            bgcolor="#27272a",
+            icon_color=C.text,
+            bgcolor=C.surface_alt,
             on_click=lambda e: self.toggle_call_mic(),
             tooltip="Mute Microphone"
         )
         self.cam_btn = ft.IconButton(
             icon=ft.Icons.VIDEOCAM,
-            icon_color="#ffffff",
-            bgcolor="#27272a",
+            icon_color=C.text,
+            bgcolor=C.surface_alt,
             on_click=lambda e: self.toggle_call_cam(),
             tooltip="Toggle Video"
         )
         self.end_btn = ft.IconButton(
             icon=ft.Icons.CALL_END,
-            icon_color="#ffffff",
-            bgcolor="#ef4444",
+            icon_color=C.on_accent,
+            bgcolor=C.danger,
             icon_size=28,
             width=56,
             height=56,
@@ -564,8 +620,8 @@ class MessengerApp(
 
         self.accept_btn = ft.IconButton(
             icon=ft.Icons.CALL,
-            icon_color="#ffffff",
-            bgcolor="#22c55e",
+            icon_color=C.on_accent,
+            bgcolor=C.success,
             icon_size=28,
             width=56,
             height=56,
@@ -574,8 +630,8 @@ class MessengerApp(
         )
         self.decline_btn = ft.IconButton(
             icon=ft.Icons.CALL_END,
-            icon_color="#ffffff",
-            bgcolor="#ef4444",
+            icon_color=C.on_accent,
+            bgcolor=C.danger,
             icon_size=28,
             width=56,
             height=56,
@@ -625,9 +681,9 @@ class MessengerApp(
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        bgcolor="#18181b",
+                        bgcolor=C.surface,
                         border_radius=ft.BorderRadius(bottom_left=24, bottom_right=24, top_left=0, top_right=0),
-                        shadow=ft.BoxShadow(blur_radius=15, color="#000000aa")
+                        shadow=ft.BoxShadow(blur_radius=15, color=C.shadow_strong)
                     ),
                     ft.Container(
                         content=self.video_container,
@@ -639,12 +695,9 @@ class MessengerApp(
                 spacing=0,
                 expand=True
             ),
-            bgcolor="#09090b",
+            bgcolor=C.bg,
             expand=True
         )
-
-        # ── Ekran Geçişleri ──────────────────────────────────────────
-        self.show_login_screen()
 
     def run_on_ui(self, func, *args, **kwargs):
         async def _run():

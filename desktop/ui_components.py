@@ -6,6 +6,7 @@ mixin tarafından çağrılan ortak yardımcılardır.
 """
 
 import flet as ft
+from desktop.theme import C
 
 
 class UiComponentsMixin:
@@ -37,13 +38,13 @@ class UiComponentsMixin:
     def update_connection_status(self, is_connected: bool):
         def _update():
             if is_connected:
-                self.status_dot.bgcolor = "#3b82f6"  # Blue
+                self.status_dot.bgcolor = C.info  # Blue
                 self.status_label.value = "Server: Online"
-                self.status_label.color = "#60a5fa"
+                self.status_label.color = C.info_text
             else:
-                self.status_dot.bgcolor = "#ef4444"  # Red
+                self.status_dot.bgcolor = C.danger  # Red
                 self.status_label.value = "Server: Offline"
-                self.status_label.color = "#ef4444"
+                self.status_label.color = C.danger
             try: self.page.update()
             except: pass
         self.run_on_ui(_update)

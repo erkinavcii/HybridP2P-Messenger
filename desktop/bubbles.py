@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 
 import flet as ft
+from desktop.theme import C
 
 from crypto_utils import decrypt_message, decrypt_bytes
 from desktop.net_config import FILE_ICONS
@@ -20,19 +21,21 @@ from desktop.net_config import FILE_ICONS
 class BubblesMixin:
 
     def create_message_bubble(self, sender: str, text: str, time_str: str, is_mine: bool, is_read: bool = True):
-        bubble_color = "#8b5cf6" if is_mine else "#27272a"
-        text_color   = "#ffffff" if is_mine else "#e0e0e0"
+        bubble_color = C.accent if is_mine else C.surface_alt
+        text_color   = C.on_accent if is_mine else C.text_bubble_other
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
 
         # Build timestamp row containing tick status icons for sender's messages
+        # Kendi baloncuğumuz renkli (accent) zeminde: saat ve tikler de o zemine
+        # göre açık tonlarda olmalı, yoksa gri-üstüne-mor okunmuyor.
         time_row_controls = [
-            ft.Text(time_str, size=10, color="#888888")
+            ft.Text(time_str, size=10, color=C.on_accent_muted if is_mine else C.text_muted)
         ]
         if is_mine:
             tick_icon = ft.Icon(
                 ft.Icons.DONE_ALL if is_read else ft.Icons.DONE,
                 size=14,
-                color="#22c55e" if is_read else "#71717a"
+                color=C.tick_read_on_accent if is_read else C.on_accent_muted
             )
             time_row_controls.append(tick_icon)
 
@@ -49,7 +52,7 @@ class BubblesMixin:
                 ft.Container(
                     content=ft.Column(
                         controls=[
-                            ft.Text(sender, size=11, color="#9e9e9e",
+                            ft.Text(sender, size=11, color=C.text_secondary,
                                     weight=ft.FontWeight.BOLD, visible=not is_mine),
                             ft.Text(text, size=14, color=text_color, selectable=True),
                             time_row,
@@ -64,7 +67,7 @@ class BubblesMixin:
                         bottom_right=14 if is_mine else 4,
                     ),
                     width=300,
-                    shadow=ft.BoxShadow(blur_radius=8, color="#00000033", offset=ft.Offset(0, 2)),
+                    shadow=ft.BoxShadow(blur_radius=8, color=C.shadow, offset=ft.Offset(0, 2)),
                     animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
                 ),
             ],
@@ -77,7 +80,7 @@ class BubblesMixin:
         Tıklanınca içerik diyalogda gösterilir, kapanınca silinir.
         """
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
-        color = "#8b5cf6" if is_mine else "#27272a"
+        color = C.accent if is_mine else C.surface_alt
         bubble_row = None
 
         def on_tap(e):
@@ -90,7 +93,7 @@ class BubblesMixin:
                 except Exception as ex:
                     plaintext = f"[Cozme hatasi: {ex}]"
 
-            content_text = ft.Text(plaintext, size=15, color="#ffffff",
+            content_text = ft.Text(plaintext, size=15, color=C.text,
                                    selectable=True, text_align=ft.TextAlign.CENTER)
 
             has_cleaned = False
@@ -122,12 +125,12 @@ class BubblesMixin:
                         # Header Row (interactive elements inside content to avoid click blocking in title)
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.VISIBILITY, color="#ef4444", size=20),
-                                ft.Text("View-Once Message", size=14, color="#ef4444", weight=ft.FontWeight.BOLD),
+                                ft.Icon(ft.Icons.VISIBILITY, color=C.danger, size=20),
+                                ft.Text("View-Once Message", size=14, color=C.danger, weight=ft.FontWeight.BOLD),
                                 ft.Container(expand=True),
                                 ft.IconButton(
                                     icon=ft.Icons.CLOSE,
-                                    icon_color="#ef4444",
+                                    icon_color=C.danger,
                                     icon_size=18,
                                     on_click=close_dialog,
                                     tooltip="Close",
@@ -136,12 +139,12 @@ class BubblesMixin:
                             spacing=8,
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
-                        ft.Divider(color="#ef444444", height=1),
+                        ft.Divider(color=C.danger_border, height=1),
                         ft.Container(height=10),
                         content_text,
                         ft.Container(height=12),
                         ft.Text("This message will be permanently deleted from the chat once closed.",
-                                size=11, color="#ef4444", text_align=ft.TextAlign.CENTER),
+                                size=11, color=C.danger, text_align=ft.TextAlign.CENTER),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     tight=True,
@@ -151,7 +154,7 @@ class BubblesMixin:
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
                 on_dismiss=lambda e: clean_up(),
-                bgcolor="#18181b",
+                bgcolor=C.surface,
             )
             self.page.overlay.append(dialog)
             dialog.open = True
@@ -165,18 +168,18 @@ class BubblesMixin:
                     content=ft.Container(
                         content=ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.VISIBILITY, color="#ef4444", size=18),
+                                ft.Icon(ft.Icons.VISIBILITY, color=C.danger, size=18),
                                 ft.Column(
                                     controls=[
                                         ft.Text(
                                             "Sender" if not is_mine else "You",
-                                            size=11, color="#9e9e9e", visible=not is_mine
+                                            size=11, color=C.text_secondary, visible=not is_mine
                                         ),
                                         ft.Text("View-once message",
-                                                size=13, color="#ef4444"),
+                                                size=13, color=C.danger),
                                         ft.Text("Tap to view",
-                                                size=10, color="#888888"),
-                                        ft.Text(time_str, size=9, color="#666666"),
+                                                size=10, color=C.text_muted),
+                                        ft.Text(time_str, size=9, color=C.text_faint),
                                     ],
                                     spacing=1, tight=True,
                                 ),
@@ -190,7 +193,7 @@ class BubblesMixin:
                         bottom_left=4 if is_mine else 14,
                         bottom_right=14 if is_mine else 4,
                         ),
-                        border=ft.Border(left=ft.BorderSide(1, "#ef444444"), top=ft.BorderSide(1, "#ef444444"), right=ft.BorderSide(1, "#ef444444"), bottom=ft.BorderSide(1, "#ef444444")),
+                        border=ft.Border(left=ft.BorderSide(1, C.danger_border), top=ft.BorderSide(1, C.danger_border), right=ft.BorderSide(1, C.danger_border), bottom=ft.BorderSide(1, C.danger_border)),
                         width=260,
                     ),
                 ),
@@ -206,12 +209,12 @@ class BubblesMixin:
         Resimler için indirme sonrası thumbnail gösterilir.
         """
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
-        color = "#8b5cf6" if is_mine else "#27272a"
+        color = C.accent if is_mine else C.surface_alt
         icon  = FILE_ICONS.get(file_type, ft.Icons.DESCRIPTION)
         bubble_row = None
 
         # İndirme durumu için durum göstergesi
-        status_text = ft.Text("Download", size=11, color="#a78bfa")
+        status_text = ft.Text("Download", size=11, color=C.accent_light)
         image_display = ft.Column(controls=[], visible=False)
 
         def show_view_once_dialog(content_control, message_text):
@@ -246,12 +249,12 @@ class BubblesMixin:
                         # Header Row
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.VISIBILITY, color="#ef4444", size=20),
-                                ft.Text("View-Once File", size=14, color="#ef4444", weight=ft.FontWeight.BOLD),
+                                ft.Icon(ft.Icons.VISIBILITY, color=C.danger, size=20),
+                                ft.Text("View-Once File", size=14, color=C.danger, weight=ft.FontWeight.BOLD),
                                 ft.Container(expand=True),
                                 ft.IconButton(
                                     icon=ft.Icons.CLOSE,
-                                    icon_color="#ef4444",
+                                    icon_color=C.danger,
                                     icon_size=18,
                                     on_click=close_dialog,
                                     tooltip="Close",
@@ -260,12 +263,12 @@ class BubblesMixin:
                             spacing=8,
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
-                        ft.Divider(color="#ef444444", height=1),
+                        ft.Divider(color=C.danger_border, height=1),
                         ft.Container(height=10),
                         content_control,
                         ft.Container(height=12),
                         ft.Text(message_text,
-                                size=11, color="#ef4444", text_align=ft.TextAlign.CENTER),
+                                size=11, color=C.danger, text_align=ft.TextAlign.CENTER),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     tight=True,
@@ -275,7 +278,7 @@ class BubblesMixin:
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
                 on_dismiss=lambda e: clean_up(),
-                bgcolor="#18181b",
+                bgcolor=C.surface,
             )
             self.page.overlay.append(dialog)
             dialog.open = True
@@ -284,7 +287,7 @@ class BubblesMixin:
         def on_download(e):
             if view_once and is_mine:
                 show_view_once_dialog(
-                    ft.Text(f"Gonderdiginiz dosya: {original_name}", size=14, color="#ffffff"),
+                    ft.Text(f"Gonderdiginiz dosya: {original_name}", size=14, color=C.text),
                     "This message will be permanently deleted from the chat once closed."
                 )
                 return
@@ -318,7 +321,7 @@ class BubblesMixin:
                                 dest.write_bytes(raw)
                                 def _show_file_vo():
                                     show_view_once_dialog(
-                                        ft.Text(f"Dosya indirildi ve kaydedildi:\n{dest.name}", size=13, color="#ffffff", text_align=ft.TextAlign.CENTER),
+                                        ft.Text(f"Dosya indirildi ve kaydedildi:\n{dest.name}", size=13, color=C.text, text_align=ft.TextAlign.CENTER),
                                         "This file has been saved to your local Downloads folder. It will be permanently deleted from the chat once closed."
                                     )
                                 self.run_on_ui(_show_file_vo)
@@ -365,8 +368,8 @@ class BubblesMixin:
         vo_badge = ft.Container(
             content=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.VISIBILITY, size=10, color="#ef4444"),
-                    ft.Text("View-once", size=9, color="#ef4444"),
+                    ft.Icon(ft.Icons.VISIBILITY, size=10, color=C.danger),
+                    ft.Text("View-once", size=9, color=C.danger),
                 ],
                 spacing=2,
             ),
@@ -376,16 +379,16 @@ class BubblesMixin:
         bubble_content = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text(sender, size=11, color="#9e9e9e",
+                    ft.Text(sender, size=11, color=C.text_secondary,
                             weight=ft.FontWeight.BOLD, visible=not is_mine),
                     vo_badge,
                     ft.Row(
                         controls=[
-                            ft.Icon(icon, size=24, color="#a78bfa"),
+                            ft.Icon(icon, size=24, color=C.accent_light),
                             ft.Column(
                                 controls=[
                                     ft.Text(original_name, size=12,
-                                            color="#ffffff", max_lines=1,
+                                            color=C.on_accent if is_mine else C.text, max_lines=1,
                                             overflow=ft.TextOverflow.ELLIPSIS),
                                     status_text,
                                 ],
@@ -393,7 +396,7 @@ class BubblesMixin:
                             ),
                             ft.IconButton(
                                 icon=ft.Icons.DOWNLOAD if not view_once else ft.Icons.VISIBILITY,
-                                icon_color="#ef4444" if view_once else "#a78bfa",
+                                icon_color=C.danger if view_once else C.accent_light,
                                 icon_size=18,
                                 on_click=on_download,
                                 tooltip="View" if view_once else "Download & Decrypt",
@@ -402,7 +405,7 @@ class BubblesMixin:
                         spacing=6,
                     ),
                     image_display,
-                    ft.Text(time_str, size=10, color="#888888"),
+                    ft.Text(time_str, size=10, color=C.text_muted),
                 ],
                 spacing=4, tight=True,
             ),
@@ -413,9 +416,9 @@ class BubblesMixin:
                         bottom_left=4 if is_mine else 14,
                         bottom_right=14 if is_mine else 4,
             ),
-            border=ft.Border(left=ft.BorderSide(1, "#ef444444"), top=ft.BorderSide(1, "#ef444444"), right=ft.BorderSide(1, "#ef444444"), bottom=ft.BorderSide(1, "#ef444444")) if view_once else None,
+            border=ft.Border(left=ft.BorderSide(1, C.danger_border), top=ft.BorderSide(1, C.danger_border), right=ft.BorderSide(1, C.danger_border), bottom=ft.BorderSide(1, C.danger_border)) if view_once else None,
             width=300,
-            shadow=ft.BoxShadow(blur_radius=8, color="#00000033",
+            shadow=ft.BoxShadow(blur_radius=8, color=C.shadow,
                                 offset=ft.Offset(0, 2)),
         )
 
@@ -444,13 +447,13 @@ class BubblesMixin:
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
                 ft.Container(
-                    content=ft.Text(label, size=10, color="#9e9e9e",
+                    content=ft.Text(label, size=10, color=C.text_secondary,
                                     weight=ft.FontWeight.BOLD,
                                     text_align=ft.TextAlign.CENTER),
-                    bgcolor="#1c1c1f",
+                    bgcolor=C.date_sep_bg,
                     padding=ft.Padding(14, 5, 14, 5),
                     border_radius=12,
-                    border=ft.Border(left=ft.BorderSide(1, "#27272a"), top=ft.BorderSide(1, "#27272a"), right=ft.BorderSide(1, "#27272a"), bottom=ft.BorderSide(1, "#27272a")),
+                    border=ft.Border(left=ft.BorderSide(1, C.surface_alt), top=ft.BorderSide(1, C.surface_alt), right=ft.BorderSide(1, C.surface_alt), bottom=ft.BorderSide(1, C.surface_alt)),
                 ),
             ],
         )
@@ -460,12 +463,12 @@ class BubblesMixin:
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
                 ft.Container(
-                    content=ft.Text(text, size=11, color="#aaaaaa",
+                    content=ft.Text(text, size=11, color=C.text_system,
                                     text_align=ft.TextAlign.CENTER),
-                    bgcolor="#27272a",
+                    bgcolor=C.surface_alt,
                     padding=ft.Padding(16, 6, 16, 6),
                     border_radius=8,
-                    border=ft.Border(left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"), right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")),
+                    border=ft.Border(left=ft.BorderSide(1, C.border), top=ft.BorderSide(1, C.border), right=ft.BorderSide(1, C.border), bottom=ft.BorderSide(1, C.border)),
                 ),
             ],
         )

@@ -57,6 +57,9 @@ def server(tmp_path_factory):
     env = dict(os.environ,
                HYBRIDP2P_DB_PATH=str(db_path),
                HYBRIDP2P_MAX_WS_MESSAGE_SIZE=str(MAX_WS_MESSAGE_SIZE),
+               # Oturum çok sayıda kullanıcı kaydeder; 20/dk kayıt sınırı burada kapalı.
+               # Sınırın kendisi test_rate_limit.py'de ayrı bir sunucuyla doğrulanır.
+               HYBRIDP2P_RATE_LIMIT="0",
                PYTHONIOENCODING="utf-8")
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "server.main:app",

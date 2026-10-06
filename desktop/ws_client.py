@@ -103,9 +103,12 @@ class WsClientMixin:
 
                                 uid = self.verified_msg_uid(sender, enc, data.get("msg_uid", ""),
                                                             data.get("uid_sig", ""))
+                                prev = None if vo else self.verified_preview(
+                                    sender, enc, data.get("encrypted_preview", ""), data.get("preview_sig", ""))
                                 try:
                                     pt = decrypt_message(enc, self.state["private_key"])
-                                    self._on_incoming_message(sender, pt, ts, vo, enc, msg_uid=uid)
+                                    self._on_incoming_message(sender, pt, ts, vo, enc, msg_uid=uid,
+                                                              preview=prev)
                                 except Exception as ex:
                                     self._on_incoming_message(sender, f"[Hata:{ex}]", ts)
 
@@ -596,8 +599,40 @@ class WsClientMixin:
             return False
         return store.edit_message(sender, msg_uid, sender, new_text)
 
+    def encrypt_preview_for(self, recipient: str, encrypted_payload: str, preview: dict):
+        """Önizlemeyi alıcıya şifreler ve o mesaja bağlı imzalar → (enc, sig)."""
+        from crypto_utils import encrypt_message
+        from desktop import linkpreview
+        pub = self.state.get("recipient_pub_key") if self.state.get("recipient") == recipient else None
+        pub = pub or self._resolve_sender_public_key(recipient)
+        enc = encrypt_message(json.dumps(preview, ensure_ascii=False), pub)
+        sig = self._sign(linkpreview.signed_data(self.state["username"], recipient, encrypted_payload, enc))
+        return enc, sig
+
+    def verified_preview(self, sender: str, encrypted_payload: str, encrypted_preview: str,
+                         preview_sig: str):
+        """Gelen önizlemeyi doğrular/çözer/temizler → JSON metni veya None.
+
+        İmza önizlemeyi o mesaja bağlar: sunucu bir mesajın önizlemesini başka
+        mesaja takamaz. Geçersizse önizleme atılır, mesajın kendisi etkilenmez.
+        """
+        from crypto_utils import decrypt_message
+        from desktop import linkpreview
+        if not encrypted_preview:
+            return None
+        data = linkpreview.signed_data(sender, self.state["username"], encrypted_payload, encrypted_preview)
+        if not self._verify_from(sender, data, preview_sig):
+            print(f"[LinkPreview] '{sender}' onizleme imzasi gecersiz — atildi.")
+            return None
+        try:
+            clean = linkpreview.sanitize(decrypt_message(encrypted_preview, self.state["private_key"]))
+        except Exception as ex:
+            print(f"[LinkPreview] onizleme cozulemedi: {ex}")
+            return None
+        return json.dumps(clean, ensure_ascii=False) if clean else None
+
     def send_message_via_ws(self, recipient: str, encrypted_payload: str, view_once: bool,
-                            timestamp: str = None, msg_uid: str = None):
+                            timestamp: str = None, msg_uid: str = None, preview: dict = None):
         from datetime import timezone
         if not timestamp:
             timestamp = datetime.now(timezone.utc).isoformat()
@@ -614,6 +649,12 @@ class WsClientMixin:
             msg["msg_uid"] = msg_uid
             msg["uid_sig"] = self._sign(self._uid_sig_data(
                 self.state["username"], recipient, msg_uid, encrypted_payload))
+        if preview:
+            try:
+                msg["encrypted_preview"], msg["preview_sig"] = self.encrypt_preview_for(
+                    recipient, encrypted_payload, preview)
+            except Exception as ex:
+                print(f"[LinkPreview] onizleme eklenemedi, mesaj onizlemesiz gidiyor: {ex}")
         self.send_ws_message_with_fallback(msg)
 
     def send_group_message_via_ws(self, group_id: str, encrypted_payload: str, timestamp: str = None):

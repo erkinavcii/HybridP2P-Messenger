@@ -158,6 +158,17 @@ Bölüm 1'deki not güncellendi, bkz. yukarısı.
 
 ---
 
+## 7. Link Önizleme — Bilinen Sınırlar (2026-10-06)
+
+- **Site gönderenin IP'sini görür:** önizlemeyi gönderen çektiği için kaçınılmaz. Ayarlardan ("Link önizleme") kapatılabilir; Tor modu gelirse çekim de onun üzerinden yapılmalı.
+- **İçerik gönderenin beyanıdır:** imza önizlemenin o kişiden geldiğini kanıtlar, sayfanın gerçekten öyle olduğunu kanıtlamaz. Kötü niyetli bir kişi, linkin gittiği yerden farklı bir başlık veya resim gösterebilir. Kartta alan adı gösterilir; tıklanınca açılan adres mesajdaki URL'dir.
+- **Gecikme:** önizleme hazırlanırken (en fazla ~8 sn) o mesaj ve arkasındaki birebir mesajlar sırayla bekler; sıra bozulmaz, ekranda mesaj hemen görünür.
+- **Düzenleme önizlemeyi kaldırır:** düzenlenen mesajın eski önizlemesi her iki tarafta silinir, yenisi üretilmez.
+- **DNS yeniden bağlama (rebinding):** adres kontrolü ile bağlantı arasında DNS yanıtı değişirse koruma teorik olarak aşılabilir. Pratikte risk düşük; tam çözüm, kontrol edilen IP'ye doğrudan bağlanmaktır.
+- **Kapsam dışı:** gruplar, tek görünümlük mesajlar ve (şimdilik) web istemcisi. Web istemcisi `encrypted_preview` alanını yok sayar.
+
+---
+
 ## 5. Birebir Mesaj İmzalama — Web İstemcisi Paritesi Eksik (2026-07-25)
 
 Masaüstü istemcisi artık birebir mesajları RSA-PSS ile imzalıyor ve doğruluyor (bkz. README "Message Authenticity"). **Web istemcisi (`static/js/`) henüz imzalamıyor.**

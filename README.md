@@ -306,6 +306,18 @@ The server automatically hosts a self-contained, browser-side Zero-Knowledge E2E
   * To log in as your existing desktop user on the Web Client, click **Import existing Private Key (.pem)** on the web login screen, and paste your private key PEM. The client will derive your public key using WebCrypto SubtleCrypto and authenticate securely.
   * You can retrieve your private key from the Web Client anytime by clicking the key icon (`🔑`) in the sidebar header to copy/backup it.
 
+### Running the Tests
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+Each test session starts its own relay server on a free port with a throwaway database and isolated key directory, so it never touches `relay_server.db` or `~/.hybridp2p_messenger/`. No server needs to be running beforehand. The suite covers the crypto primitives, the username rule, WebSocket/REST message size limits, and 1:1 signature verification — including a regression check that the `signature` field survives every server delivery path (live relay, offline queue on reconnect, `/api/fetch_messages`, `/api/send_ws_fallback`).
+
+> The older `test_features.py` / `test_integration.py` in the repo root are manual scripts that hit an already-running server at import time; `pytest.ini` restricts collection to `tests/` so they are not picked up.
+
+### Message Size Limit
+A single WebSocket or REST-fallback message is capped at 256 KB (`HYBRIDP2P_MAX_WS_MESSAGE_SIZE`). Oversized or malformed frames are rejected with an `error` frame and the connection stays open; frames above twice the limit are cut off at the protocol level before being buffered. Files are not affected — they go through `/api/upload_file` with their own 10 MB limit.
+
 ### 6. Hosting Your Own E2EE Server (LAN & Internet Access)
 You can turn your local PC into an active web messenger server for clients on other networks or mobile/browser devices:
 

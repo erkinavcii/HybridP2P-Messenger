@@ -4,7 +4,8 @@ import { state, API_URL } from './state.js';
 import {
     connectWebSocket,
     fetchOfflineMessages,
-    queryUserPresence
+    queryUserPresence,
+    sendTyping
 } from './ws.js';
 import {
     renderInbox,
@@ -35,6 +36,7 @@ import {
     loadChatsFromLocalStorage
 } from './db.js';
 import { initVoipEvents } from './voip.js';
+import { applyTheme, toggleTheme, getPref, setPref } from './prefs.js';
 
 // Initialize VoIP events
 initVoipEvents();
@@ -369,6 +371,9 @@ window.addEventListener("load", async () => {
         if (sessionUser) {
             state.username = sessionUser;
             document.getElementById("my-username").innerText = sessionUser;
+            // Oturum geri yüklenince de sohbet ekranına geç (normal girişle aynı)
+            loginScreen.classList.remove("active");
+            chatScreen.classList.add("active");
             
             const fp = await getFingerprintJS(state.publicKeyPem);
             document.getElementById("my-fingerprint").innerText = fp;
@@ -719,16 +724,73 @@ if (reconnectServerBtn) {
     });
 }
 
+// ── "yazıyor…" sinyali (masaüstüyle aynı zamanlama) ──
+// Yazarken en fazla 3 sn'de bir "yazıyor" gönderilir; 4 sn tuşa basılmazsa,
+// alan boşalırsa ya da mesaj gönderilirse "bıraktı" gönderilir.
+const TYPING_RESEND_MS = 3000;
+const TYPING_IDLE_MS = 4000;
+let typingTarget = null;
+let typingLastSent = 0;
+let typingIdleTimer = null;
+
+function stopTypingSignal() {
+    clearTimeout(typingIdleTimer);
+    if (typingTarget) sendTyping(typingTarget, false);
+    typingTarget = null;
+    typingLastSent = 0;
+}
+
+function onMessageInput() {
+    const text = messageInput.value.trim();
+    if (!text || !state.recipient || state.isGroup) {
+        stopTypingSignal();
+        return;
+    }
+    if (typingTarget && typingTarget !== state.recipient) stopTypingSignal();
+    const now = Date.now();
+    if (now - typingLastSent > TYPING_RESEND_MS) {
+        sendTyping(state.recipient, true);
+        typingTarget = state.recipient;
+        typingLastSent = now;
+    }
+    clearTimeout(typingIdleTimer);
+    typingIdleTimer = setTimeout(stopTypingSignal, TYPING_IDLE_MS);
+}
+
 // Send Message bindings
-if (sendBtn) sendBtn.addEventListener("click", sendMessage);
+if (sendBtn) sendBtn.addEventListener("click", () => { stopTypingSignal(); sendMessage(); });
 if (messageInput) {
+    messageInput.addEventListener("input", onMessageInput);
     messageInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
+            stopTypingSignal();
             sendMessage();
         }
     });
 }
+
+// ── Tema ve bildirim sesi düğmeleri ──
+applyTheme();
+const themeToggleBtn = document.getElementById("theme-toggle-btn");
+const soundToggleBtn = document.getElementById("sound-toggle-btn");
+
+function refreshPrefButtons() {
+    if (themeToggleBtn) {
+        themeToggleBtn.title = getPref("theme") === "light" ? "Koyu temaya geç" : "Açık temaya geç";
+    }
+    if (soundToggleBtn) {
+        const on = !!getPref("sound_enabled");
+        soundToggleBtn.classList.toggle("pref-off", !on);
+        soundToggleBtn.title = on ? "Bildirim sesi açık (kapatmak için tıkla)" : "Bildirim sesi kapalı (açmak için tıkla)";
+    }
+}
+if (themeToggleBtn) themeToggleBtn.addEventListener("click", () => { toggleTheme(); refreshPrefButtons(); });
+if (soundToggleBtn) soundToggleBtn.addEventListener("click", () => {
+    setPref("sound_enabled", !getPref("sound_enabled"));
+    refreshPrefButtons();
+});
+refreshPrefButtons();
 
 // Toggle Ephemeral Mode button
 if (ephemeralBtn) {

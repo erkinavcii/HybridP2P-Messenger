@@ -82,3 +82,11 @@ def test_rest_fallback_enforces_same_limit(server, sender):
     small = json.dumps({"type": "message", "recipient": f"nobody_{uuid.uuid4().hex[:6]}",
                         "encrypted_payload": "küçük"})
     assert sender.post("/api/send_ws_fallback", {"payload": small}).status_code == 200
+
+
+def test_static_client_is_revalidated(server):
+    """Web istemcisi dosyaları no-cache ile sunulmalı (güncellemeden sonra eski JS kalmasın)."""
+    import requests
+    for path in ("/", "/js/app.js"):
+        r = requests.get(server.base + path, timeout=5)
+        assert r.status_code == 200 and r.headers.get("cache-control") == "no-cache"

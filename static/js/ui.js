@@ -107,19 +107,35 @@ export function appendSystemMessage(partner, text) {
     chatBody.scrollTop = chatBody.scrollHeight;
 }
 
+// ── "yazıyor…" göstergesi: karşı tarafın sinyali 6 sn içinde yenilenmezse kaybolur ──
+const TYPING_EXPIRE_MS = 6000;
+let typingTimer = null;
+
+export function showTyping(partner, isTyping) {
+    if (state.recipient !== partner || state.isGroup) return;
+    clearTimeout(typingTimer);
+    statusLabel.classList.toggle("typing-label", !!isTyping);
+    if (isTyping) {
+        statusLabel.dataset.prev = statusLabel.dataset.prev || statusLabel.innerText;
+        statusLabel.innerText = "yazıyor…";
+        typingTimer = setTimeout(() => showTyping(partner, false), TYPING_EXPIRE_MS);
+    } else if (statusLabel.dataset.prev) {
+        statusLabel.innerText = statusLabel.dataset.prev;
+        delete statusLabel.dataset.prev;
+    }
+}
+
 // Set online presence UI
 export function setPresenceUI(partner, isOnline) {
     if (state.recipient !== partner) return;
     const dot = chatPartnerStatus.querySelector(".status-dot");
     
     dot.className = "status-dot";
-    if (isOnline) {
-        dot.classList.add("online");
-        statusLabel.innerText = "Online";
-    } else {
-        dot.classList.add("offline");
-        statusLabel.innerText = "Offline";
-    }
+    dot.classList.add(isOnline ? "online" : "offline");
+    const label = isOnline ? "Online" : "Offline";
+    // "yazıyor…" görünürken durum yazısını ezme; gösterge bitince geri gelsin
+    if (statusLabel.dataset.prev) statusLabel.dataset.prev = label;
+    else statusLabel.innerText = label;
 }
 
 // Render Inbox / Chat Tile List
@@ -268,6 +284,10 @@ export function renderInbox(query = "") {
 
 // Select active chat session
 export async function selectChat(partner, publicKeyPem, isGroup = false) {
+    // Önceki sohbetten kalan "yazıyor…" göstergesini temizle
+    clearTimeout(typingTimer);
+    statusLabel.classList.remove("typing-label");
+    delete statusLabel.dataset.prev;
     state.recipient = partner;
     state.recipientPubKey = publicKeyPem;
     state.isGroup = isGroup;
@@ -343,6 +363,26 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
     }
 }
 
+// ── Tarih ayırıcı ("Bugün" / "Dün" / "6 Ekim 2026"), yerel saate göre ──
+const TR_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz",
+                   "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+
+function dayKey(isoStr) {
+    const d = new Date(isoStr);
+    if (isNaN(d)) return null;
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+export function formatDayLabel(isoStr, now = new Date()) {
+    const d = new Date(isoStr);
+    const key = dayKey(isoStr);
+    if (key === dayKey(now.toISOString())) return "Bugün";
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (key === dayKey(y.toISOString())) return "Dün";
+    const yearPart = d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : "";
+    return `${d.getDate()} ${TR_MONTHS[d.getMonth()]}${yearPart}`;
+}
+
 // Render message balloons in chat window
 export function renderMessages() {
     if (!chatBody) return;
@@ -350,7 +390,22 @@ export function renderMessages() {
     const chatObj = state.chats[state.recipient];
     if (!chatObj) return;
     
-    chatObj.messages.forEach((m, idx) => {
+    // Zaman damgasına göre sırala (geç gelen eski mesaj sona düşmesin). Özgün
+    // indeks korunur: dosya/tek görünümlük düğmeleri chatObj.messages[idx]'e bağlı.
+    const ordered = chatObj.messages
+        .map((m, idx) => ({ m, idx }))
+        .sort((a, b) => ((Date.parse(a.m.timestamp) || 0) - (Date.parse(b.m.timestamp) || 0)) || (a.idx - b.idx));
+
+    let lastDay = null;
+    ordered.forEach(({ m, idx }) => {
+        const day = dayKey(m.timestamp);
+        if (day && day !== lastDay) {
+            const sep = document.createElement("div");
+            sep.className = "date-separator";
+            sep.innerHTML = `<span>${formatDayLabel(m.timestamp)}</span>`;
+            chatBody.appendChild(sep);
+            lastDay = day;
+        }
         const container = document.createElement("div");
         const isMe = m.sender === state.username;
         container.className = `msg-container ${isMe ? 'me' : 'other'}`;
@@ -367,7 +422,7 @@ export function renderMessages() {
                     actionBtnHtml = `<span style="font-size: 11px; color: var(--text-muted);">Opened</span>`;
                 } else {
                     actionBtnHtml = `
-                        <button class="action-icon-btn" onclick="downloadAndDecryptFile('${state.recipient}', ${idx})" style="color: #ef4444;" title="View Once file">
+                        <button class="action-icon-btn" onclick="downloadAndDecryptFile('${state.recipient}', ${idx})" style="color: var(--danger);" title="View Once file">
                             👁️
                         </button>`;
                 }
@@ -391,11 +446,11 @@ export function renderMessages() {
             
             textNodeHtml = `
                 <div style="display: flex; flex-direction: column; gap: 4px;">
-                    ${isViewOnce ? `<div style="display: flex; align-items: center; gap: 4px; font-size: 10px; color: #ef4444; font-weight: bold;">🛡️ View-once file</div>` : ""}
-                    <div style="display: flex; align-items: center; gap: 10px; background-color: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); min-width: 220px;">
+                    ${isViewOnce ? `<div style="display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--danger); font-weight: bold;">🛡️ View-once file</div>` : ""}
+                    <div style="display: flex; align-items: center; gap: 10px; background-color: rgba(0,0,0,0.12); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--subtle-border); min-width: 220px;">
                         <span style="font-size: 24px;">${icon}</span>
                         <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
-                            <span style="font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ffffff;" title="${escapeHtml(m.original_name)}">${escapeHtml(m.original_name)}</span>
+                            <span style="font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: inherit;" title="${escapeHtml(m.original_name)}">${escapeHtml(m.original_name)}</span>
                             <span id="file-status-${idx}" style="font-size: 10px; color: var(--text-muted);">${statusLabelHtml}</span>
                         </div>
                         <div id="file-action-${idx}">
@@ -548,7 +603,7 @@ export async function downloadAndDecryptFile(partner, msgIndex) {
                 const closeBtn = document.getElementById("view-once-modal-close-btn");
                 
                 contentSpan.innerHTML = `
-                    <div style="text-align: center; color: #ffffff;">
+                    <div style="text-align: center; color: var(--text-color);">
                         <span style="font-size: 24px; display: block; margin-bottom: 8px;">📥</span>
                         <span style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">File Downloaded</span>
                         <span style="font-size: 12px; color: var(--text-muted);">${escapeHtml(m.original_name)}</span>
@@ -598,7 +653,7 @@ export async function downloadAndDecryptFile(partner, msgIndex) {
         if (fileAction) {
             if (m.view_once) {
                 fileAction.innerHTML = `
-                    <button class="action-icon-btn" onclick="downloadAndDecryptFile('${partner}', ${msgIndex})" style="color: #ef4444;" title="Retry">
+                    <button class="action-icon-btn" onclick="downloadAndDecryptFile('${partner}', ${msgIndex})" style="color: var(--danger);" title="Retry">
                         👁️
                     </button>`;
             } else {
@@ -833,6 +888,7 @@ window.openViewOnceMessage = openViewOnceMessage;
 window.addEventListener('chats-updated', () => renderInbox());
 window.addEventListener('messages-updated', () => renderMessages());
 window.addEventListener('presence-updated', (e) => setPresenceUI(e.detail.partner, e.detail.online));
+window.addEventListener('typing-updated', (e) => showTyping(e.detail.partner, e.detail.isTyping));
 window.addEventListener('system-message', (e) => appendSystemMessage(e.detail.partner, e.detail.text));
 window.addEventListener('ephemeral-status-synced', (e) => {
     if (state.recipient === e.detail.partner) {

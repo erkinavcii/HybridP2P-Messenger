@@ -643,10 +643,24 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
         print(f"[WS Error] WebSocket error for '{username}': {e}")
         manager.disconnect(username, websocket)
 
+class RevalidatingStaticFiles(StaticFiles):
+    """Web istemcisini her yüklemede yeniden doğrulatır (ETag ile 304, ucuz).
+
+    Başlıksız sunulduğunda tarayıcılar ES modüllerini sezgisel önbellekten
+    kullanıyor; güncelleme sonrası eski index.html / js ile yeni sunucu
+    karışıp istemci bozulabiliyordu.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Statik dosyaları sun
 try:
     os.makedirs("static", exist_ok=True)
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    app.mount("/", RevalidatingStaticFiles(directory="static", html=True), name="static")
     print("[Server] Static web client mounted successfully at '/'")
 except Exception as mount_ex:
     print(f"[Warning] Static client mount error: {mount_ex}")

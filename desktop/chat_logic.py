@@ -84,7 +84,7 @@ class ChatLogicMixin:
     def add_message_to_chat(self, sender: str, text: str, is_mine: bool,
                              time_str: str = "", save: bool = True,
                              view_once: bool = False, encrypted_payload: str = "",
-                             is_read: bool = True):
+                             is_read: bool = True, msg_uid: str = None):
         from datetime import timezone
         if not time_str:
             time_str = datetime.now(timezone.utc).isoformat()
@@ -95,7 +95,8 @@ class ChatLogicMixin:
         if view_once:
             bubble = self.create_view_once_bubble(sender, display_ts, is_mine, encrypted_payload, plaintext_fallback=text)
         else:
-            bubble = self.create_message_bubble(sender, text, display_ts, is_mine, is_read=is_read)
+            bubble = self.create_message_bubble(sender, text, display_ts, is_mine, is_read=is_read,
+                                                msg_uid=self._editable_uid(msg_uid))
 
         self._append_day_separator_if_needed(raw_ts)
         self.chat_list.controls.append(bubble)
@@ -103,7 +104,8 @@ class ChatLogicMixin:
         if save and self.state["recipient"] and self.state["store"] and not view_once:
             self.state["store"].save_message(
                 partner=self.state["recipient"], sender=sender,
-                content=text, is_mine=is_mine, timestamp=raw_ts, is_read=(0 if is_mine else 1)
+                content=text, is_mine=is_mine, timestamp=raw_ts, is_read=(0 if is_mine else 1),
+                msg_uid=msg_uid,
             )
         try: self.page.update()
         except: pass
@@ -192,7 +194,8 @@ class ChatLogicMixin:
             except: pass
 
     def _on_incoming_message(self, sender: str, plaintext: str, timestamp: str = "",
-                              view_once: bool = False, encrypted_payload: str = ""):
+                              view_once: bool = False, encrypted_payload: str = "",
+                              msg_uid: str = None):
         def _update():
             self._notify_incoming()
             # Mesaj geldiyse karşı taraf yazmayı bitirmiştir
@@ -202,18 +205,35 @@ class ChatLogicMixin:
                 self.add_message_to_chat(sender, plaintext, is_mine=False,
                                      time_str=timestamp, save=True,
                                      view_once=view_once,
-                                     encrypted_payload=encrypted_payload)
+                                     encrypted_payload=encrypted_payload,
+                                     msg_uid=msg_uid)
                 self.send_read_receipt(sender, timestamp)
             else:
                 if self.state["store"] and not view_once:
                     self.state["store"].save_message(
                         partner=sender, sender=sender,
                         content=plaintext, is_mine=False, timestamp=timestamp,
-                        is_read=0
+                        is_read=0, msg_uid=msg_uid,
                     )
                 self.log_status(f"'{sender}' adlisindan yeni mesaj var!")
             self.load_inbox_chats()
         self.run_on_ui(_update)
+
+    # ── Düzenleme / silme ──────────────────────────────────────────────
+
+    def _editable_uid(self, msg_uid):
+        """Baloncuğa düzenleme menüsü bağlanacak mı? Yalnızca kalıcı (ephemeral
+        olmayan), msg_uid'li birebir mesajlarda. Ephemeral sohbette mesajlar
+        diske yazılmadığı için düzenleme uygulanacak bir kayıt yoktur."""
+        if not msg_uid or self.state.get("is_group") or self.state.get("ephemeral"):
+            return None
+        return msg_uid
+
+    def on_message_changed(self, sender: str):
+        """Karşı taraf bir mesajını düzenledi/sildi: açık sohbetse yeniden çiz."""
+        if sender == self.state.get("recipient") and not self.state.get("ephemeral"):
+            self.load_history_to_chat()
+        self.load_inbox_chats()
 
     # ── Sesli mesaj ────────────────────────────────────────────────────
 
@@ -295,6 +315,9 @@ class ChatLogicMixin:
             self._append_day_separator_if_needed(m["timestamp"])
             if m["msg_type"] == "system":
                 self.chat_list.controls.append(self.create_system_bubble(m["content"]))
+            elif m["msg_type"] == "deleted":
+                self.chat_list.controls.append(self.create_deleted_bubble(
+                    m["sender"], self._fmt_time(m["timestamp"]), bool(m["is_mine"])))
             elif m["msg_type"] == "voice":
                 try:
                     info = json.loads(m["content"])
@@ -310,7 +333,9 @@ class ChatLogicMixin:
                 ts = self._fmt_time(m["timestamp"])
                 is_read_val = bool(m.get("is_read", 1))
                 self.chat_list.controls.append(
-                    self.create_message_bubble(m["sender"], m["content"], ts, bool(m["is_mine"]), is_read=is_read_val)
+                    self.create_message_bubble(m["sender"], m["content"], ts, bool(m["is_mine"]), is_read=is_read_val,
+                                               msg_uid=self._editable_uid(m.get("msg_uid")),
+                                               edited=bool(m.get("edited")))
                 )
         try: self.page.update()
         except: pass

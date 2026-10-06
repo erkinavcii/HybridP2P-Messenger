@@ -124,6 +124,14 @@ class MessageStore:
             except sqlite3.OperationalError:
                 pass
 
+        # Mesaj düzenleme/silme: cihazlar arası kararlı mesaj kimliği (uuid4) ve
+        # düzenlendi bayrağı. msg_uid'si olmayan (eski) mesajlar düzenlenemez/silinemez.
+        for col in ("msg_uid TEXT", "edited INTEGER DEFAULT 0"):
+            try:
+                cursor.execute(f"ALTER TABLE messages ADD COLUMN {col}")
+            except sqlite3.OperationalError:
+                pass
+
         conn.commit()
         conn.close()
 
@@ -232,6 +240,7 @@ class MessageStore:
         is_view_once: bool = False,
         msg_type: str = "text",
         is_read: int = None,
+        msg_uid: str = None,
     ) -> bool:
         """
         Mesajı yerel geçmişe kaydeder.
@@ -258,9 +267,9 @@ class MessageStore:
         try:
             conn.execute(
                 """INSERT INTO messages
-                   (chat_id, sender, content, timestamp, is_mine, msg_type, is_read)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (cid, sender, content, ts, 1 if is_mine else 0, msg_type, is_read)
+                   (chat_id, sender, content, timestamp, is_mine, msg_type, is_read, msg_uid)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (cid, sender, content, ts, 1 if is_mine else 0, msg_type, is_read, msg_uid)
             )
             conn.commit()
             return True
@@ -322,7 +331,8 @@ class MessageStore:
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(
-                """SELECT sender, content, timestamp, is_mine, msg_type, is_read
+                """SELECT sender, content, timestamp, is_mine, msg_type, is_read,
+                          msg_uid, COALESCE(edited, 0) AS edited
                    FROM messages
                    WHERE chat_id = ?
                    ORDER BY timestamp ASC
@@ -341,6 +351,7 @@ class MessageStore:
             rows = conn.execute(
                 """SELECT c.chat_id, c.partner, c.ephemeral, c.changed_at, c.is_group,
                           CASE WHEN m.msg_type = 'voice' THEN '🎤 Sesli mesaj'
+                               WHEN m.msg_type = 'deleted' THEN '🚫 Bu mesaj silindi'
                                ELSE m.content END as last_message,
                           m.timestamp as last_time,
                           (SELECT COUNT(*) FROM messages WHERE chat_id = c.chat_id AND is_mine = 0 AND is_read = 0) as unread_count
@@ -380,7 +391,7 @@ class MessageStore:
                 """SELECT c.partner, c.is_group, m.sender, m.content, m.timestamp
                    FROM messages m
                    JOIN chats c ON m.chat_id = c.chat_id
-                   WHERE m.content LIKE ? AND m.msg_type NOT IN ('system', 'file', 'voice')
+                   WHERE m.content LIKE ? AND m.msg_type NOT IN ('system', 'file', 'voice', 'deleted')
                    ORDER BY m.timestamp DESC
                    LIMIT 50""",
                 (f"%{query}%",)
@@ -549,6 +560,37 @@ class MessageStore:
         try:
             conn.execute("UPDATE contacts SET avatar_sent_hash = ? WHERE username = ?", (digest, username))
             conn.commit()
+        finally:
+            conn.close()
+
+    def edit_message(self, partner: str, msg_uid: str, sender: str, new_content: str) -> bool:
+        """Metin mesajını düzenler. Yalnızca o sohbette, o göndericiye ait ve
+        silinmemiş metin mesajı etkilenir (başkasının mesajı düzenlenemez)."""
+        if not msg_uid:
+            return False
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cur = conn.execute(
+                """UPDATE messages SET content = ?, edited = 1
+                   WHERE chat_id = ? AND msg_uid = ? AND sender = ? AND msg_type = 'text'""",
+                (new_content, self._chat_id(partner), msg_uid, sender))
+            conn.commit()
+            return cur.rowcount > 0
+        finally:
+            conn.close()
+
+    def delete_message(self, partner: str, msg_uid: str, sender: str) -> bool:
+        """Mesajı "herkesten sil": içerik yok edilir, yerinde "silindi" kalır."""
+        if not msg_uid:
+            return False
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cur = conn.execute(
+                """UPDATE messages SET content = '', msg_type = 'deleted', edited = 0
+                   WHERE chat_id = ? AND msg_uid = ? AND sender = ? AND msg_type = 'text'""",
+                (self._chat_id(partner), msg_uid, sender))
+            conn.commit()
+            return cur.rowcount > 0
         finally:
             conn.close()
 

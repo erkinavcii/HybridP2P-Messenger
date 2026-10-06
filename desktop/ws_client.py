@@ -101,9 +101,11 @@ class WsClientMixin:
                                     self.warn_blocked_message(sender)
                                     continue
 
+                                uid = self.verified_msg_uid(sender, enc, data.get("msg_uid", ""),
+                                                            data.get("uid_sig", ""))
                                 try:
                                     pt = decrypt_message(enc, self.state["private_key"])
-                                    self._on_incoming_message(sender, pt, ts, vo, enc)
+                                    self._on_incoming_message(sender, pt, ts, vo, enc, msg_uid=uid)
                                 except Exception as ex:
                                     self._on_incoming_message(sender, f"[Hata:{ex}]", ts)
 
@@ -194,6 +196,13 @@ class WsClientMixin:
                                             self.run_on_ui(self.load_inbox_chats)
                                     except Exception as ex:
                                         print(f"Grup mesaji cozme hatasi: {ex}")
+
+                            elif t in ("message_edit", "message_delete"):
+                                sender = data.get("sender", "")
+                                if self.receive_message_change(t, sender, data.get("msg_uid", ""),
+                                                               data.get("encrypted_payload", ""),
+                                                               data.get("signature", "")):
+                                    self.run_on_ui(self.on_message_changed, sender)
 
                             elif t == "avatar_update":
                                 if self.receive_avatar(data.get("sender", ""),
@@ -505,7 +514,90 @@ class WsClientMixin:
         self.state["store"].set_contact_avatar(sender, base64.b64encode(jpeg).decode("ascii"))
         return True
 
-    def send_message_via_ws(self, recipient: str, encrypted_payload: str, view_once: bool, timestamp: str = None):
+    # ── Mesaj kimliği (msg_uid) ve düzenleme/silme ─────────────────────
+    # İmzalanan veriler alan ayırıcılıdır ("uid:", "edit:", "delete:"), böylece
+    # bir türün imzası başka bir türün yerine kullanılamaz.
+
+    @staticmethod
+    def _uid_sig_data(sender, recipient, msg_uid, payload) -> bytes:
+        return f"uid:{sender}:{recipient}:{msg_uid}:{payload}".encode("utf-8")
+
+    @staticmethod
+    def _change_sig_data(kind, sender, recipient, msg_uid, payload="") -> bytes:
+        if kind == "message_edit":
+            return f"edit:{sender}:{recipient}:{msg_uid}:{payload}".encode("utf-8")
+        return f"delete:{sender}:{recipient}:{msg_uid}".encode("utf-8")
+
+    def _sign(self, data: bytes) -> str:
+        from crypto_utils import sign_data
+        return base64.b64encode(sign_data(self.state["private_key"], data)).decode("ascii")
+
+    def _verify_from(self, sender: str, data: bytes, signature_b64: str) -> bool:
+        from crypto_utils import verify_signature
+        if not signature_b64:
+            return False
+        pub = self._resolve_sender_public_key(sender)
+        if not pub:
+            return False
+        try:
+            return verify_signature(pub, base64.b64decode(signature_b64), data)
+        except Exception:
+            return False
+
+    def verified_msg_uid(self, sender: str, encrypted_payload: str, msg_uid: str, uid_sig: str):
+        """Gelen mesajın msg_uid'sini yalnızca gönderenin imzasıyla bağlıysa kabul eder.
+
+        İmzasız/geçersizse None döner: mesaj yine gösterilir ama düzenlenemez/
+        silinemez. (Aksi halde ele geçirilmiş sunucu iki mesajın kimliğini
+        değiştirip, bir mesajın silinmesini başka bir mesaja yönlendirebilirdi.)
+        """
+        if not msg_uid:
+            return None
+        data = self._uid_sig_data(sender, self.state["username"], msg_uid, encrypted_payload)
+        if self._verify_from(sender, data, uid_sig):
+            return msg_uid
+        print(f"[Edit] '{sender}' mesajinin msg_uid imzasi gecersiz — kimlik yok sayildi.")
+        return None
+
+    def send_message_change(self, kind: str, recipient: str, msg_uid: str, new_text: str = ""):
+        """Kendi mesajımızı karşı tarafta düzenler (message_edit) veya siler (message_delete)."""
+        from crypto_utils import encrypt_message
+        payload = ""
+        if kind == "message_edit":
+            pub = self.state.get("recipient_pub_key") if self.state.get("recipient") == recipient else None
+            pub = pub or self._resolve_sender_public_key(recipient)
+            if not pub:
+                return False
+            payload = encrypt_message(new_text, pub)
+        me = self.state["username"]
+        self.send_ws_message_with_fallback({
+            "type": kind, "recipient": recipient, "msg_uid": msg_uid,
+            "encrypted_payload": payload,
+            "signature": self._sign(self._change_sig_data(kind, me, recipient, msg_uid, payload)),
+        })
+        return True
+
+    def receive_message_change(self, kind: str, sender: str, msg_uid: str,
+                               encrypted_payload: str, signature_b64: str) -> bool:
+        """Gelen düzenleme/silmeyi uygular. İmza ZORUNLU; yalnızca gönderenin kendi
+        mesajını etkiler (store sorgusu sender ile sınırlı). Değiştiyse True."""
+        from crypto_utils import decrypt_message
+        data = self._change_sig_data(kind, sender, self.state["username"], msg_uid, encrypted_payload)
+        if not self._verify_from(sender, data, signature_b64):
+            print(f"[Edit] '{sender}' {kind} imzasi gecersiz/eksik — reddedildi.")
+            return False
+        store = self.state["store"]
+        if kind == "message_delete":
+            return store.delete_message(sender, msg_uid, sender)
+        try:
+            new_text = decrypt_message(encrypted_payload, self.state["private_key"])
+        except Exception as ex:
+            print(f"[Edit] Duzenleme cozulemedi: {ex}")
+            return False
+        return store.edit_message(sender, msg_uid, sender, new_text)
+
+    def send_message_via_ws(self, recipient: str, encrypted_payload: str, view_once: bool,
+                            timestamp: str = None, msg_uid: str = None):
         from datetime import timezone
         if not timestamp:
             timestamp = datetime.now(timezone.utc).isoformat()
@@ -518,6 +610,10 @@ class WsClientMixin:
             "signature":         self._sign_direct_message(recipient, encrypted_payload),
             "timestamp":         timestamp,
         }
+        if msg_uid:
+            msg["msg_uid"] = msg_uid
+            msg["uid_sig"] = self._sign(self._uid_sig_data(
+                self.state["username"], recipient, msg_uid, encrypted_payload))
         self.send_ws_message_with_fallback(msg)
 
     def send_group_message_via_ws(self, group_id: str, encrypted_payload: str, timestamp: str = None):

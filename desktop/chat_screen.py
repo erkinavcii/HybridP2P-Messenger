@@ -7,6 +7,7 @@ refresh_recipient_status, check_recipient_status_loop.
 
 import threading
 import time as time_module
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -64,6 +65,69 @@ class ChatScreenMixin:
             self.chat_avatar.visible = False
         try: self.page.update()
         except: pass
+
+    # ── Mesaj düzenleme / silme menüsü ─────────────────────────────────
+
+    def open_message_actions(self, msg_uid: str, current_text: str):
+        """Kendi mesajımız için: düzenle veya herkesten sil."""
+        recipient = self.state.get("recipient")
+        me = self.state["username"]
+        if not recipient or not msg_uid:
+            return
+
+        edit_field = ft.TextField(value=current_text, multiline=True, min_lines=1, max_lines=5,
+                                  max_length=8000, counter="", autofocus=True,
+                                  border_color=C.border, focused_border_color=C.accent,
+                                  cursor_color=C.accent)
+
+        def close(e=None):
+            dialog.open = False
+            self.page.update()
+
+        def do_edit(e):
+            new_text = (edit_field.value or "").strip()
+            if not new_text or new_text == current_text:
+                close(); return
+            if not self.state["store"].edit_message(recipient, msg_uid, me, new_text):
+                self.log_status("Mesaj düzenlenemedi."); close(); return
+            close()
+            threading.Thread(target=self.send_message_change,
+                             args=("message_edit", recipient, msg_uid, new_text), daemon=True).start()
+            self.load_history_to_chat()
+            self.load_inbox_chats()
+
+        def do_delete(e):
+            if not self.state["store"].delete_message(recipient, msg_uid, me):
+                self.log_status("Mesaj silinemedi."); close(); return
+            close()
+            threading.Thread(target=self.send_message_change,
+                             args=("message_delete", recipient, msg_uid), daemon=True).start()
+            self.load_history_to_chat()
+            self.load_inbox_chats()
+            self.log_status("Mesaj herkesten silindi.")
+
+        dialog = ft.AlertDialog(
+            title=ft.Text("Mesaj", size=16, color=C.text, weight=ft.FontWeight.BOLD),
+            content=ft.Container(
+                content=ft.Column([
+                    edit_field,
+                    ft.Text("Düzenleme ve silme karşı tarafa da uygulanır (uçtan uca şifreli, imzalı).",
+                            size=10, color=C.text_muted),
+                ], tight=True, spacing=6),
+                width=340,
+            ),
+            actions=[
+                ft.TextButton("Herkesten sil", on_click=do_delete,
+                              style=ft.ButtonStyle(color=C.danger)),
+                ft.TextButton("İptal", on_click=close, style=ft.ButtonStyle(color=C.text_muted)),
+                ft.TextButton("Kaydet", on_click=do_edit, style=ft.ButtonStyle(color=C.accent)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=C.surface,
+        )
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
 
     # ── Sesli mesaj kaydı ──────────────────────────────────────────────
 
@@ -611,11 +675,15 @@ class ChatScreenMixin:
                     return
 
                 timestamp = datetime.now(timezone.utc).isoformat()
-                self.send_message_via_ws(recipient, encrypted, view_once, timestamp=timestamp)
+                # Kalıcı birebir mesajlara düzenleme/silme için kararlı kimlik
+                msg_uid = None if view_once else uuid.uuid4().hex
+                self.send_message_via_ws(recipient, encrypted, view_once, timestamp=timestamp,
+                                         msg_uid=msg_uid)
                 self.add_message_to_chat(
                     sender=self.state["username"], text=text,
                     is_mine=True, save=not view_once, view_once=view_once,
-                    encrypted_payload=encrypted, time_str=timestamp, is_read=False
+                    encrypted_payload=encrypted, time_str=timestamp, is_read=False,
+                    msg_uid=msg_uid,
                 )
                 self.load_inbox_chats()
 

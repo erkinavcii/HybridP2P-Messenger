@@ -47,6 +47,64 @@ def _make_chat_id(user1: str, user2: str) -> str:
     return "_".join(sorted([user1, user2]))
 
 
+async def relay_or_queue(sender: str, recipient: str, frame: dict, msg_type: str,
+                         encrypted_payload: str = "", extra: dict | None = None) -> bool:
+    """Çerçeveyi alıcıya canlı iletir; alıcı çevrimdışıysa VEYA canlı gönderim
+    başarısız olursa (kayıtlı ama bağlantısı ölmüş) offline kuyruğa yazar.
+
+    True = canlı teslim edildi, False = kuyruğa alındı. Eskiden canlı gönderim
+    hatası mesajın sessizce kaybolmasına yol açabiliyordu.
+    """
+    if manager.is_online(recipient) and await manager.send_to_user(recipient, frame):
+        return True
+    async with db_session() as db:
+        await db.execute(
+            """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (sender, recipient, encrypted_payload, msg_type, json.dumps(extra or {}),
+             frame.get("timestamp") or datetime.now(timezone.utc).isoformat()))
+        await db.commit()
+    return False
+
+
+def build_message_frame(sender: str, message: dict) -> tuple[dict, dict]:
+    """Birebir mesaj çerçevesi + kuyruk extra_data'sı (WS ve REST yolu ortak).
+
+    msg_uid/uid_sig: düzenleme/silme için mesaja bağlı kararlı kimlik ve onu
+    gönderene bağlayan imza. Sunucu doğrulamaz, aynen taşır; eski istemciler
+    göndermez (boş string).
+    """
+    frame = {
+        "type": "message",
+        "sender": sender,
+        "encrypted_payload": message.get("encrypted_payload", ""),
+        "view_once": bool(message.get("view_once", False)),
+        "signature": message.get("signature", ""),
+        "msg_uid": message.get("msg_uid", ""),
+        "uid_sig": message.get("uid_sig", ""),
+        "timestamp": message.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+    }
+    extra = {k: frame[k] for k in ("view_once", "signature", "msg_uid", "uid_sig")}
+    return frame, extra
+
+
+async def relay_message_change(sender: str, message: dict, msg_type: str) -> bool:
+    """message_edit / message_delete: imzalı, msg_uid ile hedeflenen değişiklik."""
+    recipient = message.get("recipient", "")
+    if not recipient or recipient == sender or not message.get("msg_uid"):
+        return False
+    frame = {
+        "type": msg_type,
+        "sender": sender,
+        "msg_uid": message.get("msg_uid", ""),
+        "encrypted_payload": message.get("encrypted_payload", ""),
+        "signature": message.get("signature", ""),
+        "timestamp": message.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+    }
+    return await relay_or_queue(sender, recipient, frame, msg_type, frame["encrypted_payload"],
+                                {"msg_uid": frame["msg_uid"], "signature": frame["signature"]})
+
+
 async def relay_avatar_update(sender: str, message: dict) -> bool:
     """E2EE profil fotoğrafı güncellemesini iletir (WS ve REST fallback ortak yolu).
 
@@ -319,32 +377,10 @@ async def send_ws_fallback(
     ts = datetime.now(timezone.utc).isoformat()
     
     if msg_type == "message":
-        recipient = message.get("recipient", "")
-        encrypted_payload = message.get("encrypted_payload", "")
-        view_once = bool(message.get("view_once", False))
-        # 1:1 mesaj imzası — WS yolundaki ile aynı şekilde aynen taşınır.
-        signature = message.get("signature", "")
-        timestamp = message.get("timestamp") or ts
+        frame, extra = build_message_frame(x_username, message)
+        await relay_or_queue(x_username, message.get("recipient", ""), frame, "message",
+                             frame["encrypted_payload"], extra)
 
-        if manager.is_online(recipient):
-            await manager.send_to_user(recipient, {
-                "type": "message",
-                "sender": x_username,
-                "encrypted_payload": encrypted_payload,
-                "view_once": view_once,
-                "signature": signature,
-                "timestamp": timestamp,
-            })
-        else:
-            async with db_session() as db:
-                await db.execute(
-                    """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
-                       VALUES (?, ?, ?, 'message', ?, ?)""",
-                    (x_username, recipient, encrypted_payload,
-                     json.dumps({"view_once": view_once, "signature": signature}), timestamp)
-                )
-                await db.commit()
-                
     elif msg_type == "file_message":
         recipient = message.get("recipient", "")
         file_uuid = message.get("file_uuid", "")
@@ -486,6 +522,9 @@ async def send_ws_fallback(
     elif msg_type == "avatar_update":
         await relay_avatar_update(x_username, message)
 
+    elif msg_type in ("message_edit", "message_delete"):
+        await relay_message_change(x_username, message, msg_type)
+
     elif msg_type == "read_receipt":
         recipient = message.get("recipient", "")
         timestamp = message.get("timestamp", "")
@@ -541,6 +580,8 @@ async def fetch_offline_messages(
                 "encrypted_payload": r["encrypted_payload"],
                 "view_once": extra.get("view_once", False),
                 "signature": extra.get("signature", ""),
+                "msg_uid": extra.get("msg_uid", ""),
+                "uid_sig": extra.get("uid_sig", ""),
                 "timestamp": r["timestamp"],
             })
 

@@ -25,7 +25,10 @@ from server.limiter import limiter
 
 # Router'lar
 from server.routes.users import router as users_router
-from server.routes.messages import router as messages_router, _make_chat_id, relay_avatar_update
+from server.routes.messages import (
+    router as messages_router, _make_chat_id, relay_avatar_update,
+    relay_or_queue, build_message_frame, relay_message_change,
+)
 from server.routes.groups import router as groups_router
 from server.routes.voip import router as voip_router
 
@@ -108,6 +111,17 @@ def _pending_row_to_frame(row) -> dict | None:
             "sender": row["sender"],
             "encrypted_payload": row["encrypted_payload"],
             "view_once": extra.get("view_once", False),
+            "signature": extra.get("signature", ""),
+            "msg_uid": extra.get("msg_uid", ""),
+            "uid_sig": extra.get("uid_sig", ""),
+            "timestamp": row["timestamp"],
+        }
+    if row_type in ("message_edit", "message_delete"):
+        return {
+            "type": row_type,
+            "sender": row["sender"],
+            "msg_uid": extra.get("msg_uid", ""),
+            "encrypted_payload": row["encrypted_payload"],
             "signature": extra.get("signature", ""),
             "timestamp": row["timestamp"],
         }
@@ -288,45 +302,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
             if msg_type == "message":
                 recipient = message.get("recipient", "")
-                sender = username
-                encrypted_payload = message.get("encrypted_payload", "")
-                view_once = bool(message.get("view_once", False))
-                # 1:1 mesaj imzası (RSA-PSS). Eski istemciler göndermez → boş string.
-                # Sunucu imzayı doğrulamaz, sadece aynen taşır (zero-knowledge).
-                signature = message.get("signature", "")
-                timestamp = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
-
-                if manager.is_online(recipient):
-                    await manager.send_to_user(recipient, {
-                        "type": "message",
-                        "sender": sender,
-                        "encrypted_payload": encrypted_payload,
-                        "view_once": view_once,
-                        "signature": signature,
-                        "timestamp": timestamp,
-                    })
-                    await manager.send_to_user(sender, {
-                        "type": "delivery_ack",
-                        "recipient": recipient,
-                        "status": "delivered_online",
-                    })
-                else:
-                    async with db_session() as db:
-                        await db.execute(
-                            """INSERT INTO offline_msgs
-                               (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
-                               VALUES (?, ?, ?, 'message', ?, ?)""",
-                            (sender, recipient, encrypted_payload,
-                             json.dumps({"view_once": view_once, "signature": signature}),
-                             timestamp)
-                        )
-                        await db.commit()
-                        print(f"[Server] Stored offline message from '{sender}' to '{recipient}'")
-                    await manager.send_to_user(sender, {
-                        "type": "delivery_ack",
-                        "recipient": recipient,
-                        "status": "stored_offline",
-                    })
+                frame, extra = build_message_frame(username, message)
+                delivered = await relay_or_queue(username, recipient, frame, "message",
+                                                 frame["encrypted_payload"], extra)
+                await manager.send_to_user(username, {
+                    "type": "delivery_ack",
+                    "recipient": recipient,
+                    "status": "delivered_online" if delivered else "stored_offline",
+                })
 
             elif msg_type == "file_message":
                 recipient    = message.get("recipient", "")
@@ -426,6 +409,9 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
             elif msg_type == "avatar_update":
                 await relay_avatar_update(username, message)
+
+            elif msg_type in ("message_edit", "message_delete"):
+                await relay_message_change(username, message, msg_type)
 
             elif msg_type == "read_receipt":
                 recipient = message.get("recipient", "")

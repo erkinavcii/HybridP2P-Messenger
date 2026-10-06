@@ -106,7 +106,7 @@ Direct (1:1) messages are therefore signed with the sender's RSA private key, us
 * **Signed data**: `{sender}:{recipient}:{encrypted_payload}` — the recipient is included so a hostile server cannot re-target the same signed message at a different user.
 * **Verification**: the receiving client resolves the sender's public key (from the local contacts store, or fetching and pinning it on first use) and verifies before decrypting. A message carrying an **invalid** signature is discarded and a warning is written into the chat history.
 * **Downgrade protection (trust-on-first-signature)**: the first time a valid signature is seen from a contact, that contact is flagged as signing (`contacts.signs_messages`). From then on, an **unsigned** message from that contact is rejected as well. Without this, an attacker could simply strip the signature to bypass verification.
-* **Backwards compatibility**: contacts that have never sent a signature (older desktop builds and the current web client) are still accepted unsigned, so existing conversations keep working. Once every client signs, this fallback can be removed and verification made mandatory.
+* **Backwards compatibility**: both the desktop and the web client sign and verify direct messages. Contacts that have never sent a signature (older builds) are still accepted unsigned, so existing conversations keep working; this fallback can be removed to make verification mandatory.
 * Verification is applied on **both** delivery paths — live WebSocket and the offline/REST queue — so an attacker cannot bypass it by sending while the recipient is offline.
 
 ### Editing and Deleting Messages

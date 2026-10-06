@@ -169,25 +169,21 @@ Bölüm 1'deki not güncellendi, bkz. yukarısı.
 
 ---
 
-## 5. Birebir Mesaj İmzalama — Web İstemcisi Paritesi Eksik (2026-07-25)
+## 5. Birebir Mesaj İmzalama — Web Paritesi (2026-07-25, güncellendi 2026-10-06)
 
-Masaüstü istemcisi artık birebir mesajları RSA-PSS ile imzalıyor ve doğruluyor (bkz. README "Message Authenticity"). **Web istemcisi (`static/js/`) henüz imzalamıyor.**
+✅ **Kapatıldı:** web istemcisi (`static/js/`) artık birebir mesajları masaüstüyle aynı biçimde (`{sender}:{recipient}:{encrypted_payload}`, RSA-PSS) imzalıyor ve hem canlı hem çevrimdışı yolda aynı kurallarla doğruluyor. Kişi başına "imzalıyor" bayrağı IndexedDB `keys` deposunda `signs_<kullanıcı>` olarak tutuluyor.
 
-### Bunun pratik sonucu
-Doğrulama üç durumlu çalışıyor:
+Doğrulama hâlâ geçiş kuralıyla çalışıyor:
 
 | Gönderenin durumu | Davranış |
 |---|---|
 | Geçerli imza | Kabul + kişi "imzalıyor" olarak işaretlenir |
-| Geçersiz imza | **Reddedilir** + sohbet geçmişine kalıcı uyarı yazılır |
-| İmza yok, kişi daha önce hiç imzalamamış | Kabul (eski masaüstü sürümleri ve web istemcisi için geriye dönük uyumluluk) |
+| Geçersiz imza | **Reddedilir** + uyarı gösterilir |
+| İmza yok, kişi daha önce hiç imzalamamış | Kabul (eski istemci sürümleri için) |
 | İmza yok, kişi daha önce imzalamış | **Reddedilir** (downgrade saldırısı) |
 
-Yani web istemcisinden yazan bir kişi, siz ondan hiç imzalı mesaj almadığınız sürece imzasız kabul edilir. Bu pencere kapanana kadar, ele geçirilmiş bir sunucu **yalnızca hiç masaüstü kullanmamış bir kişinin adına** sahte mesaj enjekte edebilir. Kişi bir kez masaüstünden yazdığı anda bu kapı kapanır.
+### Kalan açık nokta
+- **Zorunlu doğrulama:** iki istemci de imzaladığına göre "imza yoksa ve kişi hiç imzalamamışsa kabul et" kuralı kaldırılabilir. Bu, güncellenmemiş istemcilerden gelen mesajları reddetmek demek; bilinçli bir karar olarak ayrıca verilmeli.
+- **Web uyarısı kalıcı değil:** masaüstü engellenen mesaj uyarısını sohbet geçmişine yazıyor; web yalnızca o an açık sohbette gösteriyor.
 
-### Kapatmak için yapılacaklar
-1. `static/js/ws.js` gönderim yolunda `signDataJS` ile `{sender}:{recipient}:{encrypted_payload}` imzalanıp `signature` alanı eklenmeli (`crypto.js` içinde `signDataJS`/`verifySignatureJS` zaten mevcut).
-2. `ws.js`'in `message` dalında ve `fetchOfflineMessages` içinde doğrulama yapılmalı; IndexedDB'de kişi başına `signsMessages` bayrağı tutulmalı (masaüstündeki `contacts.signs_messages` karşılığı).
-3. Her iki istemci de imzaladıktan sonra "imza yoksa kabul et" kuralı tamamen kaldırılıp doğrulama zorunlu hale getirilebilir.
-
-**Not:** Grup mesajlarında imza zaten **zorunlu** (imzasız/geçersiz grup mesajı her zaman reddediliyor) — bu gevşeklik yalnızca birebir mesajlar için ve yalnızca geçiş dönemine özgü.
+**Not:** Grup mesajlarında imza zaten **zorunlu** (imzasız/geçersiz grup mesajı her zaman reddediliyor).

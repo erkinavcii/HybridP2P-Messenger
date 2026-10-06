@@ -20,7 +20,10 @@ from desktop.net_config import FILE_ICONS
 
 class BubblesMixin:
 
-    def create_message_bubble(self, sender: str, text: str, time_str: str, is_mine: bool, is_read: bool = True):
+    def create_message_bubble(self, sender: str, text: str, time_str: str, is_mine: bool,
+                              is_read: bool = True, msg_uid: str = None, edited: bool = False):
+        """Metin baloncuğu. Kendi mesajımızda msg_uid varsa düzenle/sil menüsü
+        bağlanır (⋮ ikonu, sağ tık veya uzun basma)."""
         bubble_color = C.accent if is_mine else C.surface_alt
         text_color   = C.on_accent if is_mine else C.text_bubble_other
         align = ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START
@@ -28,9 +31,10 @@ class BubblesMixin:
         # Build timestamp row containing tick status icons for sender's messages
         # Kendi baloncuğumuz renkli (accent) zeminde: saat ve tikler de o zemine
         # göre açık tonlarda olmalı, yoksa gri-üstüne-mor okunmuyor.
-        time_row_controls = [
-            ft.Text(time_str, size=10, color=C.on_accent_muted if is_mine else C.text_muted)
-        ]
+        sub_color = C.on_accent_muted if is_mine else C.text_muted
+        time_row_controls = [ft.Text(time_str, size=10, color=sub_color)]
+        if edited:
+            time_row_controls.insert(0, ft.Text("düzenlendi", size=10, italic=True, color=sub_color))
         if is_mine:
             tick_icon = ft.Icon(
                 ft.Icons.DONE_ALL if is_read else ft.Icons.DONE,
@@ -39,6 +43,14 @@ class BubblesMixin:
             )
             time_row_controls.append(tick_icon)
 
+        actionable = is_mine and bool(msg_uid)
+        open_menu = (lambda e: self.open_message_actions(msg_uid, text)) if actionable else None
+        if actionable:
+            time_row_controls.append(ft.IconButton(
+                icon=ft.Icons.MORE_VERT, icon_size=14, icon_color=sub_color,
+                tooltip="Düzenle / sil", on_click=open_menu,
+                style=ft.ButtonStyle(padding=0), width=22, height=22))
+
         time_row = ft.Row(
             controls=time_row_controls,
             spacing=4,
@@ -46,10 +58,7 @@ class BubblesMixin:
             tight=True
         )
 
-        return ft.Row(
-            alignment=align,
-            controls=[
-                ft.Container(
+        body = ft.Container(
                     content=ft.Column(
                         controls=[
                             ft.Text(sender, size=11, color=C.text_secondary,
@@ -69,6 +78,29 @@ class BubblesMixin:
                     width=300,
                     shadow=ft.BoxShadow(blur_radius=8, color=C.shadow, offset=ft.Offset(0, 2)),
                     animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
+                )
+        if actionable:
+            body = ft.GestureDetector(content=body, on_long_press=open_menu,
+                                      on_secondary_tap=open_menu)
+        return ft.Row(alignment=align, controls=[body])
+
+    def create_deleted_bubble(self, sender: str, time_str: str, is_mine: bool):
+        """"Herkesten silinmiş" mesajın yer tutucusu (içerik yok edilmiştir)."""
+        return ft.Row(
+            alignment=ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START,
+            controls=[
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.BLOCK, size=14, color=C.text_muted),
+                            ft.Text("Bu mesaj silindi", size=13, italic=True, color=C.text_muted),
+                            ft.Text(time_str, size=10, color=C.text_faint),
+                        ],
+                        spacing=6, tight=True,
+                    ),
+                    bgcolor=C.surface, padding=ft.Padding(12, 8, 12, 8), border_radius=12,
+                    border=ft.Border(left=ft.BorderSide(1, C.border), top=ft.BorderSide(1, C.border),
+                                     right=ft.BorderSide(1, C.border), bottom=ft.BorderSide(1, C.border)),
                 ),
             ],
         )

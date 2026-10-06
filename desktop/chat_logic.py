@@ -157,10 +157,41 @@ class ChatLogicMixin:
             return
         play_notification()
 
+    # ── "Yazıyor…" göstergesi (alım) ───────────────────────────────────
+    # Karşı taraf "durdu" sinyalini hiç gönderemezse (bağlantı koptu vb.)
+    # gösterge sonsuza kadar kalmasın diye kendiliğinden söner.
+    TYPING_EXPIRE_SEC = 6.0
+
+    def _on_typing_received(self, sender: str, is_typing: bool):
+        # Yalnızca o an açık olan birebir sohbetin karşı tarafı için göster
+        if sender != self.state.get("recipient") or self.state.get("is_group", False):
+            return
+        old = getattr(self, "_typing_expire_timer", None)
+        if old:
+            old.cancel()
+        self.typing_text.visible = is_typing
+        if is_typing:
+            import threading
+            self._typing_expire_timer = threading.Timer(
+                self.TYPING_EXPIRE_SEC, lambda: self.run_on_ui(self._hide_typing))
+            self._typing_expire_timer.daemon = True
+            self._typing_expire_timer.start()
+        try: self.page.update()
+        except: pass
+
+    def _hide_typing(self):
+        if self.typing_text.visible:
+            self.typing_text.visible = False
+            try: self.page.update()
+            except: pass
+
     def _on_incoming_message(self, sender: str, plaintext: str, timestamp: str = "",
                               view_once: bool = False, encrypted_payload: str = ""):
         def _update():
             self._notify_incoming()
+            # Mesaj geldiyse karşı taraf yazmayı bitirmiştir
+            if sender == self.state.get("recipient"):
+                self._hide_typing()
             if self.state["recipient"] and sender == self.state["recipient"]:
                 self.add_message_to_chat(sender, plaintext, is_mine=False,
                                      time_str=timestamp, save=True,

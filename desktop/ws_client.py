@@ -195,6 +195,11 @@ class WsClientMixin:
                                     except Exception as ex:
                                         print(f"Grup mesaji cozme hatasi: {ex}")
 
+                            elif t == "typing":
+                                self.run_on_ui(self._on_typing_received,
+                                               data.get("sender", ""),
+                                               bool(data.get("is_typing", False)))
+
                             elif t == "error":
                                 # Sunucu bir mesajı reddetti (örn. boyut sınırı, bozuk format)
                                 code = data.get("code", "")

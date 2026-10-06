@@ -258,9 +258,15 @@ class MessengerApp(
             # Normal kullanımda sunucu sınırına (256 KB) asla yaklaşılmasın:
             # 8000 karakter şifrelenip base64'lenince ~30 KB eder.
             max_length=8000,
+            counter="",  # Flet max_length ile "0/8000" sayacı gösterir; gizle
             on_submit=lambda e: self.on_send_click(e),
+            on_change=self.on_message_input_change,
             shift_enter=True,
         )
+
+        # "yazıyor…" göstergesi (sohbet başlığında, alıcı durumunun altında)
+        self.typing_text = ft.Text("yazıyor…", size=10, color="#a78bfa",
+                                   italic=True, visible=False)
 
         self.username_text = ft.Text("", size=11, color="#9e9e9e")
         self.status_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor="#ef4444")
@@ -435,6 +441,7 @@ class MessengerApp(
                                     controls=[
                                         self.chat_title_text,
                                         self.recipient_status_row,
+                                        self.typing_text,
                                     ],
                                     spacing=0, tight=True,
                                 ),

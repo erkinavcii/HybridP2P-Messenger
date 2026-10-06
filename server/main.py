@@ -496,6 +496,18 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             elif msg_type == "ping":
                 await manager.send_to_user(username, {"type": "pong"})
 
+            elif msg_type == "typing":
+                # "Yazıyor..." göstergesi — yalnızca canlı relay.
+                # Bilerek offline kuyruğa yazılmaz ve REST fallback'te yoktur:
+                # bayat bir "yazıyor" sinyalinin teslim edilmesi anlamsızdır.
+                recipient = message.get("recipient", "")
+                if recipient and recipient != username and manager.is_online(recipient):
+                    await manager.send_to_user(recipient, {
+                        "type": "typing",
+                        "sender": username,
+                        "is_typing": bool(message.get("is_typing", False)),
+                    })
+
             elif msg_type == "call_offer":
                 recipient  = message.get("recipient", "")
                 call_id    = message.get("call_id", str(uuid_lib.uuid4()))

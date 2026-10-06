@@ -47,6 +47,39 @@ def _make_chat_id(user1: str, user2: str) -> str:
     return "_".join(sorted([user1, user2]))
 
 
+async def relay_avatar_update(sender: str, message: dict) -> bool:
+    """E2EE profil fotoğrafı güncellemesini iletir (WS ve REST fallback ortak yolu).
+
+    Sunucu fotoğrafı göremez: payload alıcının public key'iyle şifreli,
+    imza istemcide doğrulanır. Alıcı çevrimdışıysa kuyruğa yazılır; aynı
+    gönderen→alıcı için yalnızca EN SON avatar tutulur (eskiler silinir),
+    böylece sık güncelleme kuyruğu şişiremez.
+    """
+    recipient = message.get("recipient", "")
+    if not recipient or recipient == sender:
+        return False
+    frame = {
+        "type": "avatar_update",
+        "sender": sender,
+        "encrypted_payload": message.get("encrypted_payload", ""),
+        "signature": message.get("signature", ""),
+        "timestamp": message.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+    }
+    if manager.is_online(recipient) and await manager.send_to_user(recipient, frame):
+        return True
+    async with db_session() as db:
+        await db.execute(
+            "DELETE FROM offline_msgs WHERE sender = ? AND recipient = ? AND msg_type = 'avatar_update'",
+            (sender, recipient))
+        await db.execute(
+            """INSERT INTO offline_msgs (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
+               VALUES (?, ?, ?, 'avatar_update', ?, ?)""",
+            (sender, recipient, frame["encrypted_payload"],
+             json.dumps({"signature": frame["signature"]}), frame["timestamp"]))
+        await db.commit()
+    return False
+
+
 @router.get("/api/chat_settings/{username}")
 async def get_chat_settings(
     request: Request,
@@ -449,6 +482,9 @@ async def send_ws_fallback(
                          json.dumps({"group_id": group_id, "signature": signature}), timestamp)
                     )
             await db.commit()
+
+    elif msg_type == "avatar_update":
+        await relay_avatar_update(x_username, message)
 
     elif msg_type == "read_receipt":
         recipient = message.get("recipient", "")

@@ -1019,3 +1019,33 @@ body {
 .action-icon-btn.pref-off {
     opacity: 0.45;
 }
+
+/* ── Mesaj düzenleme / silme ── */
+.msg-actions-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 2px;
+}
+.msg-actions-btn:hover {
+    opacity: 1;
+}
+.msg-edited {
+    font-size: 9px;
+    font-style: italic;
+    opacity: 0.65;
+}
+.msg-deleted {
+    font-style: italic;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+.msg-container .msg-bubble.deleted {
+    background-color: var(--surface) !important;
+    color: var(--text-muted) !important;
+    border: 1px solid var(--border-color);
+}

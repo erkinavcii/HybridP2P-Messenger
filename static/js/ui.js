@@ -10,7 +10,8 @@ import {
     signDataJS,
     signDirectMessageJS,
     encryptMessageJS,
-    makeAuthHeadersJS
+    makeAuthHeadersJS,
+    uidSigData
 } from './crypto.js';
 import {
     persistChats,
@@ -21,7 +22,10 @@ import {
 } from './db.js';
 import {
     sendReadReceipt,
-    queryUserPresence
+    queryUserPresence,
+    sendFrameWithFallback,
+    sendMessageChange,
+    applyMessageChange
 } from './ws.js';
 
 // DOM Selectors
@@ -185,6 +189,7 @@ export function renderInbox(query = "") {
         const lastMsgObj = c.messages[c.messages.length - 1];
         let snippet = lastMsgObj ? lastMsgObj.content : "No messages yet";
         if (lastMsgObj && lastMsgObj.view_once) snippet = "👁 View-once message";
+        if (lastMsgObj && lastMsgObj.deleted) snippet = "🚫 Bu mesaj silindi";
         
         if (snippet && snippet.length > 30) snippet = snippet.substring(0, 27) + "...";
         
@@ -470,17 +475,26 @@ export function renderMessages() {
                     </div>
                 `;
             }
+        } else if (m.deleted) {
+            textNodeHtml = `<span class="msg-deleted">🚫 Bu mesaj silindi</span>`;
         } else {
             textNodeHtml = `<span class="msg-text">${escapeHtml(m.content || "")}</span>`;
         }
 
+        // Düzenle/sil menüsü: yalnızca kendi, kimlikli, kalıcı birebir metin mesajları
+        // (masaüstüyle aynı kapsam: grup, tek görünümlük ve ephemeral sohbet hariç)
+        const actionable = isMe && m.msg_uid && !m.is_file && !m.view_once && !m.deleted
+                           && !state.isGroup && !state.ephemeral;
+
         container.innerHTML = `
-            <div class="msg-bubble ${m.opened ? 'view-once-decrypted' : ''}">
+            <div class="msg-bubble ${m.opened ? 'view-once-decrypted' : ''} ${m.deleted ? 'deleted' : ''}">
                 ${state.isGroup && !isMe ? `<span class="msg-sender">${m.sender}</span>` : ""}
                 ${textNodeHtml}
                 <div class="msg-meta">
+                    ${m.edited && !m.deleted ? `<span class="msg-edited">düzenlendi</span>` : ""}
                     <span class="msg-time">${formatTime(m.timestamp)}</span>
                     ${isMe ? `<span class="msg-status-tick ${m.read ? 'read' : ''}">${m.read ? '✓✓' : '✓'}</span>` : ""}
+                    ${actionable ? `<button class="msg-actions-btn" title="Düzenle / sil" onclick="openMessageActions(${idx})">⋮</button>` : ""}
                 </div>
             </div>
         `;
@@ -846,6 +860,13 @@ export async function sendMessage() {
                                                            state.recipient, encryptedPayload),
                     "timestamp": timestamp
                 };
+                // Kalıcı birebir mesajlara düzenleme/silme için kararlı kimlik
+                if (!isViewOnce) {
+                    const msgUid = crypto.randomUUID().replace(/-/g, "");
+                    textMsgPayload.msg_uid = msgUid;
+                    textMsgPayload.uid_sig = await signDataJS(state.privateKeyPem,
+                        uidSigData(state.username, state.recipient, msgUid, encryptedPayload));
+                }
             }
             
             const msgObj = {
@@ -855,24 +876,13 @@ export async function sendMessage() {
                 view_once: isViewOnce,
                 read: true
             };
+            if (textMsgPayload.msg_uid) msgObj.msg_uid = textMsgPayload.msg_uid;
             
             await saveChatToLocalStorage(state.recipient, msgObj);
             renderMessages();
             renderInbox();
             
-            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                state.ws.send(JSON.stringify(textMsgPayload));
-            } else {
-                const path = "/api/send_ws_fallback";
-                const bodyText = JSON.stringify({ payload: JSON.stringify(textMsgPayload) });
-                const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
-                headers["Content-Type"] = "application/json";
-                await fetch(`${API_URL}${path}`, {
-                    method: "POST",
-                    headers: headers,
-                    body: bodyText
-                });
-            }
+            await sendFrameWithFallback(textMsgPayload);
         } catch (err) {
             console.error("Mesaj gönderilemedi:", err);
             alert("Mesaj gönderilemedi: " + err);
@@ -880,9 +890,62 @@ export async function sendMessage() {
     }
 }
 
+// ── Düzenle / herkesten sil penceresi ──
+const editModal = document.getElementById("edit-message-modal");
+const editInput = document.getElementById("edit-message-input");
+let editTarget = null;   // { partner, msgUid, oldText }
+
+export function openMessageActions(msgIndex) {
+    const partner = state.recipient;
+    const m = state.chats[partner] && state.chats[partner].messages[msgIndex];
+    if (!m || !m.msg_uid || m.sender !== state.username || m.deleted) return;
+    editTarget = { partner, msgUid: m.msg_uid, oldText: m.content };
+    editInput.value = m.content;
+    editModal.classList.add("active");
+    editInput.focus();
+}
+
+function closeMessageActions() {
+    editModal.classList.remove("active");
+    editTarget = null;
+}
+
+async function commitMessageChange(kind) {
+    if (!editTarget) return;
+    const { partner, msgUid, oldText } = editTarget;
+    const newText = editInput.value.trim();
+    if (kind === "message_edit" && (!newText || newText === oldText)) {
+        closeMessageActions();
+        return;
+    }
+    closeMessageActions();
+    // Önce yerelde uygula (anında görünür), sonra karşı tarafa imzalı gönder
+    if (!applyMessageChange(partner, msgUid, state.username, kind, newText)) return;
+    await persistChats();
+    renderMessages();
+    renderInbox();
+    try {
+        await sendMessageChange(kind, partner, msgUid, newText);
+    } catch (err) {
+        console.error("Değişiklik gönderilemedi:", err);
+        appendSystemMessage(partner, "⚠️ Değişiklik karşı tarafa gönderilemedi.");
+    }
+}
+
+if (editModal) {
+    document.getElementById("edit-message-cancel-btn").addEventListener("click", closeMessageActions);
+    document.getElementById("edit-message-save-btn").addEventListener("click", () => commitMessageChange("message_edit"));
+    document.getElementById("edit-message-delete-btn").addEventListener("click", () => commitMessageChange("message_delete"));
+    editInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitMessageChange("message_edit"); }
+        if (e.key === "Escape") closeMessageActions();
+    });
+}
+
 // Global exposure for onclick handlers in HTML template
 window.downloadAndDecryptFile = downloadAndDecryptFile;
 window.openViewOnceMessage = openViewOnceMessage;
+window.openMessageActions = openMessageActions;
 
 // Listeners to custom events from ws.js or db.js
 window.addEventListener('chats-updated', () => renderInbox());

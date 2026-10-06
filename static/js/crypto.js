@@ -420,6 +420,20 @@ export async function signDirectMessageJS(privateKeyPem, sender, recipient, encr
     return await signDataJS(privateKeyPem, directMessageSigData(sender, recipient, encryptedPayload));
 }
 
+// Mesaj kimliğini (msg_uid) o şifreli mesaja bağlar. Bu olmadan ele geçirilmiş
+// bir sunucu iki mesajın kimliğini değiştirip bir silmeyi başka mesaja yönlendirebilirdi.
+export function uidSigData(sender, recipient, msgUid, encryptedPayload) {
+    return new TextEncoder().encode(`uid:${sender}:${recipient}:${msgUid}:${encryptedPayload}`);
+}
+
+// Alan ayırıcılı değişiklik imzası: silme imzası düzenleme olarak (ya da tersi) kullanılamaz.
+export function changeSigData(kind, sender, recipient, msgUid, encryptedPayload = "") {
+    if (kind === "message_edit") {
+        return new TextEncoder().encode(`edit:${sender}:${recipient}:${msgUid}:${encryptedPayload}`);
+    }
+    return new TextEncoder().encode(`delete:${sender}:${recipient}:${msgUid}`);
+}
+
 export async function makeAuthHeadersJS(username, privateKeyPem, method, path, bodyText = "") {
     const timestamp = new Date().toISOString();
     const bodyHash = await sha256(bodyText);

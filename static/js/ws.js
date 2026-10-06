@@ -7,7 +7,11 @@ import {
     verifySignatureJS,
     decryptSymmetricJS,
     makeAuthHeadersJS,
-    directMessageSigData
+    directMessageSigData,
+    uidSigData,
+    changeSigData,
+    signDataJS as signJS,
+    encryptMessageJS
 } from './crypto.js';
 import {
     dbSet,
@@ -116,6 +120,95 @@ export async function verifyDirectMessage(sender, encryptedPayload, signatureB64
     return true;
 }
 
+async function verifyFrom(sender, dataBytes, signatureB64) {
+    if (!signatureB64) return false;
+    const pub = await getContactPubKey(sender);
+    if (!pub) return false;
+    try {
+        return await verifySignatureJS(pub, signatureB64, dataBytes);
+    } catch {
+        return false;
+    }
+}
+
+// Gelen mesajın msg_uid'sini yalnızca gönderenin imzasıyla bağlıysa kabul eder.
+// Geçersizse null: mesaj yine gösterilir ama düzenlenemez/silinemez.
+export async function verifiedMsgUid(sender, encryptedPayload, msgUid, uidSig) {
+    if (!msgUid) return null;
+    if (await verifyFrom(sender, uidSigData(sender, state.username, msgUid, encryptedPayload), uidSig)) {
+        return msgUid;
+    }
+    console.warn(`[Edit] '${sender}' mesajının msg_uid imzası geçersiz — kimlik yok sayıldı.`);
+    return null;
+}
+
+// Canlı WS varsa oradan, yoksa REST fallback ile gönderir.
+export async function sendFrameWithFallback(frame) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify(frame));
+        return;
+    }
+    const path = "/api/send_ws_fallback";
+    const bodyText = JSON.stringify({ payload: JSON.stringify(frame) });
+    const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+    headers["Content-Type"] = "application/json";
+    await fetch(`${API_URL}${path}`, { method: "POST", headers, body: bodyText });
+}
+
+// Kendi mesajımızı karşı tarafta düzenler (message_edit) veya siler (message_delete).
+export async function sendMessageChange(kind, recipient, msgUid, newText = "") {
+    let payload = "";
+    if (kind === "message_edit") {
+        const pub = await getContactPubKey(recipient);
+        if (!pub) return false;
+        payload = await encryptMessageJS(newText, pub);
+    }
+    const signature = await signJS(state.privateKeyPem,
+        changeSigData(kind, state.username, recipient, msgUid, payload));
+    await sendFrameWithFallback({ type: kind, recipient, msg_uid: msgUid, encrypted_payload: payload, signature });
+    return true;
+}
+
+// Yerel kayıtta değişikliği uygular. Yalnızca o sohbette, o göndericiye ait,
+// silinmemiş metin mesajı etkilenir (başkasının mesajı değiştirilemez).
+export function applyMessageChange(partner, msgUid, sender, kind, newText = "") {
+    const chat = state.chats[partner];
+    const m = chat && chat.messages.find(x => x.msg_uid === msgUid && x.sender === sender
+                                           && !x.is_file && !x.view_once && !x.deleted);
+    if (!m) return false;
+    if (kind === "message_delete") {
+        m.content = "";
+        m.deleted = true;
+        delete m.edited;
+    } else {
+        m.content = newText;
+        m.edited = true;
+    }
+    return true;
+}
+
+// Gelen düzenleme/silme. İmza ZORUNLU.
+async function receiveMessageChange(kind, sender, msgUid, encryptedPayload, signature) {
+    const data = changeSigData(kind, sender, state.username, msgUid, encryptedPayload);
+    if (!(await verifyFrom(sender, data, signature))) {
+        console.error(`[Edit] '${sender}' ${kind} imzası geçersiz/eksik — reddedildi.`);
+        return false;
+    }
+    let newText = "";
+    if (kind === "message_edit") {
+        try {
+            newText = await decryptMessageJS(encryptedPayload, state.privateKeyPem);
+        } catch (err) {
+            console.error("[Edit] Düzenleme çözülemedi:", err);
+            return false;
+        }
+    }
+    if (!applyMessageChange(sender, msgUid, sender, kind, newText)) return false;
+    await persistChats();
+    if (state.recipient === sender) window.dispatchEvent(new CustomEvent('messages-updated'));
+    return true;
+}
+
 function warnBlockedMessage(sender) {
     window.dispatchEvent(new CustomEvent('system-message', {
         detail: {
@@ -151,6 +244,8 @@ export async function fetchOfflineMessages() {
                         encrypted_payload: msg.encrypted_payload,
                         read: false
                     };
+                    const uid = await verifiedMsgUid(msg.sender, msg.encrypted_payload, msg.msg_uid, msg.uid_sig);
+                    if (uid) msgObj.msg_uid = uid;
                     await saveChatToLocalStorage(msg.sender, msgObj);
                 } catch (decryptErr) {
                     console.error("Çevrimdışı mesaj çözülemedi:", decryptErr);
@@ -222,6 +317,8 @@ export function connectWebSocket() {
                         encrypted_payload: data.encrypted_payload,
                         read: isActive
                     };
+                    const uid = await verifiedMsgUid(sender, data.encrypted_payload, data.msg_uid, data.uid_sig);
+                    if (uid) msgObj.msg_uid = uid;
 
                     if (!state.chats[sender]) {
                         state.chats[sender] = { partner: sender, ephemeral: false, messages: [] };
@@ -246,6 +343,14 @@ export function connectWebSocket() {
                 }
             }
             
+            // Karşı taraf kendi mesajını düzenledi / herkesten sildi
+            else if (data.type === "message_edit" || data.type === "message_delete") {
+                if (await receiveMessageChange(data.type, data.sender, data.msg_uid,
+                                               data.encrypted_payload || "", data.signature || "")) {
+                    window.dispatchEvent(new CustomEvent('chats-updated'));
+                }
+            }
+
             // Karşı taraf yazıyor / yazmayı bıraktı
             else if (data.type === "typing") {
                 window.dispatchEvent(new CustomEvent('typing-updated', {

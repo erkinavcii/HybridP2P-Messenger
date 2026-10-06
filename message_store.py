@@ -116,6 +116,14 @@ class MessageStore:
         except sqlite3.OperationalError:
             pass
 
+        # E2EE profil fotoğrafı: karşı tarafın avatarı (base64 JPEG) ve
+        # bizim avatarımızın bu kişiye en son gönderilen sürümünün özeti
+        for col in ("avatar TEXT", "avatar_sent_hash TEXT"):
+            try:
+                cursor.execute(f"ALTER TABLE contacts ADD COLUMN {col}")
+            except sqlite3.OperationalError:
+                pass
+
         conn.commit()
         conn.close()
 
@@ -507,6 +515,39 @@ class MessageStore:
             conn.execute(
                 "UPDATE contacts SET signs_messages = 1 WHERE username = ?", (username,)
             )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def set_contact_avatar(self, username: str, avatar_b64: str):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("UPDATE contacts SET avatar = ? WHERE username = ?", (avatar_b64, username))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_contact_avatar(self, username: str):
+        """Kişinin avatarı (base64 JPEG) veya None."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            row = conn.execute("SELECT avatar FROM contacts WHERE username = ?", (username,)).fetchone()
+            return row[0] if row and row[0] else None
+        finally:
+            conn.close()
+
+    def get_avatar_sent_hash(self, username: str):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            row = conn.execute("SELECT avatar_sent_hash FROM contacts WHERE username = ?", (username,)).fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
+
+    def set_avatar_sent_hash(self, username: str, digest: str):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("UPDATE contacts SET avatar_sent_hash = ? WHERE username = ?", (digest, username))
             conn.commit()
         finally:
             conn.close()

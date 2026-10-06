@@ -356,6 +356,8 @@ class MessengerApp(
             visible=False
         )
 
+        # Sohbet başlığındaki karşı taraf avatarı (E2EE fotoğraf varsa)
+        self.chat_avatar = ft.Container(visible=False)
         self.chat_title_text = ft.Text("No active chat", size=16, weight=ft.FontWeight.BOLD, color=C.text)
         self.inbox_list = ft.ListView(expand=True, spacing=4, padding=8)
 
@@ -517,6 +519,7 @@ class MessengerApp(
                                     icon=ft.Icons.ARROW_BACK, icon_color=C.text,
                                     icon_size=20, on_click=lambda e: self.show_inbox_screen(),
                                 ),
+                                self.chat_avatar,
                                 ft.Column(
                                     controls=[
                                         self.chat_title_text,

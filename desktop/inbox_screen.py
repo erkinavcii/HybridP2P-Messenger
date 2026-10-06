@@ -19,6 +19,26 @@ from crypto_utils import encrypt_message, public_key_to_pem_string, serialize_pr
 
 class InboxScreenMixin:
 
+    def make_avatar(self, partner: str, is_group: bool, radius: int = 20):
+        """Kişinin E2EE avatarı varsa onu, yoksa ikonlu varsayılanı döndürür."""
+        icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
+        bg = C.accent if is_group else C.avatar_dm
+        b64 = None
+        if not is_group and self.state.get("store"):
+            b64 = self.state["store"].get_contact_avatar(partner)
+        if b64:
+            return ft.CircleAvatar(foreground_image_src=f"data:image/jpeg;base64,{b64}",
+                                   bgcolor=bg, radius=radius)
+        return ft.CircleAvatar(content=ft.Icon(icon, color=C.on_accent, size=int(radius * 0.9)),
+                               bgcolor=bg, radius=radius)
+
+    def refresh_avatars(self):
+        """Yeni bir avatar gelince görünen yerleri günceller (UI thread'inde çağrılır)."""
+        if self.page.controls and self.page.controls[0] is self.inbox_view:
+            self.load_inbox_chats(self.search_field.value.strip() or None)
+        if self.state.get("recipient") and not self.state.get("is_group", False):
+            self.update_chat_header_avatar()
+
     def show_inbox_screen(self):
         self.state["recipient"] = None
         self.state["is_group"] = False
@@ -93,11 +113,7 @@ class InboxScreenMixin:
                         ft.Container(
                             content=ft.Row(
                                 controls=[
-                                    ft.CircleAvatar(
-                                        content=ft.Icon(avatar_icon, color=C.on_accent, size=18),
-                                        bgcolor=avatar_color,
-                                        radius=20,
-                                    ),
+                                    self.make_avatar(partner, is_group, radius=20),
                                     ft.Column(
                                         controls=[
                                             ft.Row(
@@ -194,11 +210,7 @@ class InboxScreenMixin:
                             ft.Container(
                                 content=ft.Row(
                                     controls=[
-                                        ft.CircleAvatar(
-                                            content=ft.Icon(avatar_icon, color=C.on_accent, size=18),
-                                            bgcolor=avatar_color,
-                                            radius=20,
-                                        ),
+                                        self.make_avatar(partner, is_group, radius=20),
                                         ft.Column(
                                             controls=[
                                                 ft.Row(
@@ -252,11 +264,7 @@ class InboxScreenMixin:
                             ft.Container(
                                 content=ft.Row(
                                     controls=[
-                                        ft.CircleAvatar(
-                                            content=ft.Icon(avatar_icon, color=C.on_accent, size=16),
-                                            bgcolor=avatar_color,
-                                            radius=16,
-                                        ),
+                                        self.make_avatar(partner, is_group, radius=16),
                                         ft.Column(
                                             controls=[
                                                 ft.Row(
@@ -719,11 +727,7 @@ class InboxScreenMixin:
                     ft.Container(
                         content=ft.Row(
                             controls=[
-                                ft.CircleAvatar(
-                                    content=ft.Icon(ft.Icons.PERSON, color=C.on_accent, size=16),
-                                    bgcolor=C.avatar_dm,
-                                    radius=16,
-                                ),
+                                self.make_avatar(uname, False, radius=16),
                                 ft.Column(
                                     controls=[
                                         ft.Text(uname, weight=ft.FontWeight.BOLD, size=13, color=C.text),
@@ -882,6 +886,51 @@ class InboxScreenMixin:
             settings_store.set("sound_enabled", bool(e.control.value))
             self.log_status("Bildirim sesi açıldı." if e.control.value else "Bildirim sesi kapatıldı.")
 
+        # ── Profil fotoğrafı (E2EE dağıtılır) ──
+        from desktop import avatar as avatar_mod
+        me = self.state["username"]
+
+        def _own_preview():
+            jpeg = avatar_mod.load_own(me)
+            if jpeg:
+                return ft.CircleAvatar(foreground_image_src=avatar_mod.to_data_url(jpeg),
+                                       bgcolor=C.accent, radius=26)
+            return ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=C.on_accent, size=26),
+                                   bgcolor=C.accent, radius=26)
+
+        avatar_slot = ft.Container(content=_own_preview())
+
+        async def on_pick_avatar(e):
+            files = await self.file_picker.pick_files(allow_multiple=False)
+            if not files:
+                return
+            try:
+                from pathlib import Path
+                jpeg = avatar_mod.normalize(Path(files[0].path).read_bytes())
+            except (OSError, ValueError) as ex:
+                self.log_status(f"Fotoğraf kullanılamadı: {ex}")
+                return
+            avatar_mod.save_own(me, jpeg)
+            avatar_slot.content = _own_preview()
+            self.page.update()
+            self.broadcast_avatar()
+
+        avatar_row = ft.Row(
+            controls=[
+                avatar_slot,
+                ft.Column(
+                    controls=[
+                        ft.Text("Profil fotoğrafı", size=13, color=C.text, weight=ft.FontWeight.BOLD),
+                        ft.Text("Kişilerinize uçtan uca şifreli gönderilir; sunucu göremez.",
+                                size=10, color=C.text_muted),
+                    ],
+                    spacing=2, tight=True, expand=True,
+                ),
+                ft.TextButton("Seç", on_click=on_pick_avatar, style=ft.ButtonStyle(color=C.accent)),
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
         theme_switch = ft.Switch(value=not C.is_dark, active_color=C.accent,
                                  on_change=on_theme_toggle)
         sound_switch = ft.Switch(value=bool(settings_store.get("sound_enabled")),
@@ -999,6 +1048,7 @@ class InboxScreenMixin:
                             alignment=ft.MainAxisAlignment.START,
                         ),
                         ft.Divider(color=C.surface_alt, height=10),
+                        avatar_row,
                         ft.Row(
                             controls=[
                                 ft.Icon(ft.Icons.DARK_MODE if C.is_dark else ft.Icons.LIGHT_MODE,

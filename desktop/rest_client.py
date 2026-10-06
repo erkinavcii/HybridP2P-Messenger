@@ -166,9 +166,12 @@ class RestClientMixin:
                         print(f"[REST] '{msg['sender']}' kullanicisindan gelen cevrimdisi mesaj basariyla cozuldu.")
                         uid = self.verified_msg_uid(msg["sender"], msg["encrypted_payload"],
                                                     msg.get("msg_uid", ""), msg.get("uid_sig", ""))
+                        vo = bool(msg.get("view_once", False))
+                        prev = None if vo else self.verified_preview(
+                            msg["sender"], msg["encrypted_payload"],
+                            msg.get("encrypted_preview", ""), msg.get("preview_sig", ""))
                         self._on_incoming_message(msg["sender"], pt, msg.get("timestamp", ""),
-                                             bool(msg.get("view_once", False)),
-                                             msg["encrypted_payload"], msg_uid=uid)
+                                             vo, msg["encrypted_payload"], msg_uid=uid, preview=prev)
                     except Exception as ex:
                         print(f"[REST] Mesaj cozme hatasi: {ex}")
                         self._on_incoming_message(msg["sender"], f"[Hata: {ex}]",

@@ -84,7 +84,7 @@ class ChatLogicMixin:
     def add_message_to_chat(self, sender: str, text: str, is_mine: bool,
                              time_str: str = "", save: bool = True,
                              view_once: bool = False, encrypted_payload: str = "",
-                             is_read: bool = True, msg_uid: str = None):
+                             is_read: bool = True, msg_uid: str = None, preview: str = None):
         from datetime import timezone
         if not time_str:
             time_str = datetime.now(timezone.utc).isoformat()
@@ -96,7 +96,7 @@ class ChatLogicMixin:
             bubble = self.create_view_once_bubble(sender, display_ts, is_mine, encrypted_payload, plaintext_fallback=text)
         else:
             bubble = self.create_message_bubble(sender, text, display_ts, is_mine, is_read=is_read,
-                                                msg_uid=self._editable_uid(msg_uid))
+                                                msg_uid=self._editable_uid(msg_uid), preview=preview)
 
         self._append_day_separator_if_needed(raw_ts)
         self.chat_list.controls.append(bubble)
@@ -105,7 +105,7 @@ class ChatLogicMixin:
             self.state["store"].save_message(
                 partner=self.state["recipient"], sender=sender,
                 content=text, is_mine=is_mine, timestamp=raw_ts, is_read=(0 if is_mine else 1),
-                msg_uid=msg_uid,
+                msg_uid=msg_uid, preview=preview,
             )
         try: self.page.update()
         except: pass
@@ -195,7 +195,7 @@ class ChatLogicMixin:
 
     def _on_incoming_message(self, sender: str, plaintext: str, timestamp: str = "",
                               view_once: bool = False, encrypted_payload: str = "",
-                              msg_uid: str = None):
+                              msg_uid: str = None, preview: str = None):
         def _update():
             self._notify_incoming()
             # Mesaj geldiyse karşı taraf yazmayı bitirmiştir
@@ -206,14 +206,14 @@ class ChatLogicMixin:
                                      time_str=timestamp, save=True,
                                      view_once=view_once,
                                      encrypted_payload=encrypted_payload,
-                                     msg_uid=msg_uid)
+                                     msg_uid=msg_uid, preview=preview)
                 self.send_read_receipt(sender, timestamp)
             else:
                 if self.state["store"] and not view_once:
                     self.state["store"].save_message(
                         partner=sender, sender=sender,
                         content=plaintext, is_mine=False, timestamp=timestamp,
-                        is_read=0, msg_uid=msg_uid,
+                        is_read=0, msg_uid=msg_uid, preview=preview,
                     )
                 self.log_status(f"'{sender}' adlisindan yeni mesaj var!")
             self.load_inbox_chats()
@@ -335,7 +335,8 @@ class ChatLogicMixin:
                 self.chat_list.controls.append(
                     self.create_message_bubble(m["sender"], m["content"], ts, bool(m["is_mine"]), is_read=is_read_val,
                                                msg_uid=self._editable_uid(m.get("msg_uid")),
-                                               edited=bool(m.get("edited")))
+                                               edited=bool(m.get("edited")),
+                                               preview=m.get("preview"))
                 )
         try: self.page.update()
         except: pass

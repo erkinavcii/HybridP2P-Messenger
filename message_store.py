@@ -580,6 +580,21 @@ class MessageStore:
         finally:
             conn.close()
 
+    def set_message_preview(self, partner: str, msg_uid: str, preview_json: str) -> bool:
+        """Kendi gönderdiğimiz mesaja (önizleme sonradan hazır olunca) önizleme ekler."""
+        if not msg_uid:
+            return False
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cur = conn.execute(
+                """UPDATE messages SET preview = ?
+                   WHERE chat_id = ? AND msg_uid = ? AND is_mine = 1 AND msg_type = 'text'""",
+                (preview_json, self._chat_id(partner), msg_uid))
+            conn.commit()
+            return cur.rowcount > 0
+        finally:
+            conn.close()
+
     def delete_message(self, partner: str, msg_uid: str, sender: str) -> bool:
         """Mesajı "herkesten sil": içerik yok edilir, yerinde "silindi" kalır."""
         if not msg_uid:

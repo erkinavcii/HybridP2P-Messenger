@@ -43,10 +43,57 @@ class ChatScreenMixin:
             self.video_call_icon_btn.visible = False
 
         self.username_text.value = f"User: {self.state['username']}"
+        # Önceki sohbetten kalmış bir "yazıyor…" yeni sohbette görünmesin
+        self.typing_text.visible = False
         self.refresh_recipient_status()
         self.page.controls.clear()
         self.page.add(self.chat_view)
         self.page.update()
+
+    # ── "Yazıyor…" sinyali gönderme ─────────────────────────────────────
+    # Debounce: yazarken en fazla TYPING_RESEND_SEC'de bir "true"; son tuştan
+    # TYPING_IDLE_SEC sonra veya mesaj gönderilince "false". Yalnızca birebir
+    # sohbetlerde ve WebSocket açıkken gönderilir (REST fallback'e düşmez).
+    TYPING_RESEND_SEC = 3.0
+    TYPING_IDLE_SEC = 4.0
+
+    def _send_typing(self, is_typing: bool):
+        recipient = self.state.get("recipient")
+        if not recipient or self.state.get("is_group", False) or not self.is_ws_connected():
+            return
+        import json
+        self._ws_send_raw(json.dumps({"type": "typing", "recipient": recipient,
+                                      "is_typing": is_typing}))
+
+    def on_message_input_change(self, e):
+        text = (self.message_input.value or "").strip()
+        timer = getattr(self, "_typing_idle_timer", None)
+        if timer:
+            timer.cancel()
+
+        if not text:
+            self._stop_typing_signal()
+            return
+
+        now = time_module.monotonic()
+        last = getattr(self, "_typing_last_sent", 0.0)
+        if not getattr(self, "_typing_active", False) or now - last >= self.TYPING_RESEND_SEC:
+            self._typing_active = True
+            self._typing_last_sent = now
+            self._send_typing(True)
+
+        self._typing_idle_timer = threading.Timer(self.TYPING_IDLE_SEC, self._stop_typing_signal)
+        self._typing_idle_timer.daemon = True
+        self._typing_idle_timer.start()
+
+    def _stop_typing_signal(self):
+        timer = getattr(self, "_typing_idle_timer", None)
+        if timer:
+            timer.cancel()
+            self._typing_idle_timer = None
+        if getattr(self, "_typing_active", False):
+            self._typing_active = False
+            self._send_typing(False)
 
     def on_connect_recipient(self, e):
         recipient_input = self.recipient_field.value.strip()
@@ -294,6 +341,8 @@ class ChatScreenMixin:
         # Clear input field immediately
         self.message_input.value = ""
         self.page.update()
+        # Mesaj gitti — karşı tarafta "yazıyor…" hemen kapansın
+        self._stop_typing_signal()
 
         if staged:
             # Show progress bar and disable attach/staged remove controls

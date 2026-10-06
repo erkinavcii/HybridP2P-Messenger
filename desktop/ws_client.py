@@ -195,6 +195,12 @@ class WsClientMixin:
                                     except Exception as ex:
                                         print(f"Grup mesaji cozme hatasi: {ex}")
 
+                            elif t == "avatar_update":
+                                if self.receive_avatar(data.get("sender", ""),
+                                                       data.get("encrypted_payload", ""),
+                                                       data.get("signature", "")):
+                                    self.run_on_ui(self.refresh_avatars)
+
                             elif t == "typing":
                                 self.run_on_ui(self._on_typing_received,
                                                data.get("sender", ""),
@@ -425,6 +431,78 @@ class WsClientMixin:
         if store.contact_signs_messages(sender):
             print(f"[Signature] '{sender}' normalde imzaliyor ama bu mesaj IMZASIZ — reddedildi.")
             return False
+        return True
+
+    # ── E2EE profil fotoğrafı ──────────────────────────────────────────
+
+    def send_avatar_to(self, username: str) -> bool:
+        """Kendi avatarımızı bir kişiye şifreli + imzalı gönderir (ağ işlemi —
+        arka plan thread'inden çağırın). Gönderildiyse sürüm özeti kaydedilir."""
+        from crypto_utils import encrypt_bytes, sign_data
+        from desktop import avatar
+        me = self.state["username"]
+        jpeg = avatar.load_own(me)
+        if not jpeg or username == me:
+            return False
+        pub = self._resolve_sender_public_key(username)
+        if not pub:
+            return False
+        payload = encrypt_bytes(jpeg, pub)
+        sig = base64.b64encode(sign_data(self.state["private_key"],
+                                         avatar.signed_data(me, username, payload))).decode("ascii")
+        self.send_ws_message_with_fallback({
+            "type": "avatar_update", "recipient": username,
+            "encrypted_payload": payload, "signature": sig,
+        })
+        self.state["store"].set_avatar_sent_hash(username, avatar.digest(jpeg))
+        return True
+
+    def maybe_send_avatar(self, username: str):
+        """Bu kişi avatarımızın güncel sürümünü almadıysa arka planda gönderir."""
+        from desktop import avatar
+        jpeg = avatar.load_own(self.state["username"])
+        store = self.state.get("store")
+        if not jpeg or not store or store.get_avatar_sent_hash(username) == avatar.digest(jpeg):
+            return
+        threading.Thread(target=self.send_avatar_to, args=(username,), daemon=True).start()
+
+    def broadcast_avatar(self):
+        """Avatar değişince rehberdeki herkese gönderir (arka planda)."""
+        def _run():
+            sent = 0
+            for c in self.state["store"].get_all_contacts():
+                try:
+                    sent += bool(self.send_avatar_to(c["username"]))
+                except Exception as ex:
+                    print(f"[Avatar] '{c['username']}' kisisine gonderilemedi: {ex}")
+            self.log_status(f"Profil fotoğrafı {sent} kişiye şifreli gönderildi.")
+        threading.Thread(target=_run, daemon=True).start()
+
+    def receive_avatar(self, sender: str, encrypted_payload: str, signature_b64: str) -> bool:
+        """Gelen avatarı doğrular, çözer, yeniden kodlar ve saklar. Başarılıysa True.
+
+        İmza ZORUNLU: yeni bir tip olduğu için imzasız gönderen eski istemci yok;
+        imzasız/geçersiz avatar = ele geçirilmiş sunucunun sahte fotoğraf denemesi.
+        """
+        from crypto_utils import decrypt_bytes, verify_signature
+        from desktop import avatar
+        if not signature_b64:
+            print(f"[Avatar] '{sender}' avatari imzasiz — reddedildi.")
+            return False
+        pub = self._resolve_sender_public_key(sender)
+        if not pub:
+            return False
+        try:
+            data = avatar.signed_data(sender, self.state["username"], encrypted_payload)
+            if not verify_signature(pub, base64.b64decode(signature_b64), data):
+                print(f"[Avatar] '{sender}' avatar imzasi GECERSIZ — reddedildi.")
+                return False
+            raw = decrypt_bytes(encrypted_payload, self.state["private_key"])
+            jpeg = avatar.normalize(raw, max_bytes=avatar.MAX_RECEIVED_BYTES)
+        except Exception as ex:
+            print(f"[Avatar] '{sender}' avatari islenemedi: {ex}")
+            return False
+        self.state["store"].set_contact_avatar(sender, base64.b64encode(jpeg).decode("ascii"))
         return True
 
     def send_message_via_ws(self, recipient: str, encrypted_payload: str, view_once: bool, timestamp: str = None):

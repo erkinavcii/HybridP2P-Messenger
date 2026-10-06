@@ -45,6 +45,7 @@ class ChatScreenMixin:
             self.call_icon_btn.visible = False
             self.video_call_icon_btn.visible = False
 
+        self.update_chat_header_avatar()
         self.username_text.value = f"User: {self.state['username']}"
         # Önceki sohbetten kalmış bir "yazıyor…" yeni sohbette görünmesin
         self.typing_text.visible = False
@@ -52,6 +53,17 @@ class ChatScreenMixin:
         self.page.controls.clear()
         self.page.add(self.chat_view)
         self.page.update()
+
+    def update_chat_header_avatar(self):
+        rec = self.state.get("recipient")
+        is_group = self.state.get("is_group", False)
+        if rec:
+            self.chat_avatar.content = self.make_avatar(rec, is_group, radius=16)
+            self.chat_avatar.visible = True
+        else:
+            self.chat_avatar.visible = False
+        try: self.page.update()
+        except: pass
 
     # ── Sesli mesaj kaydı ──────────────────────────────────────────────
 
@@ -238,6 +250,9 @@ class ChatScreenMixin:
                 if received_msgs:
                     latest_ts = received_msgs[-1]["timestamp"]
                     self.send_read_receipt(rec, latest_ts)
+
+            # Bu kişi avatarımızın güncel sürümünü almadıysa şifreli gönder
+            self.maybe_send_avatar(rec)
 
             ephemeral = self.state["store"].is_ephemeral(rec)
             self.state["ephemeral"] = ephemeral

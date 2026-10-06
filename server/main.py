@@ -25,7 +25,7 @@ from server.limiter import limiter
 
 # Router'lar
 from server.routes.users import router as users_router
-from server.routes.messages import router as messages_router, _make_chat_id
+from server.routes.messages import router as messages_router, _make_chat_id, relay_avatar_update
 from server.routes.groups import router as groups_router
 from server.routes.voip import router as voip_router
 
@@ -133,6 +133,14 @@ def _pending_row_to_frame(row) -> dict | None:
             "type": "group_message",
             "sender": row["sender"],
             "group_id": extra.get("group_id", ""),
+            "encrypted_payload": row["encrypted_payload"],
+            "signature": extra.get("signature", ""),
+            "timestamp": row["timestamp"],
+        }
+    if row_type == "avatar_update":
+        return {
+            "type": "avatar_update",
+            "sender": row["sender"],
             "encrypted_payload": row["encrypted_payload"],
             "signature": extra.get("signature", ""),
             "timestamp": row["timestamp"],
@@ -415,6 +423,9 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                             (sender, recipient, encrypted_payload, json.dumps({"group_id": group_id}), timestamp)
                         )
                         await db.commit()
+
+            elif msg_type == "avatar_update":
+                await relay_avatar_update(username, message)
 
             elif msg_type == "read_receipt":
                 recipient = message.get("recipient", "")

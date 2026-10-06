@@ -82,9 +82,13 @@ def build_message_frame(sender: str, message: dict) -> tuple[dict, dict]:
         "signature": message.get("signature", ""),
         "msg_uid": message.get("msg_uid", ""),
         "uid_sig": message.get("uid_sig", ""),
+        # Link önizleme: gönderenin ürettiği, alıcıya şifreli + imzalı (sunucu URL'yi görmez)
+        "encrypted_preview": message.get("encrypted_preview", ""),
+        "preview_sig": message.get("preview_sig", ""),
         "timestamp": message.get("timestamp") or datetime.now(timezone.utc).isoformat(),
     }
-    extra = {k: frame[k] for k in ("view_once", "signature", "msg_uid", "uid_sig")}
+    extra = {k: frame[k] for k in ("view_once", "signature", "msg_uid", "uid_sig",
+                                   "encrypted_preview", "preview_sig")}
     return frame, extra
 
 
@@ -582,6 +586,8 @@ async def fetch_offline_messages(
                 "signature": extra.get("signature", ""),
                 "msg_uid": extra.get("msg_uid", ""),
                 "uid_sig": extra.get("uid_sig", ""),
+                "encrypted_preview": extra.get("encrypted_preview", ""),
+                "preview_sig": extra.get("preview_sig", ""),
                 "timestamp": r["timestamp"],
             })
 

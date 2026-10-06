@@ -114,6 +114,8 @@ def _pending_row_to_frame(row) -> dict | None:
             "signature": extra.get("signature", ""),
             "msg_uid": extra.get("msg_uid", ""),
             "uid_sig": extra.get("uid_sig", ""),
+            "encrypted_preview": extra.get("encrypted_preview", ""),
+            "preview_sig": extra.get("preview_sig", ""),
             "timestamp": row["timestamp"],
         }
     if row_type in ("message_edit", "message_delete"):

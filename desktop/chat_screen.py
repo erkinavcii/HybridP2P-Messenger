@@ -34,10 +34,12 @@ class ChatScreenMixin:
                 self.chat_title_text.value = f"Group: {display_name}"
                 self.call_icon_btn.visible = False
                 self.video_call_icon_btn.visible = False
+                self.voice_btn.visible = False
             else:
                 self.chat_title_text.value = f"Chat: {self.state['recipient']}"
                 self.call_icon_btn.visible = True
                 self.video_call_icon_btn.visible = True
+                self.voice_btn.visible = True
         else:
             self.chat_title_text.value = "No active chat"
             self.call_icon_btn.visible = False
@@ -50,6 +52,124 @@ class ChatScreenMixin:
         self.page.controls.clear()
         self.page.add(self.chat_view)
         self.page.update()
+
+    # ── Sesli mesaj kaydı ──────────────────────────────────────────────
+
+    def _voice_recorder(self):
+        if getattr(self, "_recorder", None) is None:
+            from desktop import voice
+            self._recorder = voice.VoiceRecorder(
+                on_limit=lambda: self.run_on_ui(self.toggle_voice_recording, None))
+        return self._recorder
+
+    def _set_recording_ui(self, on: bool):
+        self.recording_bar.visible = on
+        self.voice_btn.icon = ft.Icons.STOP_CIRCLE if on else ft.Icons.MIC_NONE
+        self.voice_btn.icon_color = C.danger if on else C.text_muted
+        self.voice_btn.tooltip = "Kaydı bitir ve gönder" if on else "Sesli mesaj kaydet"
+        self.message_input.disabled = on
+        try: self.page.update()
+        except: pass
+
+    def toggle_voice_recording(self, e):
+        """1. tık: kaydı başlat. 2. tık (veya "Gönder"): durdur, şifrele, gönder."""
+        from desktop import voice
+        rec = self._voice_recorder()
+
+        if rec.recording:
+            pcm = rec.stop()
+            self._set_recording_ui(False)
+            target = getattr(self, "_voice_target", None)
+            threading.Thread(target=self._send_voice, args=(pcm, target), daemon=True).start()
+            return
+
+        recipient = self.state.get("recipient")
+        if not recipient or self.state.get("is_group", False):
+            self.log_status("Sesli mesaj yalnızca birebir sohbetlerde gönderilebilir.")
+            return
+        if not self.state.get("recipient_pub_key"):
+            self.log_status("Alıcının anahtarı yok, sesli mesaj gönderilemez.")
+            return
+        if self.state.get("call_state") in ("ringing", "calling", "connected"):
+            self.log_status("Arama sırasında sesli mesaj kaydedilemez.")
+            return
+        try:
+            rec.start()
+        except Exception as ex:
+            print(f"[Voice] Mikrofon acilamadi: {ex}")
+            self.log_status("Mikrofon açılamadı (bağlı değil ya da başka uygulama kullanıyor).")
+            return
+
+        # Kayıt sürerken sohbet değişse bile ses doğru kişiye gitsin
+        self._voice_target = (recipient, self.state["recipient_pub_key"])
+        self._stop_typing_signal()
+        self._set_recording_ui(True)
+
+        def _tick():
+            while rec.recording:
+                elapsed = rec.elapsed
+                def _upd(t=elapsed):
+                    self.recording_label.value = (f"Kaydediliyor {voice.fmt_duration(t)}"
+                                                  f" / {voice.fmt_duration(voice.MAX_SECONDS)}")
+                    try: self.page.update()
+                    except: pass
+                self.run_on_ui(_upd)
+                time_module.sleep(0.5)
+        threading.Thread(target=_tick, daemon=True).start()
+
+    def cancel_voice_recording(self, e):
+        self._voice_recorder().cancel()
+        self._set_recording_ui(False)
+        self.log_status("Sesli mesaj iptal edildi.")
+
+    def _send_voice(self, pcm, target):
+        """Arka planda: Opus'a kodla → E2EE şifrele → yükle → file_message → yerelde sakla."""
+        from desktop import voice
+        if not target:
+            return
+        recipient, pub = target
+        duration = len(pcm) / voice.SAMPLE_RATE
+        if duration < voice.MIN_SECONDS:
+            self.log_status("Sesli mesaj çok kısa, gönderilmedi.")
+            return
+        try:
+            self.log_status("Sesli mesaj şifreleniyor...")
+            data = voice.encode_opus(pcm)
+            original_name = voice.voice_filename()
+            resp = self.signed_post("/api/upload_file", {
+                "sender":         self.state["username"],
+                "recipient":      recipient,
+                "encrypted_data": encrypt_bytes(data, pub),
+                "original_name":  original_name,
+                "file_type":      "audio",
+            }, timeout=60)
+            if resp.status_code != 200:
+                raise RuntimeError(f"yükleme başarısız ({resp.status_code}): {resp.text[:120]}")
+            file_uuid = resp.json()["uuid"]
+            ts = datetime.now(timezone.utc).isoformat()
+            self.send_ws_message_with_fallback({
+                "type":          "file_message",
+                "sender":        self.state["username"],
+                "recipient":     recipient,
+                "file_uuid":     file_uuid,
+                "original_name": original_name,
+                "file_type":     "audio",
+                "view_once":     False,
+                "timestamp":     ts,
+            })
+        except Exception as ex:
+            print(f"[Voice] Gonderim hatasi: {ex}")
+            self.log_status(f"Sesli mesaj gönderilemedi: {ex}")
+            return
+
+        self.store_voice(recipient, self.state["username"], True, ts, file_uuid, data, duration)
+
+        def _show():
+            if self.state.get("recipient") == recipient:
+                self.add_voice_to_chat(self.state["username"], True, ts, duration, lambda d=data: d)
+            self.log_status(f"Sesli mesaj gönderildi ({voice.fmt_duration(duration)}).")
+            self.load_inbox_chats()
+        self.run_on_ui(_show)
 
     # ── "Yazıyor…" sinyali gönderme ─────────────────────────────────────
     # Debounce: yazarken en fazla TYPING_RESEND_SEC'de bir "true"; son tuştan

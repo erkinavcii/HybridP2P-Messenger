@@ -459,6 +459,30 @@ class MessengerApp(
 
         self.upload_progress = ft.ProgressBar(color=C.accent, height=2, visible=False)
 
+        # Sesli mesaj: kayıt butonu + kayıt sırasında görünen çubuk
+        self.voice_btn = ft.IconButton(
+            icon=ft.Icons.MIC_NONE, icon_color=C.text_muted, icon_size=20,
+            tooltip="Sesli mesaj kaydet", on_click=self.toggle_voice_recording,
+        )
+        self.recording_label = ft.Text("Kaydediliyor 0:00", size=12, color=C.danger,
+                                       weight=ft.FontWeight.BOLD)
+        self.recording_bar = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.FIBER_MANUAL_RECORD, color=C.danger, size=14),
+                    self.recording_label,
+                    ft.Container(expand=True),
+                    ft.TextButton("İptal", on_click=self.cancel_voice_recording,
+                                  style=ft.ButtonStyle(color=C.text_muted)),
+                    ft.TextButton("Gönder", on_click=self.toggle_voice_recording,
+                                  style=ft.ButtonStyle(color=C.accent)),
+                ],
+                spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            bgcolor=C.danger_bg, padding=ft.Padding(10, 2, 6, 2), border_radius=6,
+            visible=False,
+        )
+
         self.staged_file_container = ft.Container(
             content=ft.Row(
                 controls=[
@@ -538,11 +562,13 @@ class MessengerApp(
                         content=ft.Column(
                             controls=[
                                 self.staged_file_container,
+                                self.recording_bar,
                                 self.upload_progress,
                                 ft.Row(
                                     controls=[
                                         self.view_once_msg_btn,
                                         self.attach_btn,
+                                        self.voice_btn,
                                         self.message_input,
                                         ft.FloatingActionButton(
                                             icon=ft.Icons.SEND_ROUNDED, bgcolor=C.accent,

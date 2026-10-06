@@ -23,6 +23,7 @@ from desktop.theme import C
 from desktop.net_config import _guess_file_type
 from desktop.notify import play_notification
 from desktop import settings_store
+from desktop import voice
 
 # Tarih ayracı etiketleri için Türkçe ay adları
 _TR_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -214,8 +215,66 @@ class ChatLogicMixin:
             self.load_inbox_chats()
         self.run_on_ui(_update)
 
+    # ── Sesli mesaj ────────────────────────────────────────────────────
+
+    def add_voice_to_chat(self, sender: str, is_mine: bool, timestamp: str,
+                          duration: float, load_audio):
+        """Sohbete sesli mesaj baloncuğu ekler. load_audio() → Ogg bayt (veya None)."""
+        self._append_day_separator_if_needed(timestamp)
+        self.chat_list.controls.append(
+            self.create_voice_bubble(sender, self._fmt_time(timestamp), is_mine, duration, load_audio))
+        try: self.page.update()
+        except: pass
+
+    def store_voice(self, partner: str, sender: str, is_mine: bool, timestamp: str,
+                    file_uuid: str, data: bytes, duration: float):
+        """Sesli mesajı yerelde saklar. Ephemeral sohbette diske HİÇBİR ŞEY yazmaz
+        ve None döner (ses yalnızca bellekte, baloncuk ömrü boyunca yaşar)."""
+        store = self.state["store"]
+        if not store or store.is_ephemeral(partner):
+            return None
+        name = voice.save_media(self.state["username"], file_uuid, data)
+        store.save_message(partner=partner, sender=sender,
+                           content=json.dumps({"voice": name, "duration": round(duration, 2)}),
+                           is_mine=is_mine, timestamp=timestamp, msg_type="voice",
+                           is_read=(0 if is_mine else (1 if self.state.get("recipient") == partner else 0)))
+        return name
+
+    def _receive_voice(self, sender: str, file_uuid: str, timestamp: str):
+        """Gelen sesli mesajı hemen indirir (sunucu ilk indirmede siler), çözer,
+        yerelde saklar ve gösterir. Arka plan thread'inde çalışır."""
+        from crypto_utils import decrypt_bytes
+        try:
+            resp = self.signed_get(f"/api/download_file/{file_uuid}", timeout=30)
+            if resp.status_code != 200:
+                raise RuntimeError(f"indirme basarisiz ({resp.status_code})")
+            data = decrypt_bytes(resp.json()["encrypted_data"], self.state["private_key"])
+            duration = voice.duration_of(data)
+        except Exception as ex:
+            print(f"[Voice] '{sender}' sesli mesaji alinamadi: {ex}")
+            self.log_status(f"'{sender}' adlısından gelen sesli mesaj alınamadı.")
+            return
+
+        self.store_voice(sender, sender, False, timestamp, file_uuid, data, duration)
+
+        def _update():
+            self._notify_incoming()
+            if sender == self.state.get("recipient"):
+                self._hide_typing()
+                self.add_voice_to_chat(sender, False, timestamp, duration, lambda d=data: d)
+            else:
+                self.log_status(f"'{sender}' adlısından sesli mesaj var!")
+            self.load_inbox_chats()
+        self.run_on_ui(_update)
+
     def _on_incoming_file(self, sender: str, file_uuid: str, original_name: str,
                            file_type: str, timestamp: str, view_once: bool):
+        if voice.is_voice_file(original_name, file_type):
+            import threading
+            threading.Thread(target=self._receive_voice, args=(sender, file_uuid, timestamp),
+                             daemon=True).start()
+            return
+
         def _update():
             self._notify_incoming()
             if self.state["recipient"] and sender == self.state["recipient"]:
@@ -236,6 +295,17 @@ class ChatLogicMixin:
             self._append_day_separator_if_needed(m["timestamp"])
             if m["msg_type"] == "system":
                 self.chat_list.controls.append(self.create_system_bubble(m["content"]))
+            elif m["msg_type"] == "voice":
+                try:
+                    info = json.loads(m["content"])
+                except ValueError:
+                    info = {}
+                name = info.get("voice", "")
+                user = self.state["username"]
+                self.chat_list.controls.append(self.create_voice_bubble(
+                    m["sender"], self._fmt_time(m["timestamp"]), bool(m["is_mine"]),
+                    float(info.get("duration", 0)),
+                    lambda n=name, u=user: voice.load_media(u, n)))
             else:
                 ts = self._fmt_time(m["timestamp"])
                 is_read_val = bool(m.get("is_read", 1))

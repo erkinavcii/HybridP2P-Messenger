@@ -441,6 +441,89 @@ class BubblesMixin:
             )
         return bubble_row
 
+    def create_voice_bubble(self, sender: str, time_str: str, is_mine: bool,
+                            duration: float, load_audio):
+        """Sesli mesaj baloncuğu: ▶/■ + süre. load_audio() Ogg baytı (veya None) döner.
+
+        Çözme ve oynatma arka planda yapılır; aynı anda tek ses çalar (voice.player).
+        """
+        from desktop import voice
+
+        fg = C.on_accent if is_mine else C.text
+        sub = C.on_accent_muted if is_mine else C.text_muted
+        status = ft.Text(voice.fmt_duration(duration), size=12, color=fg)
+        play_btn = ft.IconButton(icon=ft.Icons.PLAY_ARROW_ROUNDED, icon_color=fg,
+                                 icon_size=26, tooltip="Oynat")
+        playing = {"on": False}
+
+        def _set_idle():
+            playing["on"] = False
+            play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
+            play_btn.tooltip = "Oynat"
+            try: self.page.update()
+            except: pass
+
+        def _play_worker():
+            data = load_audio()
+            if not data:
+                def _missing():
+                    status.value = "ses dosyası bulunamadı"
+                    _set_idle()
+                self.run_on_ui(_missing)
+                return
+            try:
+                pcm, sr = voice.decode_audio(data)
+                voice.player.play(pcm, sr, on_done=lambda: self.run_on_ui(_set_idle))
+            except Exception as ex:
+                print(f"[Voice] Oynatma hatasi: {ex}")
+                self.log_status("Sesli mesaj oynatılamadı (ses cihazı?).")
+                self.run_on_ui(_set_idle)
+
+        def on_play(e):
+            if playing["on"]:
+                voice.player.stop()      # on_done → _set_idle
+                return
+            playing["on"] = True
+            play_btn.icon = ft.Icons.STOP_ROUNDED
+            play_btn.tooltip = "Durdur"
+            self.page.update()
+            threading.Thread(target=_play_worker, daemon=True).start()
+
+        play_btn.on_click = on_play
+
+        return ft.Row(
+            alignment=ft.MainAxisAlignment.END if is_mine else ft.MainAxisAlignment.START,
+            controls=[
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Text(sender, size=11, color=C.text_secondary,
+                                    weight=ft.FontWeight.BOLD, visible=not is_mine),
+                            ft.Row(
+                                controls=[
+                                    play_btn,
+                                    ft.Icon(ft.Icons.MIC, size=16, color=sub),
+                                    status,
+                                ],
+                                spacing=4,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Text(time_str, size=10, color=sub),
+                        ],
+                        spacing=0, tight=True,
+                    ),
+                    bgcolor=C.accent if is_mine else C.surface_alt,
+                    padding=ft.Padding(8, 4, 14, 8),
+                    border_radius=ft.BorderRadius(
+                        top_left=14, top_right=14,
+                        bottom_left=4 if is_mine else 14,
+                        bottom_right=14 if is_mine else 4,
+                    ),
+                    width=220,
+                ),
+            ],
+        )
+
     def create_date_separator(self, label: str):
         """Gün değişimlerinde sohbete eklenen tarih ayracı ("Bugün", "Dün", "12 Haziran")."""
         return ft.Row(

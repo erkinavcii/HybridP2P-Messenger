@@ -8,6 +8,7 @@ import {
     encryptBytesJS,
     encryptSymmetricJS,
     signDataJS,
+    signDirectMessageJS,
     encryptMessageJS,
     makeAuthHeadersJS
 } from './crypto.js';
@@ -28,6 +29,7 @@ const inboxList = document.getElementById("inbox-list");
 const chatBody = document.getElementById("chat-body");
 const messageInput = document.getElementById("message-input");
 const fileInput = document.getElementById("file-input");
+const attachBtn = document.getElementById("attach-btn");
 const stagedFileContainer = document.getElementById("staged-file-container");
 const stagedFileName = document.getElementById("staged-file-name");
 const stagedFileSize = document.getElementById("staged-file-size");
@@ -785,6 +787,8 @@ export async function sendMessage() {
                     "recipient": state.recipient,
                     "encrypted_payload": encryptedPayload,
                     "view_once": isViewOnce,
+                    "signature": await signDirectMessageJS(state.privateKeyPem, state.username,
+                                                           state.recipient, encryptedPayload),
                     "timestamp": timestamp
                 };
             }

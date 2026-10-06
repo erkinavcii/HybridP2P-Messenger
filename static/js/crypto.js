@@ -410,6 +410,16 @@ export async function signDataJS(privateKeyPem, dataBytes) {
     return arrayBufferToBase64(signatureBuffer);
 }
 
+// Birebir mesaj imzası: "{gönderen}:{alıcı}:{şifreli_payload}" (desktop/ws_client.py ile aynı).
+// Alıcı imzaya dahil: ele geçirilmiş sunucu mesajı başka birine yönlendiremez.
+export function directMessageSigData(sender, recipient, encryptedPayload) {
+    return new TextEncoder().encode(`${sender}:${recipient}:${encryptedPayload}`);
+}
+
+export async function signDirectMessageJS(privateKeyPem, sender, recipient, encryptedPayload) {
+    return await signDataJS(privateKeyPem, directMessageSigData(sender, recipient, encryptedPayload));
+}
+
 export async function makeAuthHeadersJS(username, privateKeyPem, method, path, bodyText = "") {
     const timestamp = new Date().toISOString();
     const bodyHash = await sha256(bodyText);

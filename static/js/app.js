@@ -31,7 +31,8 @@ import {
     persistChats,
     syncChatSettingsFromServer,
     syncUserGroups,
-    saveChatToLocalStorage
+    saveChatToLocalStorage,
+    loadChatsFromLocalStorage
 } from './db.js';
 import { initVoipEvents } from './voip.js';
 
@@ -390,9 +391,9 @@ window.addEventListener("load", async () => {
             }
             
             // Sync with IndexedDB chats
-            await dbGet("chats", "history").then(val => {
-                if (val) state.chats = val;
-            });
+            // Sohbetler "chats_<kullanıcı>" anahtarında (persistChats ile aynı). Eskiden
+            // "history" okunuyordu: boş durum geri yazılıp her yenilemede geçmiş siliniyordu.
+            await loadChatsFromLocalStorage();
             
             await fetchOfflineMessages();
             await syncChatSettingsFromServer();
@@ -586,9 +587,9 @@ if (loginBtn) {
                 document.getElementById("my-fingerprint").title = fp;
                 
                 // Sync with IndexedDB chats
-                await dbGet("chats", "history").then(val => {
-                    if (val) state.chats = val;
-                });
+                // Sohbetler "chats_<kullanıcı>" anahtarında (persistChats ile aynı). Eskiden
+                // "history" okunuyordu: boş durum geri yazılıp her yenilemede geçmiş siliniyordu.
+                await loadChatsFromLocalStorage();
                 
                 loginScreen.classList.remove("active");
                 chatScreen.classList.add("active");

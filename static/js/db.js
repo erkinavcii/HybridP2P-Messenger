@@ -149,6 +149,16 @@ export async function getContactPubKey(username) {
     return pubKey;
 }
 
+// Kişiden ilk geçerli imzalı mesaj geldiğinde işaretlenir; sonrasında o kişiden
+// imzasız mesaj kabul edilmez. ("keys" deposunda tutulur; şema değişmez.)
+export async function contactSignsMessages(username) {
+    return !!(await dbGet("keys", `signs_${username}`));
+}
+
+export async function markContactSignsMessages(username) {
+    await dbSet("keys", `signs_${username}`, true);
+}
+
 export async function fetchGroupName(groupId) {
     try {
         const path = `/api/groups/${state.username}`;

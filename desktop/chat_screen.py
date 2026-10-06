@@ -5,14 +5,17 @@ on_send_click, remove_staged_file, update_recipient_status_ui,
 refresh_recipient_status, check_recipient_status_loop.
 """
 
+import json
 import threading
 import time as time_module
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
 import flet as ft
 from desktop.theme import C
+from desktop import linkpreview, settings_store
 
 from crypto_utils import (
     pem_string_to_public_key,
@@ -25,6 +28,15 @@ from crypto_utils import (
 
 
 class ChatScreenMixin:
+
+    @property
+    def _dm_sender(self):
+        """Birebir metin gönderimleri için tek işçili kuyruk (ilk kullanımda kurulur)."""
+        ex = self.__dict__.get("_dm_sender_pool")
+        if ex is None:
+            ex = self.__dict__["_dm_sender_pool"] = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="dm-send")
+        return ex
 
     def show_chat_screen(self):
         self.fab.visible = False
@@ -677,8 +689,8 @@ class ChatScreenMixin:
                 timestamp = datetime.now(timezone.utc).isoformat()
                 # Kalıcı birebir mesajlara düzenleme/silme için kararlı kimlik
                 msg_uid = None if view_once else uuid.uuid4().hex
-                self.send_message_via_ws(recipient, encrypted, view_once, timestamp=timestamp,
-                                         msg_uid=msg_uid)
+                link = (None if view_once or not settings_store.get("link_previews")
+                        else linkpreview.find_first_url(text))
                 self.add_message_to_chat(
                     sender=self.state["username"], text=text,
                     is_mine=True, save=not view_once, view_once=view_once,
@@ -686,12 +698,35 @@ class ChatScreenMixin:
                     msg_uid=msg_uid,
                 )
                 self.load_inbox_chats()
+                # Önizleme ağ isteği UI'ı ve diğer mesajları bekletmesin: tüm birebir
+                # gönderimler tek işçili kuyruktan sırayla çıkar (sıra korunur);
+                # önizleme alınamazsa mesaj önizlemesiz gider.
+                self._dm_sender.submit(self._send_dm_with_preview, recipient, encrypted,
+                                       view_once, timestamp, msg_uid, link)
 
             if view_once:
                 self.state["view_once_mode"] = False
                 self.view_once_msg_btn.icon       = ft.Icons.VISIBILITY
                 self.view_once_msg_btn.icon_color = C.text_muted
                 self.page.update()
+
+    def _send_dm_with_preview(self, recipient, encrypted, view_once, timestamp, msg_uid, link):
+        preview = linkpreview.fetch_preview(link) if link else None
+        try:
+            self.send_message_via_ws(recipient, encrypted, view_once, timestamp=timestamp,
+                                     msg_uid=msg_uid, preview=preview)
+        except Exception as ex:
+            print(f"[Send] mesaj gonderilemedi: {ex}")
+            self.run_on_ui(lambda: self.log_status(f"Gönderim hatası: {ex}"))
+            return
+        if not preview or not msg_uid:
+            return
+        store = self.state.get("store")
+        if store and store.set_message_preview(recipient, msg_uid, json.dumps(preview, ensure_ascii=False)):
+            def _redraw():
+                if self.state.get("recipient") == recipient and not self.state.get("ephemeral"):
+                    self.load_history_to_chat()
+            self.run_on_ui(_redraw)
 
     def remove_staged_file(self, e):
         self.state["staged_file"] = None

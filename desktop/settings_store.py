@@ -15,6 +15,7 @@ from crypto_utils import KEYS_DIR
 DEFAULTS = {
     "theme": "dark",          # "dark" | "light"
     "sound_enabled": True,    # yeni mesaj bildirim sesi
+    "link_previews": True,    # gönderirken link önizlemesi üret (site gönderenin IP'sini görür)
 }
 
 _lock = threading.Lock()

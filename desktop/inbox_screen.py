@@ -936,6 +936,13 @@ class InboxScreenMixin:
         sound_switch = ft.Switch(value=bool(settings_store.get("sound_enabled")),
                                  active_color=C.accent, on_change=on_sound_toggle)
 
+        def on_preview_toggle(e):
+            settings_store.set("link_previews", bool(e.control.value))
+            self.log_status("Link önizleme açıldı." if e.control.value else "Link önizleme kapatıldı.")
+
+        preview_switch = ft.Switch(value=bool(settings_store.get("link_previews")),
+                                   active_color=C.accent, on_change=on_preview_toggle)
+
         # Private Key container. Initially hidden (shown as dots)
         priv_key_value = "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
 
@@ -1063,6 +1070,21 @@ class InboxScreenMixin:
                                 ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, size=18, color=C.accent),
                                 ft.Text("Bildirim sesi", size=13, color=C.text, expand=True),
                                 sound_switch,
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.LINK, size=18, color=C.accent),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text("Link önizleme", size=13, color=C.text),
+                                        ft.Text("Önizlemeyi siz çekersiniz; site IP'nizi görür, alıcınınkini görmez.",
+                                                size=10, color=C.text_muted),
+                                    ],
+                                    spacing=1, tight=True, expand=True,
+                                ),
+                                preview_switch,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),

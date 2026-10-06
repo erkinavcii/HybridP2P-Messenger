@@ -109,6 +109,9 @@ Direct (1:1) messages are therefore signed with the sender's RSA private key, us
 * **Backwards compatibility**: contacts that have never sent a signature (older desktop builds and the current web client) are still accepted unsigned, so existing conversations keep working. Once every client signs, this fallback can be removed and verification made mandatory.
 * Verification is applied on **both** delivery paths — live WebSocket and the offline/REST queue — so an attacker cannot bypass it by sending while the recipient is offline.
 
+### End-to-End Encrypted Profile Photos
+Profile photos never reach the server in readable form. When you pick a photo it is cropped to a 128×128 JPEG locally, then sent to each contact separately, encrypted with **that contact's** public key and signed with yours (`avatar_update` frame). The signed data is domain-separated (`avatar:{sender}:{recipient}:{payload}`) so an avatar signature can never be replayed as a message signature, and unsigned or wrongly signed avatars are rejected outright. Received images are decoded and **re-encoded** before being stored, which drops metadata (e.g. EXIF location) and anything embedded in the file; oversized inputs and decompression bombs are refused. The server keeps at most one pending avatar per sender/recipient pair in its offline queue.
+
 ### 5. Out-of-Band Contact Cards & MITM Detection
 Users can share their **Contact Cards** (containing username, public key PEM, and a SHA-256 fingerprint) out-of-band:
 * **Contact Cards**: Clicking the **Kimliği Kopyala (Contact Card)** button copies a structured JSON contact card. Pasting this JSON directly into the recipient field imports and saves the contact locally.
@@ -251,6 +254,7 @@ HybridP2P-Messenger/
 │   ├── settings_store.py   # Device-wide prefs (theme, notification sound) in settings.json
 │   ├── notify.py           # Synthesized new-message sound (sounddevice)
 │   ├── voice.py            # Voice messages: record, Opus encode/decode, playback, local media store
+│   ├── avatar.py           # E2EE profile photos: normalize (128px JPEG, strips EXIF), signing data
 │   ├── voip_tracks.py       # MicrophoneTrack/AudioPlayer/CameraTrack (aiortc)
 │   ├── bubbles.py           # Message/file/system chat bubble builders
 │   ├── rest_client.py       # Signed REST requests, key init/registration

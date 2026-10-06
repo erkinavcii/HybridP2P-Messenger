@@ -131,7 +131,7 @@
 - [x] **Kişi Listesi / Rehber**: Yerel rehber diyaloğu — kişi listesi, isme göre arama, parmak izi kopyalama, sohbet açma, kişi silme (masaüstü) ✅ *(favoriler henüz yok)*
 - [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri
 - [x] **Tema Seçimi**: Açık/koyu mod — ayarlardan canlı geçiş, cihazda kalıcı; tüm renkler `desktop/theme.py` paletinde (masaüstü) ✅ *(özel renk temaları henüz yok)*
-- [ ] **Profil Fotoğrafı / Avatar**: Kullanıcı fotoğrafı ekleme
+- [x] **Profil Fotoğrafı / Avatar**: E2EE — her kişiye kendi anahtarıyla şifreli + imzalı (`avatar_update`), sunucu göremez; gelen resim 128px JPEG'e yeniden kodlanır, EXIF atılır (masaüstü) ✅
 - [x] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama — "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025" (masaüstü) ✅
 - [ ] **Link Önizleme**: URL paylaşıldığında başlık ve küçük resim gösterimi
 - [x] **Ses ve Titreşim**: Yeni mesaj/dosya geldiğinde bildirim sesi — sounddevice ile üretilen çift ton, harici ses dosyası gerektirmez, arama sırasında susar (masaüstü) ✅ *(titreşim mobil özelliği, kapsam dışı)*

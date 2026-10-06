@@ -126,7 +126,7 @@ class MessageStore:
 
         # Mesaj düzenleme/silme: cihazlar arası kararlı mesaj kimliği (uuid4) ve
         # düzenlendi bayrağı. msg_uid'si olmayan (eski) mesajlar düzenlenemez/silinemez.
-        for col in ("msg_uid TEXT", "edited INTEGER DEFAULT 0"):
+        for col in ("msg_uid TEXT", "edited INTEGER DEFAULT 0", "preview TEXT"):
             try:
                 cursor.execute(f"ALTER TABLE messages ADD COLUMN {col}")
             except sqlite3.OperationalError:
@@ -241,6 +241,7 @@ class MessageStore:
         msg_type: str = "text",
         is_read: int = None,
         msg_uid: str = None,
+        preview: str = None,
     ) -> bool:
         """
         Mesajı yerel geçmişe kaydeder.
@@ -267,9 +268,9 @@ class MessageStore:
         try:
             conn.execute(
                 """INSERT INTO messages
-                   (chat_id, sender, content, timestamp, is_mine, msg_type, is_read, msg_uid)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (cid, sender, content, ts, 1 if is_mine else 0, msg_type, is_read, msg_uid)
+                   (chat_id, sender, content, timestamp, is_mine, msg_type, is_read, msg_uid, preview)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (cid, sender, content, ts, 1 if is_mine else 0, msg_type, is_read, msg_uid, preview)
             )
             conn.commit()
             return True
@@ -332,7 +333,7 @@ class MessageStore:
         try:
             rows = conn.execute(
                 """SELECT sender, content, timestamp, is_mine, msg_type, is_read,
-                          msg_uid, COALESCE(edited, 0) AS edited
+                          msg_uid, COALESCE(edited, 0) AS edited, preview
                    FROM messages
                    WHERE chat_id = ?
                    ORDER BY timestamp ASC
@@ -571,7 +572,7 @@ class MessageStore:
         conn = sqlite3.connect(self.db_path)
         try:
             cur = conn.execute(
-                """UPDATE messages SET content = ?, edited = 1
+                """UPDATE messages SET content = ?, edited = 1, preview = NULL
                    WHERE chat_id = ? AND msg_uid = ? AND sender = ? AND msg_type = 'text'""",
                 (new_content, self._chat_id(partner), msg_uid, sender))
             conn.commit()
@@ -586,7 +587,7 @@ class MessageStore:
         conn = sqlite3.connect(self.db_path)
         try:
             cur = conn.execute(
-                """UPDATE messages SET content = '', msg_type = 'deleted', edited = 0
+                """UPDATE messages SET content = '', msg_type = 'deleted', edited = 0, preview = NULL
                    WHERE chat_id = ? AND msg_uid = ? AND sender = ? AND msg_type = 'text'""",
                 (self._chat_id(partner), msg_uid, sender))
             conn.commit()

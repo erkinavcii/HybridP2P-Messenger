@@ -17,7 +17,7 @@ from slowapi import _rate_limit_exceeded_handler
 
 from crypto_utils import verify_signature, pem_string_to_public_key
 from server.config import (
-    HOST, PORT, CORS_ORIGINS, ALLOWED_HOSTS, START_TIME
+    HOST, PORT, CORS_ORIGINS, ALLOWED_HOSTS, START_TIME, MAX_WS_MESSAGE_SIZE
 )
 from server.database import init_database, db_session
 from server.websocket_manager import manager
@@ -235,7 +235,31 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
     try:
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
+
+            # Boyut sınırı: aşan mesaj işlenmez, bağlantı açık kalır
+            if len(data) > MAX_WS_MESSAGE_SIZE:
+                await manager.send_to_user(username, {
+                    "type": "error",
+                    "code": "payload_too_large",
+                    "max_size": MAX_WS_MESSAGE_SIZE,
+                    "message": "Mesaj boyut sınırını aşıyor, iletilmedi.",
+                })
+                print(f"[WS] '{username}' sinir asan mesaj gonderdi ({len(data)} > {MAX_WS_MESSAGE_SIZE}), reddedildi.")
+                continue
+
+            # Bozuk JSON eskiden bağlantıyı tamamen koparıyordu; artık sadece o çerçeve atlanır
+            try:
+                message = json.loads(data)
+                if not isinstance(message, dict):
+                    raise ValueError("JSON nesnesi bekleniyordu")
+            except (ValueError, json.JSONDecodeError):
+                await manager.send_to_user(username, {
+                    "type": "error",
+                    "code": "invalid_json",
+                    "message": "Geçersiz mesaj formatı.",
+                })
+                continue
+
             msg_type = message.get("type", "")
 
             if msg_type == "message":

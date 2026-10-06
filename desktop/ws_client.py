@@ -195,6 +195,15 @@ class WsClientMixin:
                                     except Exception as ex:
                                         print(f"Grup mesaji cozme hatasi: {ex}")
 
+                            elif t == "error":
+                                # Sunucu bir mesajı reddetti (örn. boyut sınırı, bozuk format)
+                                code = data.get("code", "")
+                                print(f"[WS] Sunucu hatasi: {code} — {data.get('message', '')}")
+                                if code == "payload_too_large":
+                                    self.log_status("Mesaj çok büyük olduğu için gönderilemedi!")
+                                else:
+                                    self.log_status(f"Sunucu mesajı reddetti: {data.get('message', code)}")
+
                             elif t == "delivery_ack":
                                 s = data.get("status","")
                                 r = data.get("recipient","")

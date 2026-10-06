@@ -3,8 +3,8 @@ import uuid as uuid_lib
 import hashlib
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, Header
-from pydantic import BaseModel
-from server.config import MAX_FILE_SIZE
+from pydantic import BaseModel, Field
+from server.config import MAX_FILE_SIZE, MAX_WS_MESSAGE_SIZE
 from server.database import db_session
 from server.auth import verify_request_signature
 from server.websocket_manager import manager
@@ -16,7 +16,7 @@ class SendMessageRequest(BaseModel):
     """REST üzerinden mesaj gönderme isteği (çevrimdışı teslimat)."""
     sender: str
     recipient: str
-    encrypted_payload: str  # Base64 kodlu şifreli paket
+    encrypted_payload: str = Field(max_length=MAX_WS_MESSAGE_SIZE)  # Base64 kodlu şifreli paket
     view_once: bool = False
 
 
@@ -38,7 +38,8 @@ class FileUploadRequest(BaseModel):
 
 class WsFallbackRequest(BaseModel):
     """WebSocket kopukken tum paket tipleri icin REST fallback model."""
-    payload: str
+    # WS yoluyla aynı sınır — aksi halde WS sınırı bu yoldan atlatılabilirdi
+    payload: str = Field(max_length=MAX_WS_MESSAGE_SIZE)
 
 
 def _make_chat_id(user1: str, user2: str) -> str:

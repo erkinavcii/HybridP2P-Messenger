@@ -1,5 +1,5 @@
 from server.main import app
-from server.config import HOST, PORT
+from server.config import HOST, PORT, MAX_WS_MESSAGE_SIZE
 
 if __name__ == "__main__":
     import uvicorn
@@ -16,4 +16,8 @@ if __name__ == "__main__":
         port=PORT,
         reload=True,           # Geliştirme modunda otomatik yeniden yükleme
         log_level="info",
+        # Protokol seviyesinde sert sınır (varsayılan 16 MB idi). Uygulama sınırının
+        # 2 katı: aradaki mesajlar uygulamada kibarca reddedilir, bundan büyük
+        # çerçeveler belleğe alınmadan bağlantı kesilir (kod 1009).
+        ws_max_size=MAX_WS_MESSAGE_SIZE * 2,
     )

@@ -255,6 +255,9 @@ class MessengerApp(
             border_color="#3f3f46", focused_border_color="#8b5cf6",
             cursor_color="#8b5cf6", text_size=14,
             min_lines=1, max_lines=3, expand=True,
+            # Normal kullanımda sunucu sınırına (256 KB) asla yaklaşılmasın:
+            # 8000 karakter şifrelenip base64'lenince ~30 KB eder.
+            max_length=8000,
             on_submit=lambda e: self.on_send_click(e),
             shift_enter=True,
         )

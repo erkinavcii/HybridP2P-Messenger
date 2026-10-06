@@ -6,7 +6,8 @@ import {
     decryptMessageJS,
     verifySignatureJS,
     decryptSymmetricJS,
-    makeAuthHeadersJS
+    makeAuthHeadersJS,
+    directMessageSigData
 } from './crypto.js';
 import {
     dbSet,
@@ -15,7 +16,9 @@ import {
     syncUserGroups,
     getContactPubKey,
     fetchGroupName,
-    saveChatToLocalStorage
+    saveChatToLocalStorage,
+    contactSignsMessages,
+    markContactSignsMessages
 } from './db.js';
 import {
     handleIncomingCallOffer,
@@ -68,6 +71,47 @@ export async function queryUserPresence(partner) {
     }
 }
 
+// Gelen birebir mesajın imzasını doğrular (masaüstüyle aynı kurallar):
+//   • İmza varsa doğrulanır; geçersizse reddedilir (taklit girişimi).
+//   • İlk geçerli imzada kişi "imzalıyor" olarak işaretlenir.
+//   • İmza yoksa: kişi daha önce imzalamışsa reddedilir (downgrade saldırısı),
+//     hiç imzalamamışsa kabul edilir (eski istemci).
+export async function verifyDirectMessage(sender, encryptedPayload, signatureB64) {
+    if (signatureB64) {
+        const pub = await getContactPubKey(sender);
+        if (!pub) {
+            console.error(`[Signature] '${sender}' public key'i alınamadı, imza doğrulanamadı.`);
+            return false;
+        }
+        try {
+            const ok = await verifySignatureJS(pub, signatureB64,
+                directMessageSigData(sender, state.username, encryptedPayload));
+            if (ok) {
+                if (!(await contactSignsMessages(sender))) await markContactSignsMessages(sender);
+                return true;
+            }
+            console.error(`[Signature] '${sender}' imzası GEÇERSİZ — mesaj reddedildi.`);
+        } catch (err) {
+            console.error(`[Signature] '${sender}' imza doğrulama hatası:`, err);
+        }
+        return false;
+    }
+    if (await contactSignsMessages(sender)) {
+        console.error(`[Signature] '${sender}' normalde imzalıyor ama bu mesaj İMZASIZ — reddedildi.`);
+        return false;
+    }
+    return true;
+}
+
+function warnBlockedMessage(sender) {
+    window.dispatchEvent(new CustomEvent('system-message', {
+        detail: {
+            partner: sender,
+            text: `⚠️ '${sender}' adına gelen bir mesajın imzası doğrulanamadı ve mesaj engellendi (taklit girişimi olabilir).`
+        }
+    }));
+}
+
 // Fetch Offline Messages
 export async function fetchOfflineMessages() {
     try {
@@ -78,6 +122,12 @@ export async function fetchOfflineMessages() {
         if (res.status === 200) {
             const data = await res.json();
             for (let msg of data.messages) {
+                // Çevrimdışı yol da canlı yolla aynı imza kontrolünden geçer; aksi halde
+                // saldırgan alıcı çevrimdışıyken göndererek kontrolü atlardı.
+                if (!(await verifyDirectMessage(msg.sender, msg.encrypted_payload, msg.signature || ""))) {
+                    warnBlockedMessage(msg.sender);
+                    continue;
+                }
                 try {
                     const plaintext = await decryptMessageJS(msg.encrypted_payload, state.privateKeyPem);
                     const msgObj = {
@@ -143,6 +193,10 @@ export function connectWebSocket() {
             // 3. E2E Chat Message received
             else if (data.type === "message") {
                 const sender = data.sender;
+                if (!(await verifyDirectMessage(sender, data.encrypted_payload, data.signature || ""))) {
+                    warnBlockedMessage(sender);
+                    return;
+                }
                 try {
                     const plaintext = await decryptMessageJS(data.encrypted_payload, state.privateKeyPem);
                     const isActive = (state.recipient === sender);

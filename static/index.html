@@ -415,6 +415,24 @@
         </div>
     </div>
 
+    <!-- Modal: Mesajı düzenle / herkesten sil -->
+    <div id="edit-message-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 420px;">
+            <div class="modal-header">
+                <span class="modal-title">Mesajı düzenle</span>
+            </div>
+            <textarea id="edit-message-input" class="input-control" rows="3" maxlength="8000" style="resize: vertical;"></textarea>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">"Herkesten sil" karşı tarafta da kaldırır; mesaj daha önce okunmuş veya kopyalanmış olabilir.</p>
+            <div class="modal-footer" style="display: flex; gap: 8px; justify-content: space-between;">
+                <button id="edit-message-delete-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--danger);">Herkesten sil</button>
+                <div style="display: flex; gap: 8px;">
+                    <button id="edit-message-cancel-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--border-color); color: var(--text-color);">İptal</button>
+                    <button id="edit-message-save-btn" class="btn" style="width: auto; padding: 10px 16px;">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: View Once Message -->
     <div id="view-once-modal" class="modal-overlay">
         <div class="modal" style="max-width: 400px; text-align: center;">

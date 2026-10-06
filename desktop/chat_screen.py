@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import flet as ft
+from desktop.theme import C
 
 from crypto_utils import (
     pem_string_to_public_key,
@@ -107,7 +108,7 @@ class ChatScreenMixin:
             self.state["recipient_pub_key"] = pub
             self.recipient_field.value      = rec
             self.recipient_field.read_only  = True
-            self.recipient_field.border_color = "#22c55e"
+            self.recipient_field.border_color = C.success
             self.ephemeral_btn.disabled = False
 
             if self.state["store"]:
@@ -221,7 +222,7 @@ class ChatScreenMixin:
 
             self.recipient_field.value = gname
             self.recipient_field.read_only = True
-            self.recipient_field.border_color = "#22c55e"
+            self.recipient_field.border_color = C.success
             self.ephemeral_btn.disabled = True
 
             self.load_history_to_chat()
@@ -242,8 +243,8 @@ class ChatScreenMixin:
                         modal=False,
                         title=ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.WARNING_ROUNDED, color="#ef4444"),
-                                ft.Text("SECURITY WARNING!", color="#ef4444", weight=ft.FontWeight.BOLD)
+                                ft.Icon(ft.Icons.WARNING_ROUNDED, color=C.danger),
+                                ft.Text("SECURITY WARNING!", color=C.danger, weight=ft.FontWeight.BOLD)
                             ],
                             spacing=8
                         ),
@@ -251,7 +252,7 @@ class ChatScreenMixin:
                             f"WARNING: The server key for '{recipient}' differs from your local record!\n\n"
                             f"This could indicate a MITM attack or the user has regenerated their key.\n\n"
                             f"Do you want to accept the new key from the server?",
-                            color="#ffffff"
+                            color=C.text
                         ),
                         actions=[
                             ft.TextButton("Reject (Safe)",
@@ -260,7 +261,7 @@ class ChatScreenMixin:
                                 on_click=lambda e: close_warning_dialog(accept=True, rec=recipient, new_pem=server_pub_pem)),
                         ],
                         actions_alignment=ft.MainAxisAlignment.END,
-                        bgcolor="#18181b",
+                        bgcolor=C.surface,
                     )
                     _active_dialog[0] = dialog
                     self.page.overlay.append(dialog)
@@ -278,28 +279,28 @@ class ChatScreenMixin:
                     modal=False,
                     title=ft.Row(
                         controls=[
-                            ft.Icon(ft.Icons.SHIELD_OUTLINED, color="#22c55e"),
-                            ft.Text("First Connection & Authentication", color="#ffffff", weight=ft.FontWeight.BOLD)
+                            ft.Icon(ft.Icons.SHIELD_OUTLINED, color=C.success),
+                            ft.Text("First Connection & Authentication", color=C.text, weight=ft.FontWeight.BOLD)
                         ],
                         spacing=8
                     ),
                     content=ft.Column(
                         controls=[
-                            ft.Text(f"Connecting to '{recipient}' for the first time.", color="#ffffff"),
-                            ft.Text("Identity fingerprint received from server:", color="#aaaaaa", size=12),
+                            ft.Text(f"Connecting to '{recipient}' for the first time.", color=C.text),
+                            ft.Text("Identity fingerprint received from server:", color=C.text_system, size=12),
                             ft.Container(
-                                content=ft.Text(fingerprint, weight=ft.FontWeight.BOLD, color="#22c55e", size=13, selectable=True),
-                                bgcolor="#27272a",
+                                content=ft.Text(fingerprint, weight=ft.FontWeight.BOLD, color=C.success, size=13, selectable=True),
+                                bgcolor=C.surface_alt,
                                 padding=10,
                                 border_radius=8,
                                 border=ft.Border(
-                                    left=ft.BorderSide(1, "#3f3f46"), top=ft.BorderSide(1, "#3f3f46"),
-                                    right=ft.BorderSide(1, "#3f3f46"), bottom=ft.BorderSide(1, "#3f3f46")
+                                    left=ft.BorderSide(1, C.border), top=ft.BorderSide(1, C.border),
+                                    right=ft.BorderSide(1, C.border), bottom=ft.BorderSide(1, C.border)
                                 ),
                             ),
                             ft.Text(
                                 "For your security, verify this fingerprint with your contact through a separate channel.",
-                                color="#ef4444", size=11
+                                color=C.danger, size=11
                             ),
                         ],
                         tight=True,
@@ -312,7 +313,7 @@ class ChatScreenMixin:
                             on_click=lambda e: close_tofu_dialog(accept=True, rec=recipient, pem=pub_key_pem, pub=pub_key)),
                     ],
                     actions_alignment=ft.MainAxisAlignment.END,
-                    bgcolor="#18181b",
+                    bgcolor=C.surface,
                 )
                 _active_dialog[0] = dialog
                 self.page.overlay.append(dialog)
@@ -420,7 +421,7 @@ class ChatScreenMixin:
                         if view_once:
                             self.state["view_once_mode"] = False
                             self.view_once_msg_btn.icon       = ft.Icons.VISIBILITY
-                            self.view_once_msg_btn.icon_color = "#888888"
+                            self.view_once_msg_btn.icon_color = C.text_muted
 
                         self.status_text.value = f"Sent: {staged['name']}"
 
@@ -486,7 +487,7 @@ class ChatScreenMixin:
             if view_once:
                 self.state["view_once_mode"] = False
                 self.view_once_msg_btn.icon       = ft.Icons.VISIBILITY
-                self.view_once_msg_btn.icon_color = "#888888"
+                self.view_once_msg_btn.icon_color = C.text_muted
                 self.page.update()
 
     def remove_staged_file(self, e):
@@ -502,13 +503,13 @@ class ChatScreenMixin:
             else:
                 self.recipient_status_row.visible = True
                 if online:
-                    self.recipient_status_dot.bgcolor = "#22c55e"
+                    self.recipient_status_dot.bgcolor = C.success
                     self.recipient_status_label.value = "Online"
-                    self.recipient_status_label.color = "#22c55e"
+                    self.recipient_status_label.color = C.success
                 else:
-                    self.recipient_status_dot.bgcolor = "#ef4444"
+                    self.recipient_status_dot.bgcolor = C.danger
                     self.recipient_status_label.value = "Offline"
-                    self.recipient_status_label.color = "#ef4444"
+                    self.recipient_status_label.color = C.danger
             try: self.page.update()
             except: pass
         self.run_on_ui(_update)

@@ -17,6 +17,7 @@ import uuid as uuid_lib
 
 import cv2
 import flet as ft
+from desktop.theme import C
 from aiortc import (
     RTCPeerConnection,
     RTCSessionDescription,
@@ -36,11 +37,11 @@ class CallScreenMixin:
 
         # Reset button states
         self.mic_btn.icon = ft.Icons.MIC
-        self.mic_btn.icon_color = "#ffffff"
-        self.mic_btn.bgcolor = "#27272a"
+        self.mic_btn.icon_color = C.text
+        self.mic_btn.bgcolor = C.surface_alt
         self.cam_btn.icon = ft.Icons.VIDEOCAM
-        self.cam_btn.icon_color = "#ffffff"
-        self.cam_btn.bgcolor = "#27272a"
+        self.cam_btn.icon_color = C.text
+        self.cam_btn.bgcolor = C.surface_alt
 
         if self.state["call_state"] == "ringing":
             self.call_status_text.value = f"Incoming {self.state['call_type']} call..."
@@ -280,8 +281,8 @@ class CallScreenMixin:
         if track:
             track.enabled = not track.enabled
             self.mic_btn.icon = ft.Icons.MIC if track.enabled else ft.Icons.MIC_OFF
-            self.mic_btn.icon_color = "#ffffff" if track.enabled else "#ef4444"
-            self.mic_btn.bgcolor = "#27272a" if track.enabled else "#2d1b1f"
+            self.mic_btn.icon_color = C.text if track.enabled else C.danger
+            self.mic_btn.bgcolor = C.surface_alt if track.enabled else C.danger_bg
             self.page.update()
 
     def toggle_call_cam(self):
@@ -289,8 +290,8 @@ class CallScreenMixin:
         if track:
             track.enabled = not track.enabled
             self.cam_btn.icon = ft.Icons.VIDEOCAM if track.enabled else ft.Icons.VIDEOCAM_OFF
-            self.cam_btn.icon_color = "#ffffff" if track.enabled else "#ef4444"
-            self.cam_btn.bgcolor = "#27272a" if track.enabled else "#2d1b1f"
+            self.cam_btn.icon_color = C.text if track.enabled else C.danger
+            self.cam_btn.bgcolor = C.surface_alt if track.enabled else C.danger_bg
             self.local_video_preview.visible = track.enabled
             self.page.update()
 

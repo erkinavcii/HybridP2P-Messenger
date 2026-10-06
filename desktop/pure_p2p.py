@@ -15,6 +15,7 @@ import json
 import zlib
 
 import flet as ft
+from desktop.theme import C
 from aiortc import (
     RTCPeerConnection,
     RTCSessionDescription,
@@ -88,8 +89,8 @@ class PureP2PMixin:
                 ft.dropdown.Option("video", "Görüntülü Arama (Video)"),
             ],
             value="audio",
-            border_color="#27272a",
-            focused_border_color="#8b5cf6",
+            border_color=C.surface_alt,
+            focused_border_color=C.accent,
         )
 
         caller_offer_tf = ft.TextField(
@@ -98,30 +99,30 @@ class PureP2PMixin:
             min_lines=3,
             max_lines=5,
             read_only=True,
-            border_color="#27272a",
-            focused_border_color="#8b5cf6",
+            border_color=C.surface_alt,
+            focused_border_color=C.accent,
             text_size=10,
         )
 
         caller_qr_image = ft.Image(src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", width=160, height=160, fit="contain", visible=False)
         caller_qr_container = ft.Container(
             content=ft.Column([
-                ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color="#888888"),
+                ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color=C.text_muted),
                 caller_qr_image
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             visible=False,
             alignment=ft.Alignment(0, 0)
         )
 
-        caller_status_text = ft.Text("", size=11, color="#8b5cf6")
-        caller_prog = ft.ProgressBar(color="#8b5cf6", visible=False)
+        caller_status_text = ft.Text("", size=11, color=C.accent)
+        caller_prog = ft.ProgressBar(color=C.accent, visible=False)
 
         caller_copy_btn = ft.Button(
             content="Teklifi Kopyala",
             icon=ft.Icons.COPY,
             on_click=lambda e: self.copy_to_clipboard(caller_offer_tf.value) if caller_offer_tf.value else None,
             disabled=True,
-            style=ft.ButtonStyle(bgcolor="#27272a", color="#ffffff")
+            style=ft.ButtonStyle(bgcolor=C.surface_alt, color=C.text)
         )
 
         caller_answer_tf = ft.TextField(
@@ -129,8 +130,8 @@ class PureP2PMixin:
             multiline=True,
             min_lines=3,
             max_lines=5,
-            border_color="#27272a",
-            focused_border_color="#8b5cf6",
+            border_color=C.surface_alt,
+            focused_border_color=C.accent,
             text_size=10,
         )
 
@@ -138,7 +139,7 @@ class PureP2PMixin:
             content="3. Bağlan ve Görüşmeyi Başlat",
             icon=ft.Icons.PLAY_ARROW,
             width=300,
-            style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff"),
+            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent),
             disabled=True
         )
 
@@ -238,7 +239,7 @@ class PureP2PMixin:
             icon=ft.Icons.WIFI,
             on_click=generate_offer_click,
             width=300,
-            style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff")
+            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent)
         )
 
         def connect_call_click(e):
@@ -281,8 +282,8 @@ class PureP2PMixin:
             multiline=True,
             min_lines=3,
             max_lines=5,
-            border_color="#27272a",
-            focused_border_color="#8b5cf6",
+            border_color=C.surface_alt,
+            focused_border_color=C.accent,
             text_size=10,
         )
 
@@ -292,30 +293,30 @@ class PureP2PMixin:
             min_lines=3,
             max_lines=5,
             read_only=True,
-            border_color="#27272a",
-            focused_border_color="#8b5cf6",
+            border_color=C.surface_alt,
+            focused_border_color=C.accent,
             text_size=10,
         )
 
         callee_qr_image = ft.Image(src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", width=160, height=160, fit="contain", visible=False)
         callee_qr_container = ft.Container(
             content=ft.Column([
-                ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color="#888888"),
+                ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color=C.text_muted),
                 callee_qr_image
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             visible=False,
             alignment=ft.Alignment(0, 0)
         )
 
-        callee_status_text = ft.Text("", size=11, color="#8b5cf6")
-        callee_prog = ft.ProgressBar(color="#8b5cf6", visible=False)
+        callee_status_text = ft.Text("", size=11, color=C.accent)
+        callee_prog = ft.ProgressBar(color=C.accent, visible=False)
 
         callee_copy_btn = ft.Button(
             content="Cevabı Kopyala",
             icon=ft.Icons.COPY,
             on_click=lambda e: self.copy_to_clipboard(callee_answer_tf.value) if callee_answer_tf.value else None,
             disabled=True,
-            style=ft.ButtonStyle(bgcolor="#27272a", color="#ffffff")
+            style=ft.ButtonStyle(bgcolor=C.surface_alt, color=C.text)
         )
 
         def generate_answer_click(e):
@@ -426,7 +427,7 @@ class PureP2PMixin:
             icon=ft.Icons.CHECK,
             on_click=generate_answer_click,
             width=300,
-            style=ft.ButtonStyle(bgcolor="#8b5cf6", color="#ffffff")
+            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent)
         )
 
         caller_tab = ft.Container(
@@ -438,7 +439,7 @@ class PureP2PMixin:
                     caller_offer_tf,
                     caller_copy_btn,
                     caller_qr_container,
-                    ft.Divider(color="#27272a", height=10),
+                    ft.Divider(color=C.surface_alt, height=10),
                     caller_answer_tf,
                     p2p_connect_btn,
                     caller_status_text,
@@ -499,13 +500,13 @@ class PureP2PMixin:
         dialog = ft.AlertDialog(
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.WIFI_TETHERING, color="#8b5cf6"),
-                    ft.Text("Pure P2P (Sunucusuz Bağlantı)", size=16, color="#ffffff", weight=ft.FontWeight.BOLD),
+                    ft.Icon(ft.Icons.WIFI_TETHERING, color=C.accent),
+                    ft.Text("Pure P2P (Sunucusuz Bağlantı)", size=16, color=C.text, weight=ft.FontWeight.BOLD),
                     ft.Container(expand=True),
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
                         icon_size=18,
-                        icon_color="#888888",
+                        icon_color=C.text_muted,
                         on_click=close_p2p,
                     ),
                 ],
@@ -517,7 +518,7 @@ class PureP2PMixin:
                 height=460,
                 padding=0,
             ),
-            bgcolor="#18181b",
+            bgcolor=C.surface,
         )
 
         self.page.overlay.append(dialog)

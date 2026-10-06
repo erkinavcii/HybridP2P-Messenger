@@ -116,7 +116,7 @@
 - [x] **Grup Sohbeti**: Birden fazla aliciya sifreli simetrik mesaj (Shared Group Key + Rekeying) ✅
 - [ ] **Mesaj Duzenleme/Silme**: Gonderilenin her iki taraftan silinmesi
 - [x] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi (masaüstü & web tarafında çift yeşil tik) ✅
-- [ ] **Yaziyor... Gostergesi**: Karsi tarafin yazma durumu
+- [x] **Yaziyor... Gostergesi**: Karsi tarafin yazma durumu — birebir sohbetlerde, debounce'lu, yalnizca canli relay (masaustu) ✅
 - [x] **Mesaj Arama**: Yerel gecmiste arama (Sohbet ve Mesaj Gövdesi Arama) ✅
 
 ### 🗄️ Veri Yönetimi
@@ -130,7 +130,7 @@
 - [x] **Çoklu Sohbet Sekmesi**: Birden fazla kişiyle eş zamanlı sohbet (WhatsApp tarzı Inbox / Sohbet Listesi) ✅
 - [x] **Kişi Listesi / Rehber**: Yerel rehber diyaloğu — kişi listesi, isme göre arama, parmak izi kopyalama, sohbet açma, kişi silme (masaüstü) ✅ *(favoriler henüz yok)*
 - [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri
-- [ ] **Tema Seçimi**: Açık/koyu mod geçişi + özel renk temaları
+- [x] **Tema Seçimi**: Açık/koyu mod — ayarlardan canlı geçiş, cihazda kalıcı; tüm renkler `desktop/theme.py` paletinde (masaüstü) ✅ *(özel renk temaları henüz yok)*
 - [ ] **Profil Fotoğrafı / Avatar**: Kullanıcı fotoğrafı ekleme
 - [x] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama — "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025" (masaüstü) ✅
 - [ ] **Link Önizleme**: URL paylaşıldığında başlık ve küçük resim gösterimi

@@ -154,7 +154,7 @@ Bölüm 1'deki not güncellendi, bkz. yukarısı.
 - **Gruplar ve tek görünümlük mesajlar:** kapsam dışı (v1 yalnızca birebir, kalıcı metin mesajları).
 - **Karşı taraf eski sürümse:** düzenleme/silme çerçevelerini yok sayar; değişiklik yalnızca sizin tarafınızda görünür.
 - **"Herkesten sil" bir garanti değildir:** alıcı mesajı silinmeden önce okumuş, kopyalamış veya ekran görüntüsü almış olabilir; değiştirilmiş bir istemci silme isteğini uygulamayabilir. Bu, tüm mesajlaşma uygulamaları için geçerlidir.
-- **Web istemcisi:** henüz desteklemiyor (web paritesi turunda).
+- **Web istemcisi:** destekliyor (W3, 2026-10-06) — aynı protokol, masaüstüyle birlikte çalışır. Web'de mesajlar IndexedDB'deki sohbet kaydında düzenlenir/silinir.
 
 ---
 

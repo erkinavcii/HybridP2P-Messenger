@@ -93,10 +93,66 @@ async def health_check(request: Request):
     }
 
 
+def _pending_row_to_frame(row) -> dict | None:
+    """Offline kuyruk satırını istemciye gidecek WS çerçevesine çevirir.
+
+    Bilinmeyen tip için None döner. YENİ BİR KUYRUKLANAN TİP EKLERKEN BURAYA DA
+    DAL EKLENMELİ (ayrıca routes/messages.py::send_ws_fallback'e).
+    """
+    row_type = row["msg_type"]
+    extra = json.loads(row["extra_data"] or "{}")
+
+    if row_type == "message":
+        return {
+            "type": "message",
+            "sender": row["sender"],
+            "encrypted_payload": row["encrypted_payload"],
+            "view_once": extra.get("view_once", False),
+            "signature": extra.get("signature", ""),
+            "timestamp": row["timestamp"],
+        }
+    if row_type == "file_message":
+        return extra
+    if row_type == "ephemeral_toggle":
+        return {
+            "type": "ephemeral_toggle",
+            "sender": row["sender"],
+            "ephemeral": extra.get("ephemeral", False),
+            "timestamp": row["timestamp"],
+        }
+    if row_type == "group_key_dist":
+        return {
+            "type": "group_key_dist",
+            "sender": row["sender"],
+            "group_id": extra.get("group_id", ""),
+            "encrypted_payload": row["encrypted_payload"],
+            "timestamp": row["timestamp"],
+        }
+    if row_type == "group_message":
+        return {
+            "type": "group_message",
+            "sender": row["sender"],
+            "group_id": extra.get("group_id", ""),
+            "encrypted_payload": row["encrypted_payload"],
+            "signature": extra.get("signature", ""),
+            "timestamp": row["timestamp"],
+        }
+    if row_type == "read_receipt":
+        return {
+            "type": "read_receipt",
+            "sender": row["sender"],
+            "timestamp": extra.get("timestamp", ""),
+        }
+    return None
+
+
 async def _deliver_pending_messages(username: str):
     """
-    Kullanıcı WebSocket'e bağlandığında bekleyen offline
-    mesajlarını teslim eder ve veritabanından siler.
+    Kullanıcı WebSocket'e bağlandığında bekleyen offline mesajlarını teslim eder.
+
+    Yalnızca GERÇEKTEN gönderilebilen satırlar silinir (id bazlı). Eskiden
+    kullanıcının tüm kuyruğu toplu siliniyordu; teslim sırasında bağlantı
+    koparsa gönderilemeyen mesajlar da kaybolurdu.
     """
     async with db_session() as db:
         cursor = await db.execute(
@@ -105,64 +161,24 @@ async def _deliver_pending_messages(username: str):
         )
         rows = await cursor.fetchall()
 
+        done_ids = []
         for row in rows:
-            row_type = row["msg_type"]
+            frame = _pending_row_to_frame(row)
+            if frame is None:
+                # Tanınmayan tip: teslim edilemez; görünür şekilde kaydedip kuyruktan çıkar
+                print(f"[Server] UYARI: '{row['msg_type']}' tipi icin teslim dali yok, satir {row['id']} atlandi.")
+                done_ids.append(row["id"])
+                continue
+            if not await manager.send_to_user(username, frame):
+                # Bağlantı koptu — kalanlar kuyrukta kalsın, bir sonraki bağlantıda gelsin
+                break
+            done_ids.append(row["id"])
 
-            if row_type == "message":
-                extra = json.loads(row["extra_data"] or "{}")
-                await manager.send_to_user(username, {
-                    "type": "message",
-                    "sender": row["sender"],
-                    "encrypted_payload": row["encrypted_payload"],
-                    "view_once": extra.get("view_once", False),
-                    "signature": extra.get("signature", ""),
-                    "timestamp": row["timestamp"],
-                })
-            elif row_type == "file_message":
-                extra = json.loads(row["extra_data"] or "{}")
-                await manager.send_to_user(username, extra)
-            elif row_type == "ephemeral_toggle":
-                extra = json.loads(row["extra_data"] or "{}")
-                await manager.send_to_user(username, {
-                    "type": "ephemeral_toggle",
-                    "sender": row["sender"],
-                    "ephemeral": extra.get("ephemeral", False),
-                    "timestamp": row["timestamp"],
-                })
-            elif row_type == "group_key_dist":
-                extra = json.loads(row["extra_data"] or "{}")
-                await manager.send_to_user(username, {
-                    "type": "group_key_dist",
-                    "sender": row["sender"],
-                    "group_id": extra.get("group_id", ""),
-                    "encrypted_payload": row["encrypted_payload"],
-                    "timestamp": row["timestamp"],
-                })
-            elif row_type == "group_message":
-                extra = json.loads(row["extra_data"] or "{}")
-                await manager.send_to_user(username, {
-                    "type": "group_message",
-                    "sender": row["sender"],
-                    "group_id": extra.get("group_id", ""),
-                    "encrypted_payload": row["encrypted_payload"],
-                    "signature": extra.get("signature", ""),
-                    "timestamp": row["timestamp"],
-                })
-            elif row_type == "read_receipt":
-                extra = json.loads(row["extra_data"] or "{}")
-                await manager.send_to_user(username, {
-                    "type": "read_receipt",
-                    "sender": row["sender"],
-                    "timestamp": extra.get("timestamp", ""),
-                })
-
-        if rows:
-            await db.execute(
-                "DELETE FROM offline_msgs WHERE recipient = ?",
-                (username,)
-            )
+        if done_ids:
+            placeholders = ",".join("?" * len(done_ids))
+            await db.execute(f"DELETE FROM offline_msgs WHERE id IN ({placeholders})", done_ids)
             await db.commit()
-            print(f"[Server] Delivered and deleted {len(rows)} pending messages for '{username}'.")
+            print(f"[Server] Delivered {len(done_ids)}/{len(rows)} pending messages for '{username}'.")
 
 
 @app.websocket("/ws/{username}")
@@ -230,9 +246,9 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             pass
         return
 
-    await _deliver_pending_messages(username)
-
     try:
+        await _deliver_pending_messages(username)
+
         while True:
             data = await websocket.receive_text()
 
@@ -611,10 +627,10 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 })
 
     except WebSocketDisconnect:
-        manager.disconnect(username)
+        manager.disconnect(username, websocket)
     except Exception as e:
         print(f"[WS Error] WebSocket error for '{username}': {e}")
-        manager.disconnect(username)
+        manager.disconnect(username, websocket)
 
 # Statik dosyaları sun
 try:

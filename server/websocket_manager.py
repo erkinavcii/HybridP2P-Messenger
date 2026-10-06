@@ -27,8 +27,15 @@ class ConnectionManager:
         self.active_connections[username] = websocket
         print(f"[WS] '{username}' connected. Active connections: {len(self.active_connections)}")
 
-    def disconnect(self, username: str):
-        """Bağlantıyı kapatır ve listeden çıkarır. Devam eden aramayı da temizler."""
+    def disconnect(self, username: str, websocket: WebSocket = None):
+        """Bağlantıyı listeden çıkarır. Devam eden aramayı da temizler.
+
+        `websocket` verilirse yalnızca kayıtlı bağlantı o nesneyse silinir. Bu,
+        kullanıcı hızla yeniden bağlandığında eski handler'ın kapanırken YENİ
+        bağlantıyı listeden silmesini (ve kullanıcının çevrimdışı görünmesini) önler.
+        """
+        if websocket is not None and self.active_connections.get(username) is not websocket:
+            return
         self.active_connections.pop(username, None)
         # Kullanıcı bir aramanın içindeyse, call_id'yi temizle
         call_id = self.active_calls.pop(username, None)
@@ -63,13 +70,24 @@ class ConnectionManager:
         if task and not task.done():
             task.cancel()
 
-    async def send_to_user(self, username: str, message: dict):
-        """Belirli bir kullanıcıya JSON mesaj gönderir."""
+    async def send_to_user(self, username: str, message: dict) -> bool:
+        """Belirli bir kullanıcıya JSON mesaj gönderir. Başarılıysa True.
+
+        Alıcının socket'i ölmüşse hata YUTULUR ve o bağlantı listeden çıkarılır.
+        Eskiden hata yukarı fırlıyordu: bu çağrı çoğu zaman GÖNDERENİN handler'ı
+        içinde yapıldığından, kopmuş bir alıcı, ona yazan herkesin bağlantısını
+        düşürüyordu ve kopmuş kullanıcı "online" görünmeye devam ediyordu.
+        """
         ws = self.active_connections.get(username)
-        if ws:
+        if not ws:
+            return False
+        try:
             await ws.send_json(message)
             return True
-        return False
+        except Exception as ex:
+            print(f"[WS] '{username}' kullanicisina gonderilemedi, olu baglanti kaldiriliyor: {ex}")
+            self.disconnect(username, ws)
+            return False
 
 # Global bağlantı yöneticisi örneği
 manager = ConnectionManager()

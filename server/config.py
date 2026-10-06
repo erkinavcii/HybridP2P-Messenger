@@ -10,6 +10,11 @@ PORT = int(os.getenv("HYBRIDP2P_PORT", "8000"))
 DB_PATH = os.getenv("HYBRIDP2P_DB_PATH", "relay_server.db")
 MAX_FILE_SIZE = int(os.getenv("HYBRIDP2P_MAX_FILE_SIZE", "10485760")) # default 10MB
 
+# Tek bir WebSocket / REST-fallback mesajının azami boyutu (karakter).
+# Dosyalar bu yoldan değil /api/upload_file ile gider (MAX_FILE_SIZE).
+# 256 KB; şifreli metin, SDP, avatar (~25 KB) ve link önizleme (~30 KB) için yeterli pay.
+MAX_WS_MESSAGE_SIZE = int(os.getenv("HYBRIDP2P_MAX_WS_MESSAGE_SIZE", "262144"))
+
 cors_origins_raw = os.getenv("HYBRIDP2P_CORS_ORIGINS", "*")
 CORS_ORIGINS = [orig.strip() for orig in cors_origins_raw.split(",")] if cors_origins_raw else ["*"]
 

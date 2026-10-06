@@ -147,6 +147,17 @@ Bölüm 1'deki not güncellendi, bkz. yukarısı.
 
 ---
 
+## 6. Mesaj Düzenleme/Silme — Bilinen Sınırlar (2026-10-06)
+
+- **Eski mesajlar:** `msg_uid` özelliğinden önce gönderilmiş mesajların kararlı kimliği yok; düzenlenemez/silinemez (⋮ menüsü görünmez).
+- **Ephemeral sohbetler:** mesajlar diske yazılmadığı için düzenlenecek kayıt yok; menü gösterilmez. Gelen düzenleme/silme ephemeral sohbette uygulanmaz.
+- **Gruplar ve tek görünümlük mesajlar:** kapsam dışı (v1 yalnızca birebir, kalıcı metin mesajları).
+- **Karşı taraf eski sürümse:** düzenleme/silme çerçevelerini yok sayar; değişiklik yalnızca sizin tarafınızda görünür.
+- **"Herkesten sil" bir garanti değildir:** alıcı mesajı silinmeden önce okumuş, kopyalamış veya ekran görüntüsü almış olabilir; değiştirilmiş bir istemci silme isteğini uygulamayabilir. Bu, tüm mesajlaşma uygulamaları için geçerlidir.
+- **Web istemcisi:** henüz desteklemiyor (web paritesi turunda).
+
+---
+
 ## 5. Birebir Mesaj İmzalama — Web İstemcisi Paritesi Eksik (2026-07-25)
 
 Masaüstü istemcisi artık birebir mesajları RSA-PSS ile imzalıyor ve doğruluyor (bkz. README "Message Authenticity"). **Web istemcisi (`static/js/`) henüz imzalamıyor.**

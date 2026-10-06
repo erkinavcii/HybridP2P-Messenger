@@ -20,8 +20,40 @@ from desktop.net_config import FILE_ICONS
 
 class BubblesMixin:
 
+    def create_link_preview_card(self, preview, is_mine: bool):
+        """Link önizleme kartı. preview: depodaki JSON metni (veya dict).
+        Tıklanınca bağlantı tarayıcıda açılır; resim zaten yerelde (şifreli
+        gelmiş), görüntülemek için siteye istek atılmaz."""
+        from desktop import linkpreview
+        try:
+            p = linkpreview.sanitize(preview) if preview else None
+        except Exception:
+            p = None
+        if not p:
+            return None
+        fg = C.on_accent if is_mine else C.text_bubble_other
+        muted = C.on_accent_muted if is_mine else C.text_muted
+        parts = []
+        if p.get("image"):
+            parts.append(ft.Image(src="data:image/jpeg;base64," + p["image"], height=130,
+                                  fit="cover", border_radius=8, width=272))
+        parts.append(ft.Text(linkpreview.domain_of(p["url"]), size=10, color=muted))
+        if p["title"]:
+            parts.append(ft.Text(p["title"], size=13, weight=ft.FontWeight.BOLD, color=fg,
+                                 max_lines=2, overflow=ft.TextOverflow.ELLIPSIS))
+        if p["description"]:
+            parts.append(ft.Text(p["description"], size=11, color=muted,
+                                 max_lines=3, overflow=ft.TextOverflow.ELLIPSIS))
+        return ft.Container(
+            content=ft.Column(controls=parts, spacing=3, tight=True),
+            url=p["url"], tooltip=p["url"][:120],
+            bgcolor=C.shadow, padding=8, border_radius=8,
+            border=ft.Border(left=ft.BorderSide(3, C.accent_light if is_mine else C.accent)),
+        )
+
     def create_message_bubble(self, sender: str, text: str, time_str: str, is_mine: bool,
-                              is_read: bool = True, msg_uid: str = None, edited: bool = False):
+                              is_read: bool = True, msg_uid: str = None, edited: bool = False,
+                              preview=None):
         """Metin baloncuğu. Kendi mesajımızda msg_uid varsa düzenle/sil menüsü
         bağlanır (⋮ ikonu, sağ tık veya uzun basma)."""
         bubble_color = C.accent if is_mine else C.surface_alt
@@ -63,6 +95,7 @@ class BubblesMixin:
                         controls=[
                             ft.Text(sender, size=11, color=C.text_secondary,
                                     weight=ft.FontWeight.BOLD, visible=not is_mine),
+                            *([card] if (card := self.create_link_preview_card(preview, is_mine)) else []),
                             ft.Text(text, size=14, color=text_color, selectable=True),
                             time_row,
                         ],

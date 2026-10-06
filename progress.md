@@ -112,7 +112,7 @@
 ### 💬 Mesajlaşma Özellikleri
 - [x] **Tek Gorunumlu Mesaj (View-Once)** — per-mesaj toggle, 10s countdown, hic kaydedilmez ✅
 - [x] **Dosya/Resim Gonderimi** — AES-256-GCM sifreleme, sunucu Zero-Knowledge, inline resim ✅
-- [ ] **Sesli Mesaj**: Mikrofon kaydi → sifrelenmis ses dosyasi gonderimi
+- [x] **Sesli Mesaj**: Mikrofon kaydi → Opus/Ogg (~4 KB/sn) → mevcut E2EE dosya yolu; alici hemen indirip yerelde saklar, yeniden baslatinca da dinlenebilir, ephemeral sohbette diske yazilmaz (masaustu) ✅ *(grup sohbetlerinde yok)*
 - [x] **Grup Sohbeti**: Birden fazla aliciya sifreli simetrik mesaj (Shared Group Key + Rekeying) ✅
 - [ ] **Mesaj Duzenleme/Silme**: Gonderilenin her iki taraftan silinmesi
 - [x] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi (masaüstü & web tarafında çift yeşil tik) ✅

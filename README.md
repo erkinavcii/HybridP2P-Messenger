@@ -250,6 +250,7 @@ HybridP2P-Messenger/
 │   ├── theme.py            # Dark/light palette — the ONLY place hex colors live (C.accent, C.text …)
 │   ├── settings_store.py   # Device-wide prefs (theme, notification sound) in settings.json
 │   ├── notify.py           # Synthesized new-message sound (sounddevice)
+│   ├── voice.py            # Voice messages: record, Opus encode/decode, playback, local media store
 │   ├── voip_tracks.py       # MicrophoneTrack/AudioPlayer/CameraTrack (aiortc)
 │   ├── bubbles.py           # Message/file/system chat bubble builders
 │   ├── rest_client.py       # Signed REST requests, key init/registration

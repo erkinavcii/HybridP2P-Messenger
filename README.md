@@ -247,6 +247,9 @@ HybridP2P-Messenger/
 ├── client.py              # Thin entry point — MessengerApp wiring only
 ├── desktop/                # Flet desktop client package (mixins on MessengerApp)
 │   ├── net_config.py       # Server URL state, file-type helpers
+│   ├── theme.py            # Dark/light palette — the ONLY place hex colors live (C.accent, C.text …)
+│   ├── settings_store.py   # Device-wide prefs (theme, notification sound) in settings.json
+│   ├── notify.py           # Synthesized new-message sound (sounddevice)
 │   ├── voip_tracks.py       # MicrophoneTrack/AudioPlayer/CameraTrack (aiortc)
 │   ├── bubbles.py           # Message/file/system chat bubble builders
 │   ├── rest_client.py       # Signed REST requests, key init/registration

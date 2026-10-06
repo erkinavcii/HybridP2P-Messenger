@@ -115,6 +115,9 @@ You can edit your own direct messages or delete them for everyone (⋮ icon, rig
 ### End-to-End Encrypted Profile Photos
 Profile photos never reach the server in readable form. When you pick a photo it is cropped to a 128×128 JPEG locally, then sent to each contact separately, encrypted with **that contact's** public key and signed with yours (`avatar_update` frame). The signed data is domain-separated (`avatar:{sender}:{recipient}:{payload}`) so an avatar signature can never be replayed as a message signature, and unsigned or wrongly signed avatars are rejected outright. Received images are decoded and **re-encoded** before being stored, which drops metadata (e.g. EXIF location) and anything embedded in the file; oversized inputs and decompression bombs are refused. The server keeps at most one pending avatar per sender/recipient pair in its offline queue.
 
+### Link Previews (Sender-Generated, Encrypted)
+When a direct message contains a link, the **sender's** client fetches the page title, description and image, shrinks the image to a small JPEG, and sends that preview **encrypted to the recipient** in an optional `encrypted_preview` field next to the message. The recipient never connects to the website, so the site learns nothing about them, and the server never sees the URL. The preview is signed together with the message it belongs to (`preview:{sender}:{recipient}:{payload}:{encrypted_preview}`), so a server cannot move a preview onto a different message; unsigned or forged previews are dropped while the message itself is still shown. Received previews are validated (http/https links only, length limits) and the image is re-encoded. On the sending side, fetching refuses private, loopback and link-local addresses on every redirect hop, so a malicious link cannot make your client probe your local network; it also enforces time and size limits. A failed fetch never blocks sending. The trade-off is that the website sees the **sender's** IP, so the feature can be turned off in Settings ("Link önizleme"). View-once and group messages never carry previews, and older clients simply ignore the extra field.
+
 ### 5. Out-of-Band Contact Cards & MITM Detection
 Users can share their **Contact Cards** (containing username, public key PEM, and a SHA-256 fingerprint) out-of-band:
 * **Contact Cards**: Clicking the **Kimliği Kopyala (Contact Card)** button copies a structured JSON contact card. Pasting this JSON directly into the recipient field imports and saves the contact locally.
@@ -254,10 +257,11 @@ HybridP2P-Messenger/
 ├── desktop/                # Flet desktop client package (mixins on MessengerApp)
 │   ├── net_config.py       # Server URL state, file-type helpers
 │   ├── theme.py            # Dark/light palette — the ONLY place hex colors live (C.accent, C.text …)
-│   ├── settings_store.py   # Device-wide prefs (theme, notification sound) in settings.json
+│   ├── settings_store.py   # Device-wide prefs (theme, notification sound, link previews) in settings.json
 │   ├── notify.py           # Synthesized new-message sound (sounddevice)
 │   ├── voice.py            # Voice messages: record, Opus encode/decode, playback, local media store
 │   ├── avatar.py           # E2EE profile photos: normalize (128px JPEG, strips EXIF), signing data
+│   ├── linkpreview.py      # Sender-side link previews: SSRF-guarded fetch, OG parsing, sanitize
 │   ├── voip_tracks.py       # MicrophoneTrack/AudioPlayer/CameraTrack (aiortc)
 │   ├── bubbles.py           # Message/file/system chat bubble builders
 │   ├── rest_client.py       # Signed REST requests, key init/registration

@@ -18,9 +18,11 @@ import json
 from datetime import datetime
 
 import flet as ft
+from desktop.theme import C
 
 from desktop.net_config import _guess_file_type
 from desktop.notify import play_notification
+from desktop import settings_store
 
 # Tarih ayracı etiketleri için Türkçe ay adları
 _TR_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -152,8 +154,11 @@ class ChatLogicMixin:
         self.run_on_ui(_apply)
 
     def _notify_incoming(self):
-        """Gelen mesaj/dosya için bildirim sesi. Aktif arama sırasında çalınmaz."""
+        """Gelen mesaj/dosya için bildirim sesi. Aktif arama sırasında ve
+        kullanıcı ayarlardan kapattıysa çalınmaz."""
         if self.state.get("call_state") in ("ringing", "calling", "connected"):
+            return
+        if not settings_store.get("sound_enabled"):
             return
         play_notification()
 
@@ -264,11 +269,11 @@ class ChatLogicMixin:
         def _apply():
             if self.state["ephemeral"]:
                 self.ephemeral_btn.icon       = ft.Icons.VISIBILITY_OFF
-                self.ephemeral_btn.icon_color = "#ef4444"
+                self.ephemeral_btn.icon_color = C.danger
                 self.ephemeral_btn.tooltip    = "Ephemeral mode ON — disable"
             else:
                 self.ephemeral_btn.icon       = ft.Icons.VISIBILITY
-                self.ephemeral_btn.icon_color = "#8b5cf6"
+                self.ephemeral_btn.icon_color = C.accent
                 self.ephemeral_btn.tooltip    = "Switch to Ephemeral Chat"
             try: self.page.update()
             except: pass
@@ -304,11 +309,11 @@ class ChatLogicMixin:
         self.state["view_once_mode"] = not self.state["view_once_mode"]
         if self.state["view_once_mode"]:
             self.view_once_msg_btn.icon       = ft.Icons.VISIBILITY_OFF
-            self.view_once_msg_btn.icon_color = "#ef4444"
+            self.view_once_msg_btn.icon_color = C.danger
             self.view_once_msg_btn.tooltip    = "View-once ON — disable"
         else:
             self.view_once_msg_btn.icon       = ft.Icons.VISIBILITY
-            self.view_once_msg_btn.icon_color = "#888888"
+            self.view_once_msg_btn.icon_color = C.text_muted
             self.view_once_msg_btn.tooltip    = "Send as view-once"
         self.page.update()
 

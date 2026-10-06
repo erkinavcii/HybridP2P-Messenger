@@ -316,7 +316,8 @@ The clients will automatically generate their RSA-4096 keys under `~/.hybridp2p_
 The server automatically hosts a self-contained, browser-side Zero-Knowledge E2EE Web Client directly at the root path (`/`).
 
 * **Localhost Access:** Simply open your web browser and navigate to `http://127.0.0.1:8000/`.
-* **Full Feature Parity:** The Web Client has full feature parity with the Desktop client, including E2EE messaging, file/image sharing (with inline image rendering), view-once media, chat history search, real-time online/offline statuses, and E2EE read receipts.
+* **Feature Parity:** The Web Client supports E2EE messaging with signed direct messages, file/image sharing (with inline image rendering), view-once media, chat history search, real-time online/offline statuses, E2EE read receipts, typing indicator, date separators, notification sound and a light/dark theme (sidebar buttons). Still desktop-only for now: message edit/delete, profile photos, voice messages and link previews.
+* **Updates:** the server sends the web client with `Cache-Control: no-cache`, so browsers revalidate on every load and never run stale JavaScript after an upgrade.
 * **Private Key Import & Export (Device/Account Transfer):**
   * To log in as your existing desktop user on the Web Client, click **Import existing Private Key (.pem)** on the web login screen, and paste your private key PEM. The client will derive your public key using WebCrypto SubtleCrypto and authenticate securely.
   * You can retrieve your private key from the Web Client anytime by clicking the key icon (`🔑`) in the sidebar header to copy/backup it.

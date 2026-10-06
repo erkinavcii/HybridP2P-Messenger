@@ -105,7 +105,7 @@
 - [ ] **Signal Protokolü (Double Ratchet)**: Her mesajda yeni anahtar türetme → tam Forward Secrecy. Bir anahtar ele geçirilse bile geçmiş/gelecek mesajlar korunur
 - [ ] **Anahtar Doğrulama (Key Verification)**: QR kod veya güvenlik numarası ile karşı tarafın anahtarını yüz yüze doğrulama (MITM koruması)
 - [x] **Private Key Şifreleme**: Yerel private key'i kullanıcı parolası ile AES şifreleme (cihaz çalınsa bile anahtar güvende) (IndexedDB + Parola korumalı E2EE yedek) ✅
-- [x] **Mesaj İmzalama (Digital Signature)**: Birebir mesajlara RSA-PSS imza + alıcı bağlama + ilk-imzada-güven (downgrade koruması); hem WebSocket hem çevrimdışı yolda doğrulanıyor (masaüstü) ✅ *(web istemcisi henüz imzalamıyor — bkz. KNOWN_ISSUES.md §5)*
+- [x] **Mesaj İmzalama (Digital Signature)**: Birebir mesajlara RSA-PSS imza + alıcı bağlama + ilk-imzada-güven (downgrade koruması); hem WebSocket hem çevrimdışı yolda doğrulanıyor (masaüstü + web) ✅ *(zorunlu doğrulama ayrı karar — bkz. KNOWN_ISSUES.md §5)*
 - [ ] **Anahtar Yenileme (Key Rotation)**: Belirli aralıklarla otomatik yeni anahtar çifti üretme ve dağıtma
 - [x] **Sunucu Tarafı Rate Limiting**: Brute-force ve spam saldırılarına karşı istek sınırlama ✅
 
@@ -116,7 +116,7 @@
 - [x] **Grup Sohbeti**: Birden fazla aliciya sifreli simetrik mesaj (Shared Group Key + Rekeying) ✅
 - [x] **Mesaj Duzenleme/Silme**: Kendi mesajini duzenle / herkesten sil — imzali msg_uid (sunucu kimlikleri degistiremez), imzali message_edit/message_delete, yalnizca yazar (masaustu, birebir) ✅ *(grup ve ephemeral sohbetlerde, msg_uid oncesi eski mesajlarda yok)*
 - [x] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi (masaüstü & web tarafında çift yeşil tik) ✅
-- [x] **Yaziyor... Gostergesi**: Karsi tarafin yazma durumu — birebir sohbetlerde, debounce'lu, yalnizca canli relay (masaustu) ✅
+- [x] **Yaziyor... Gostergesi**: Karsi tarafin yazma durumu — birebir sohbetlerde, debounce'lu, yalnizca canli relay (masaustu + web) ✅
 - [x] **Mesaj Arama**: Yerel gecmiste arama (Sohbet ve Mesaj Gövdesi Arama) ✅
 
 ### 🗄️ Veri Yönetimi
@@ -130,11 +130,11 @@
 - [x] **Çoklu Sohbet Sekmesi**: Birden fazla kişiyle eş zamanlı sohbet (WhatsApp tarzı Inbox / Sohbet Listesi) ✅
 - [x] **Kişi Listesi / Rehber**: Yerel rehber diyaloğu — kişi listesi, isme göre arama, parmak izi kopyalama, sohbet açma, kişi silme (masaüstü) ✅ *(favoriler henüz yok)*
 - [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri
-- [x] **Tema Seçimi**: Açık/koyu mod — ayarlardan canlı geçiş, cihazda kalıcı; tüm renkler `desktop/theme.py` paletinde (masaüstü) ✅ *(özel renk temaları henüz yok)*
+- [x] **Tema Seçimi**: Açık/koyu mod — ayarlardan canlı geçiş, cihazda kalıcı; tüm renkler `desktop/theme.py` paletinde (masaüstü); web'de kenar çubuğu düğmesi + `styles.css` belirteçleri (web) ✅ *(özel renk temaları henüz yok)*
 - [x] **Profil Fotoğrafı / Avatar**: E2EE — her kişiye kendi anahtarıyla şifreli + imzalı (`avatar_update`), sunucu göremez; gelen resim 128px JPEG'e yeniden kodlanır, EXIF atılır (masaüstü) ✅
-- [x] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama — "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025" (masaüstü) ✅
+- [x] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama — "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025" (masaüstü + web; web mesajları zaman damgasına göre sıralar) ✅
 - [x] **Link Önizleme**: gönderen çeker, alıcıya şifreli + mesaja bağlı imzalı gönderir (`encrypted_preview`); alıcı siteye bağlanmaz, sunucu URL'yi görmez; yerel ağ adresleri reddedilir; ayarlardan kapatılabilir (masaüstü) ✅
-- [x] **Ses ve Titreşim**: Yeni mesaj/dosya geldiğinde bildirim sesi — sounddevice ile üretilen çift ton, harici ses dosyası gerektirmez, arama sırasında susar (masaüstü) ✅ *(titreşim mobil özelliği, kapsam dışı)*
+- [x] **Ses ve Titreşim**: Yeni mesaj/dosya geldiğinde bildirim sesi — sounddevice ile üretilen çift ton, harici ses dosyası gerektirmez, arama sırasında susar (masaüstü; web'de WebAudio ile aynı ton, kenar çubuğundan kapatılabilir) ✅ *(titreşim mobil özelliği, kapsam dışı)*
 
 ### 🌐 Ağ ve Altyapı
 - [ ] **TLS/HTTPS**: Sunucu iletişimini SSL sertifikası ile şifreleme (transit encryption)

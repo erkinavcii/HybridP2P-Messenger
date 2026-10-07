@@ -17,6 +17,10 @@ python -m pip install -r requirements.txt
 ## ☁️ 2. Sunucu (Röle) Kurulumu ve Yayına Alma
 Sunucu (Relay Server) mesajları uçtan uca şifreli olarak geçici saklar ve WebSocket yönlendirmesini yönetir.
 
+> Bu bölüm yerel ağda / denemede hızlı çalıştırma içindir (şifresiz `http`).
+> İnternete açık, HTTPS'li kalıcı kurulum için **[DEPLOY.md](DEPLOY.md)** rehberini
+> kullanın (Docker, otomatik sertifika, alan adı olmadan da çalışan mod).
+
 ### A. Yerel Ağda (Aynı Wi-Fi) veya İnternette Barındırma
 1. Sunucu bilgisayarında `server.py` dosyasını çalıştırın:
    ```bash
@@ -59,6 +63,9 @@ Sunucu IP adresinizi öğrendikten sonra (örneğin: `192.168.1.50` veya genel I
 ### Adım 1: İstemciyi Başlatın
 1. İstemciyi çalıştırın (`client.py` veya derlediğiniz `.exe` dosyası üzerinden).
 2. Giriş ekranındaki **"Sunucu Adresi"** alanına sunucunuzun IP ve port bilgisini girin (örn: `192.168.1.50:8000` veya genel IP adresi `85.95.x.y:8000`). Varsayılan olarak `127.0.0.1:8000` ayarlıdır.
+   * Sunucu HTTPS ile kurulduysa (DEPLOY.md) adresi `https://` ile yazın, örn. `https://mesaj.example.com`.
+   * Sunucu yalnızca IP ile ve kendinden imzalı sertifikayla kurulduysa, yöneticiden aldığınız değeri **"Sertifika parmak izi"** alanına bir kez girin (sonraki girişlerde hatırlanır).
+   * Kullanıcı adı 2–32 karakter olmalı; yalnızca küçük harf, rakam ve `_`.
 3. Kendinize bir kullanıcı adı belirleyin (Örn: `alice` veya `bob`) ve **Giriş Yap** butonuna tıklayın.
 
 ### Adım 2: Kendi Kimlik Kartınızı Arkadaşınıza Gönderin

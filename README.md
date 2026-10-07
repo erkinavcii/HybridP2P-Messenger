@@ -12,11 +12,11 @@ A secure, private, and lightweight hybrid peer-to-peer messaging application des
 * **Ephemeral Chat Mode:** Sync-capable ephemeral messaging that keeps conversations strictly in volatile memory (RAM) and never writes them to disk.
 * **View-Once Messages & Files:** Individual text messages or files that can be opened only once before being permanently deleted from RAM and UI.
 * **E2EE VoIP Voice & Video Calling (STUN-First P2P):**
-  * **Zero Server Cost (STUN-First):** Uses public STUN servers to negotiate direct peer-to-peer UDP connections for ~90% of calls.
+  * **Direct P2P First (STUN):** Uses STUN to negotiate direct peer-to-peer connections, so media normally does not pass through any server. Public STUN by default, or your own coturn (see DEPLOY.md).
   * **End-to-End Cryptography:** Media stream is fully E2EE using DTLS-SRTP, ensuring neither the ISP nor the server can intercept audio/video.
-  * **TURN Fallback (Alternative):** Supports seamless fallback to a TURN server (e.g., coturn or Metered TURN) if STUN direct P2P fails due to symmetric NATs.
-  * **Performance Optimization:** Prioritizes hardware-accelerated H.264, dynamically adapts resolution/FPS (720p to 360p) based on network quality, and leverages audio priority and WebRTC audio processing filters (AEC/ANS/AGC).
-* **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with dynamic cryptographic rekeying (forward secrecy) upon member additions/removals, keeping upload bandwidth constant at $O(1)$.
+  * **TURN Fallback (Optional):** When a direct path is impossible (CGNAT, symmetric NAT), calls can be relayed through a TURN server such as the bundled coturn profile; the stream stays encrypted.
+  * **Audio Processing:** The web client enables WebRTC echo cancellation, noise suppression and automatic gain control. *(Adaptive resolution/frame rate on weak connections is planned, not yet implemented.)*
+* **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with cryptographic rekeying upon member additions/removals (a removed member cannot read new messages), keeping upload bandwidth constant at $O(1)$. *(Per-message forward secrecy à la Signal's Double Ratchet is not implemented.)*
 * **Secure Passwordless Authentication:** Connections and modifying API requests are authenticated using cryptographic challenges and RSA-PSS signatures.
 
 ---
@@ -60,7 +60,7 @@ We combine asymmetric and symmetric cryptography (hybrid encryption) to achieve 
                                                                    └── 6. Decrypt Ciphertext using AES Key
 ```
 
-* **RSA-4096 (OAEP with SHA-256 MGF1):** Used for asymmetric key exchange and wrapping symmetric session keys. 4096-bit key length provides military-grade security.
+* **RSA-4096 (OAEP with SHA-256 MGF1):** Used for asymmetric key exchange and wrapping symmetric session keys. The 4096-bit key length gives a large security margin against classical attacks.
 * **RSA-PSS Signatures:** Used for challenge-response connection handshakes and API request verification. We employ **PSS (Probabilistic Signature Scheme)** padding with **SHA-256** hashing to guarantee secure, randomized signatures.
 * **AES-256-GCM:** Used for symmetric encryption of message payloads and files. GCM (Galois/Counter Mode) provides **Authenticated Encryption with Associated Data (AEAD)**, ensuring confidentiality, integrity, and authenticity.
 
@@ -211,12 +211,12 @@ To prevent the server from gathering metadata about when a message was read, rea
 
 ## 📞 E2EE VoIP Voice & Video Calling (STUN-First P2P)
 
-HybridP2P Messenger features a military-grade, secure, and low-latency voice and video calling infrastructure designed to operate with zero server media overhead.
+HybridP2P Messenger provides end-to-end encrypted voice and video calls (standard WebRTC, DTLS-SRTP). Media flows directly between devices whenever possible; the server only relays call setup messages.
 
 ### 1. Peer-to-Peer STUN-First Architecture
 To bypass firewall constraints and establish direct device-to-device streaming without expensive relay server costs:
 * **STUN Signaling:** The clients get the ICE server list from `GET /api/ice_servers` (signed request) to discover their external public IP addresses and ports. By default this is Google's public STUN; a self-hosted coturn can replace it entirely (`HYBRIDP2P_PUBLIC_STUN=0`), see [DEPLOY.md §6](DEPLOY.md). The serverless Pure P2P mode has no server to ask and uses public STUN.
-* **Direct P2P UDP:** Using the gathered ICE candidates, the clients negotiate a direct UDP session (WebRTC). In over 85-90% of household networks, this allows media traffic (audio/video packets) to flow directly between devices.
+* **Direct P2P UDP:** Using the gathered ICE candidates, the clients negotiate a direct UDP session (WebRTC). On most home networks this lets audio/video flow directly between devices; behind carrier-grade or symmetric NAT a TURN relay is needed.
 * **Zero Server Media Burden:** The main server (`server.py`) acts purely as a routing channel for the initialization handshakes (SDP Offer/Answer and ICE candidates) and maintains no contact with the actual media stream.
 
 ### 2. TURN Alternative / Fallback
@@ -228,11 +228,9 @@ For scenarios where both devices are restricted behind strict symmetric NAT fire
 * **Standard E2EE:** The media streams are encrypted using **DTLS-SRTP** (Datagram Transport Layer Security - Secure Real-time Transport Protocol), a WebRTC native security suite.
 * **ISP Protection:** Internet Service Providers (ISPs) and network operators can only monitor that a connection exists and estimate data volumes. They are mathematically incapable of listening to the calls or accessing video feeds.
 
-### 4. Performance & Bandwidth Optimization
-* **H.264 Priority:** Prioritizes hardware-accelerated H.264 constrained baseline profiles on web and mobile devices to conserve battery life and prevent CPU overheating.
-* **Adaptive Bitrate & Resolution:** Dynamically adjusts resolution and frame rates between **720p HD @ 30 FPS** (under optimal conditions) down to **360p @ 15 FPS** (on degraded connections) to maintain continuity.
-* **Audio Priority Over Video:** Ensures audio tracks are given higher transmission priority (`priority: "high"` in SDP) during bandwidth congestion, preferring the video frame-rate to drop rather than corrupting audio clarity.
-* **Acoustic Quality Filters:** Leverages WebRTC's native Acoustic Echo Cancellation (AEC), Acoustic Noise Suppression (ANS), and Automatic Gain Control (AGC) for clear, crisp audio.
+### 4. Audio Processing & Planned Quality Adaptation
+* **Implemented:** the web client requests WebRTC's echo cancellation (AEC), noise suppression (ANS) and automatic gain control (AGC) for the microphone.
+* **Planned (not yet implemented):** adapting resolution and frame rate to connection quality (e.g. 720p@30 → 360p@15 based on `getStats()`), keeping audio prioritised over video, and preferring hardware-accelerated codecs. Tracked in AGENTS.md §5.3.
 
 ---
 

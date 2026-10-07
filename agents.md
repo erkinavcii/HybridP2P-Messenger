@@ -50,6 +50,10 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 - [x] **API /api/ice_servers Güvenliği:** `server.py` üzerinde isteklerin imza doğrulama (X-Signature) ile doğrulanması sağlandı; `TURN_SECRET` parametresine bağlı TURN şifresi üretimi eklendi.
 - [x] **Pure P2P Entegrasyonu:** Hem masaüstü hem de web istemcisine zlib/deflate sıkıştırmalı Base64 SDP kopyala-yapıştır ile sunucusuz arama özelliği entegre edildi.
 - [x] **Web İstemcisi Modülerleştirme:** CSS ve devasa script blokları `styles.css`, `state.js`, `crypto.js`, `db.js`, `voip.js`, `ws.js`, `ui.js`, `app.js` şeklinde ES6 modüllerine bölünerek `static/index.html` 400+ satıra düşürüldü.
+- [x] **Masaüstü UX:** yazıyor göstergesi, tarih ayırıcı, bildirim sesi, açık/koyu tema, sesli mesaj, E2EE profil fotoğrafı, kişi rehberi, mesaj düzenleme/herkesten silme, link önizleme (gönderen çeker, şifreli gönderir).
+- [x] **Web Paritesi (W1–W5):** imzalı birebir mesajlar, yukarıdaki UX özelliklerinin tamamı web'de; masaüstüyle aynı protokoller (birlikte çalışır). Web yalnızca link önizlemeyi gösterir, üretemez (CORS).
+- [x] **Deployment (D1–D5):** Docker imajı, docker-compose (Caddy; alan adı + Let's Encrypt ya da yalnızca IP + kendinden imzalı sertifika), masaüstü https/wss + parmak izi sabitleme, coturn (STUN/TURN) ve Google STUN aç/kapa, PWA, Cloudflare Tunnel demosu, `DEPLOY.md`. **Docker'da henüz çalıştırılmadı** — KNOWN_ISSUES §8.
+- [x] **Otomatik Testler:** `tests/` altında pytest paketi (sunucu yolları, imzalar, TLS sabitleme, deployment, PWA önbellek listesi …).
 
 ---
 
@@ -71,11 +75,11 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 - [ ] **Dinamik Kalite Adaptasyonu (VoIP Polish):** `getStats()` verisine göre zayıf bağlantılarda çözünürlüğü ve kare hızını dinamik düşürme (örn. 720p@30fps -> 360p@15fps), ses önceliğini yüksek tutma.
 
 ### 5.4. Eksik UX & Güvenlik Özellikleri
-- [ ] **Özel Anahtar Şifreleme (Private Key Encryption):** Yerel cihazdaki private key'lerin kullanıcı şifresiyle şifrelenip PEM olarak diske yazılması.
-- [ ] **Mesaj İmzalama (Digital Signature):** Gönderilen her mesajın RSA-PSS ile imzalanması ve alıcının gönderen kimliğini doğrulaması.
+- [ ] **Özel Anahtar Şifreleme (Private Key Encryption):** Yerel cihazdaki private key'lerin kullanıcı şifresiyle şifrelenip PEM olarak diske yazılması. *(Geliştirme sürecinde anahtara kolay erişim için bilinçli olarak ertelendi; yayın öncesi ele alınacak.)*
+- [x] **Mesaj İmzalama (Digital Signature):** Birebir mesajlar masaüstü ve web'de RSA-PSS ile imzalanıyor, alıcı doğruluyor (ilk imzada güven + downgrade koruması). *(Açık karar: imzasız mesajı tamamen reddetmek — KNOWN_ISSUES §5.)*
 
 ---
 
 ## 6) 🛠️ GELİŞTİRME NOTLARI & HATIRLATMALAR
-- **Vanilla CSS:** Web uygulamasında harici CSS kütüphaneleri (Tailwind vb.) yerine `index.html` içindeki özelleştirilmiş Vanilla CSS kullanılacaktır.
+- **Vanilla CSS:** Web uygulamasında harici CSS kütüphaneleri (Tailwind vb.) yerine `static/css/styles.css` içindeki Vanilla CSS kullanılır; renkler yalnızca `:root` belirteçlerinde tanımlıdır (açık tema `:root[data-theme="light"]`).
 - **Backwards Compatibility:** WebSocket payload yapıları ve API imza formatları değiştirilirken eski istemcilerin çökmeyeceğinden emin olunmalıdır.

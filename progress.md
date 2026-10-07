@@ -102,8 +102,8 @@
 > Aşağıdaki maddeler MVP'nin üzerine eklenebilecek, projeyi profesyonel seviyeye taşıyacak özelliklerdir.
 
 ### 🔐 Güvenlik İyileştirmeleri
-- [ ] **Signal Protokolü (Double Ratchet)**: Her mesajda yeni anahtar türetme → tam Forward Secrecy. Bir anahtar ele geçirilse bile geçmiş/gelecek mesajlar korunur
-- [ ] **Anahtar Doğrulama (Key Verification)**: QR kod veya güvenlik numarası ile karşı tarafın anahtarını yüz yüze doğrulama (MITM koruması)
+- [ ] **Signal Protokolü (Double Ratchet)**: Her mesajda yeni anahtar türetme → tam Forward Secrecy. Bir anahtar ele geçirilse bile geçmiş/gelecek mesajlar korunur *(karmaşıklık nedeniyle bilinçli olarak ertelendi; yapılıp yapılmayacağı tartışılacak)*
+- [ ] **Anahtar Doğrulama (Key Verification)**: QR kod veya güvenlik numarası ile karşı tarafın anahtarını yüz yüze doğrulama (MITM koruması) *(kısmen: parmak izi rehberde (masaüstü + web) ve kişi kartlarında görünür; QR / güvenlik numarası akışı yok)*
 - [x] **Private Key Şifreleme**: Yerel private key'i kullanıcı parolası ile AES şifreleme (cihaz çalınsa bile anahtar güvende) (IndexedDB + Parola korumalı E2EE yedek) ✅
 - [x] **Mesaj İmzalama (Digital Signature)**: Birebir mesajlara RSA-PSS imza + alıcı bağlama + ilk-imzada-güven (downgrade koruması); hem WebSocket hem çevrimdışı yolda doğrulanıyor (masaüstü + web) ✅ *(zorunlu doğrulama ayrı karar — bkz. KNOWN_ISSUES.md §5)*
 - [ ] **Anahtar Yenileme (Key Rotation)**: Belirli aralıklarla otomatik yeni anahtar çifti üretme ve dağıtma
@@ -129,7 +129,7 @@
 ### 🎨 Arayüz ve UX İyileştirmeleri
 - [x] **Çoklu Sohbet Sekmesi**: Birden fazla kişiyle eş zamanlı sohbet (WhatsApp tarzı Inbox / Sohbet Listesi) ✅
 - [x] **Kişi Listesi / Rehber**: Yerel rehber diyaloğu — kişi listesi, isme göre arama, parmak izi kopyalama, sohbet açma, kişi silme (masaüstü + web) ✅ *(favoriler henüz yok)*
-- [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri
+- [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri *(kısmen: yeni mesaj sesi var (masaüstü + web); işletim sistemi bildirimi yok)*
 - [x] **Tema Seçimi**: Açık/koyu mod — ayarlardan canlı geçiş, cihazda kalıcı; tüm renkler `desktop/theme.py` paletinde (masaüstü); web'de kenar çubuğu düğmesi + `styles.css` belirteçleri (web) ✅ *(özel renk temaları henüz yok)*
 - [x] **Profil Fotoğrafı / Avatar**: E2EE — her kişiye kendi anahtarıyla şifreli + imzalı (`avatar_update`), sunucu göremez; gelen resim 128px JPEG'e yeniden kodlanır, EXIF atılır (masaüstü + web; web'de canvas ile) ✅
 - [x] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama — "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025" (masaüstü + web; web mesajları zaman damgasına göre sıralar) ✅
@@ -141,16 +141,16 @@
 - [x] **Docker Compose**: `docker compose up -d --build` — app + Caddy + isteğe bağlı coturn (`turn` profili); Cloudflare Tunnel demosu (`docker-compose.demo.yml`); rehber `DEPLOY.md` ✅ *(Docker'da doğrulama bekliyor — KNOWN_ISSUES §8)*
 - [x] **PWA**: kurulabilir web uygulaması (manifest, ikonlar, önce-ağ service worker) ✅ *(gerçek tarayıcı testi bekliyor)*
 - [x] **STUN/TURN seçimi**: Google STUN aç/kapa (`HYBRIDP2P_PUBLIC_STUN`), kendi coturn'ünüz, kısa ömürlü TURN kimliği ✅
-- [ ] **JWT Kimlik Doğrulama**: REST API için token tabanlı yetkilendirme
-- [ ] **NAT Traversal (STUN/TURN)**: Farklı ağlardaki cihazlar arası doğrudan bağlantı
+- [x] ~~**JWT Kimlik Doğrulama**~~: gerek kalmadı — her REST isteği RSA-PSS ile imzalanıyor (X-Signature), WebSocket challenge-response ile doğrulanıyor; sunucuda oturum/token durumu yok
+- [x] **NAT Traversal (STUN/TURN)**: Farklı ağlardaki cihazlar arası doğrudan bağlantı — STUN (Google ya da kendi coturn'ünüz), TURN aktarımı (coturn profili, kısa ömürlü kimlik) ✅
 - [ ] **Çoklu Sunucu (Federation)**: Farklı sunuculardaki kullanıcılar arası mesajlaşma (Matrix protokolü gibi)
 - [ ] **Tor/Onion Routing**: Anonim bağlantı desteği
-- [ ] **Tamamen Sunucusuz P2P Modu**: Manuel SDP (QR Kod/Metin) ve BitTorrent DHT sinyalleşme ile sıfır sunucu iletişimi
+- [ ] **Tamamen Sunucusuz P2P Modu**: Manuel SDP (QR Kod/Metin) ve BitTorrent DHT sinyalleşme ile sıfır sunucu iletişimi *(kısmen: manuel SDP + QR ile arama uygulama içinde var (Pure P2P); bağımsız serverless_client.py / serverless.html ve DHT bekliyor)*
 
 ### 📱 Platform Desteği
 - [ ] **Android APK Derleme**: Flet ile Android paketleme
 - [ ] **iOS IPA Derleme**: Flet ile iOS paketleme
-- [ ] **Web Versiyonu**: Flet web hedefi ile tarayıcıda çalışma
+- [x] ~~**Web Versiyonu**: Flet web hedefi~~: yerine bağımsız HTML/JS web istemcisi (`static/`) yapıldı — masaüstüyle özellik paritesi, PWA olarak kurulabilir ✅
 - [x] **Masaüstü İnstaller**: Windows (.exe), macOS (.dmg), Linux (.deb) paketleme (.exe derlendi) ✅
 - [ ] **Çoklu Cihaz Senkronizasyonu**: Aynı hesabı birden fazla cihazda kullanma
 

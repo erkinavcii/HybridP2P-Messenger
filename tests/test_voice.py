@@ -36,9 +36,31 @@ def test_decoded_audio_is_not_silence():
     ("voice-1.ogg", "document", False),     # tip audio değil
     ("şarkı.ogg", "audio", False),          # sıradan ses dosyası
     ("voice-1.mp3", "audio", False),
+    ("voice-1712345678901.webm", "audio", True),   # web istemcisi (Chrome MediaRecorder)
+    ("voice-1.webm", "video", False),
 ])
 def test_is_voice_file(name, ftype, expected):
     assert voice.is_voice_file(name, ftype) is expected
+
+
+def test_webm_opus_from_browser_decodes():
+    """Web istemcisinin (Chrome) gönderdiği WebM/Opus masaüstünde çözülebilmeli."""
+    import io
+    import av
+    pcm = _tone(1.0)
+    buf = io.BytesIO()
+    with av.open(buf, "w", format="webm") as out:
+        stream = out.add_stream("libopus", rate=voice.SAMPLE_RATE, layout="mono")
+        frame = av.AudioFrame.from_ndarray(pcm.reshape(1, -1), format="s16", layout="mono")
+        frame.sample_rate = voice.SAMPLE_RATE
+        for packet in stream.encode(frame):
+            out.mux(packet)
+        for packet in stream.encode(None):
+            out.mux(packet)
+    decoded, sr = voice.decode_audio(buf.getvalue())
+    assert sr == voice.SAMPLE_RATE
+    assert abs(len(decoded) / sr - 1.0) < 0.1
+    assert np.abs(decoded.astype(np.int32)).mean() > 1000
 
 
 def test_fmt_duration():

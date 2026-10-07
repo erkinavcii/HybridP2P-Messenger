@@ -5,7 +5,9 @@ Tasarım:
   • Kodlama: PyAV ile Opus/Ogg (~4 KB/sn; aynı ses WAV olarak ~96 KB/sn).
   • İletim: mevcut E2EE dosya yolu (encrypt_bytes → /api/upload_file → file_message,
     file_type="audio"). Dosya adı "voice-…ogg" — eski istemciler bunu sıradan bir
-    ses dosyası olarak görüp indirebilir (geriye dönük uyumlu).
+    ses dosyası olarak görüp indirebilir (geriye dönük uyumlu). Web istemcisi
+    Chrome'da "voice-…webm" gönderir (MediaRecorder Ogg kaydedemez); içerik yine
+    Opus'tur ve PyAV kabı içerikten tanır, bu yüzden iki uzantı da kabul edilir.
   • Saklama: sunucu dosyayı ilk indirmede siler, bu yüzden alıcı sesi hemen
     indirip ~/.hybridp2p_messenger/{user}/media/ altına yazar. Ephemeral
     sohbetlerde diske hiçbir şey yazılmaz (çağıran taraf kontrol eder).
@@ -24,12 +26,13 @@ FRAME = 960                  # 20 ms @ 48 kHz (Opus'un doğal çerçeve boyu)
 MAX_SECONDS = 120
 MIN_SECONDS = 0.5
 VOICE_PREFIX = "voice-"
-VOICE_EXT = ".ogg"
+VOICE_EXT = ".ogg"                      # masaüstünün gönderdiği
+VOICE_EXTS = (".ogg", ".webm")          # kabul edilenler (.webm: web istemcisi / Chrome)
 
 
 def is_voice_file(original_name: str, file_type: str) -> bool:
     return (file_type == "audio" and original_name.startswith(VOICE_PREFIX)
-            and original_name.endswith(VOICE_EXT))
+            and original_name.endswith(VOICE_EXTS))
 
 
 def voice_filename() -> str:

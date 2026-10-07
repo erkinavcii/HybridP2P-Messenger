@@ -1,6 +1,9 @@
 # HybridP2P Messenger — tek komutla kurulum:
-#     cp .env.example .env    (düzenleyin: HYBRIDP2P_SITE ve HYBRIDP2P_TLS)
-#     docker compose up -d --build
+#     1) cp .env.example .env
+#     2) .env içinde A (alan adı) veya B (yalnızca IP) modunu seçin —
+#        adım adım açıklama .env.example dosyasının başında
+#     3) docker compose up -d --build
+#     4) Yalnızca B modu: docker compose logs certgen  → sertifika parmak izi
 # Ayrıntılar: DEPLOY.md
 name: hybridp2p
 

@@ -193,17 +193,27 @@ class MessengerApp(
 
         self.server_address_field = ft.TextField(
             label="Server Address", value="127.0.0.1:8000",
-            hint_text="Example: 127.0.0.1:8000 or server.com:8000",
+            hint_text="127.0.0.1:8000 · https://mesaj.example.com · https://203.0.113.5",
             prefix_icon=ft.Icons.COMPUTER,
             border_color=C.accent, focused_border_color=C.accent_light,
-            cursor_color=C.accent, text_size=15, height=55,
+            cursor_color=C.accent, text_size=15,
+        )
+
+        # Yalnızca IP modundaki (kendinden imzalı) sunucular için; bir kez girilir,
+        # adresle birlikte hatırlanır (desktop/tls_pin.py)
+        self.tls_pin_field = ft.TextField(
+            label="Sertifika parmak izi",
+            hint_text="İsteğe bağlı — yalnızca IP ile kurulan sunucular (AB:CD:…)",
+            prefix_icon=ft.Icons.VERIFIED_USER,
+            border_color=C.accent, focused_border_color=C.accent_light,
+            cursor_color=C.accent, text_size=12,
         )
 
         self.username_field = ft.TextField(
             label="Username", hint_text="Example: alice",
             prefix_icon=ft.Icons.PERSON,
             border_color=C.accent, focused_border_color=C.accent_light,
-            cursor_color=C.accent, text_size=15, height=55,
+            cursor_color=C.accent, text_size=15,
         )
 
         self.import_key_checkbox = ft.Checkbox(
@@ -266,6 +276,8 @@ class MessengerApp(
                         content=ft.Column(
                             controls=[
                                 self.server_address_field,
+                                ft.Container(height=8),
+                                self.tls_pin_field,
                                 ft.Container(height=12),
                                 self.username_field,
                                 ft.Container(height=12),

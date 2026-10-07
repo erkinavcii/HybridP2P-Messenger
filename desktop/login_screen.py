@@ -8,8 +8,11 @@ ile birlikte).
 import re
 import threading
 
+import flet as ft
+from desktop.theme import C
+
 from message_store import MessageStore
-from desktop.net_config import update_server_urls
+from desktop import net_config, tls_pin
 
 USERNAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 
@@ -20,6 +23,36 @@ class LoginScreenMixin:
         self.fab.visible = False
         self.page.controls.clear()
         self.page.add(self.login_view)
+        self.page.update()
+
+    def _show_pin_mismatch_dialog(self, err):
+        def close(e=None):
+            dialog.open = False
+            self.page.update()
+
+        dialog = ft.AlertDialog(
+            title=ft.Row([ft.Icon(ft.Icons.GPP_BAD, color=C.danger),
+                          ft.Text("Sunucu kimliği doğrulanamadı", size=16, color=C.text,
+                                  weight=ft.FontWeight.BOLD)], spacing=8),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text("Sunucunun sunduğu sertifika, sabitlenen parmak iziyle eşleşmiyor. "
+                            "Bağlantı kurulmadı ve hiçbir veri gönderilmedi.", size=12, color=C.text),
+                    ft.Text("Araya giren biri (MITM) olabilir ya da sunucu sertifikası değişmiş "
+                            "olabilir. Parmak izini sunucu yöneticisinden güvenli bir kanalla "
+                            "(yüz yüze, telefon) yeniden doğrulayın.", size=12, color=C.text_muted),
+                    ft.Text("Beklenen:", size=10, color=C.text_secondary),
+                    ft.Text(err.expected, size=10, color=C.text_secondary, selectable=True),
+                    ft.Text("Görülen:", size=10, color=C.danger),
+                    ft.Text(err.seen, size=10, color=C.danger, selectable=True),
+                ], tight=True, spacing=10),
+                width=360,
+            ),
+            actions=[ft.TextButton("Tamam", on_click=close, style=ft.ButtonStyle(color=C.accent))],
+            bgcolor=C.surface,
+        )
+        self.page.overlay.append(dialog)
+        dialog.open = True
         self.page.update()
 
     def on_import_key_change(self, e):
@@ -37,9 +70,23 @@ class LoginScreenMixin:
             return
         self.username_field.error_text = None
 
-        # update server URLs
+        # Adres ve parmak izi biçimi burada (anında geri bildirim); ağ gerektiren
+        # parmak izi doğrulaması aşağıda, arka plan iş parçacığında yapılır.
         server_addr = self.server_address_field.value.strip()
-        update_server_urls(server_addr)
+        pin = (self.tls_pin_field.value or "").strip()
+        self.server_address_field.error_text = None
+        self.tls_pin_field.error_text = None
+        try:
+            use_tls, _, _ = net_config.parse_server_address(server_addr)
+            if pin:
+                pin = tls_pin.normalize_fingerprint(pin)
+                if not use_tls:
+                    raise ValueError("Parmak izi yalnızca https:// adresleriyle kullanılır.")
+        except ValueError as bad:
+            target = self.tls_pin_field if pin and "armak izi" in str(bad) else self.server_address_field
+            target.error_text = str(bad)
+            self.page.update()
+            return
 
         # Disable button and update text
         self.login_btn.disabled = True
@@ -49,6 +96,8 @@ class LoginScreenMixin:
 
         def do_login():
             try:
+                # https ise parmak izini doğrula/sabitle (ağ işlemi); uyuşmazlıkta PinMismatch
+                net_config.update_server_urls(server_addr, pin)
                 self.state["username"] = username
                 if self.import_key_checkbox.value:
                     imported_pem = self.import_key_field.value.strip()
@@ -101,10 +150,17 @@ class LoginScreenMixin:
 
                 self.page.run_task(login_success_ui)
             except Exception as ex:
-                async def login_failed_ui():
+                # ex, except bloğu bitince silinir; sonradan çalışan fonksiyona
+                # varsayılan argümanla aktarılmalı (yoksa NameError → hata hiç görünmez)
+                async def login_failed_ui(ex=ex):
                     self.login_btn.disabled = False
                     self.login_btn.content.controls[1].value = "Sign In"
-                    self.username_field.error_text = f"Hata: {ex}"
+                    if isinstance(ex, tls_pin.PinMismatch):
+                        # Olası MITM: gözden kaçmayacak bir uyarı penceresi
+                        self.tls_pin_field.error_text = "Parmak izi eşleşmiyor — bağlanılmadı."
+                        self._show_pin_mismatch_dialog(ex)
+                    else:
+                        self.username_field.error_text = f"Hata: {ex}"
                     self.log_status(f"Giris sirasinda hata olustu: {ex}")
                     self.page.update()
                 self.page.run_task(login_failed_ui)

@@ -210,3 +210,11 @@ Docker olmadan doğrulananlar (pytest): üretim giriş noktası (`python server.
 9. Cloudflare Tunnel demosu (D4) — eklendiğinde.
 10. **PWA (D3), gerçek Chrome/Edge ile:** Claude'un gömülü tarayıcı paneli service worker kaydına izin vermiyor ("unknown error when fetching the script"), bu yüzden orada doğrulanamadı. Kontrol: adres çubuğunda "Uygulamayı yükle" çıkıyor mu; kurulan uygulama ayrı pencerede açılıyor mu; sunucu kapatılınca arayüz önbellekten açılıyor mu (bağlantı yok uyarısıyla); sunucu açılınca yeni sürüm hemen geliyor mu (önce-ağ politikası). pytest yalnızca manifest/ikonları ve önbellek listesinin eksiksiz ve sunulabilir olduğunu doğrular.
 
+---
+
+## 9. Pure P2P (Sunucusuz) Mod Herkese Açık STUN Kullanır (2026-10-07)
+
+Sunucu üzerinden yapılan aramalarda STUN/TURN listesi sunucudan gelir ve `HYBRIDP2P_PUBLIC_STUN=0` ile Google tamamen devre dışı bırakılabilir (D5). **Pure P2P modu ise bir sunucuya bağlanmadığı için** bu ayarı göremez; `desktop/pure_p2p.py` Google ve Cloudflare STUN sunucularını sabit kullanır. STUN olmadan farklı ağlardaki iki cihaz birbirini bulamayacağı için bu bilinçli bir tercih; bedeli, STUN sağlayıcısının arayanların IP adresini görmesi (içerik değil).
+
+İleride yapılabilir: masaüstü ayarlarına "özel STUN adresi" alanı (ör. kendi coturn'ünüz) ve web'deki sunucusuz moda aynısı.
+

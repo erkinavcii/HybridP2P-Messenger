@@ -137,8 +137,10 @@
 - [x] **Ses ve Titreşim**: Yeni mesaj/dosya geldiğinde bildirim sesi — sounddevice ile üretilen çift ton, harici ses dosyası gerektirmez, arama sırasında susar (masaüstü; web'de WebAudio ile aynı ton, kenar çubuğundan kapatılabilir) ✅ *(titreşim mobil özelliği, kapsam dışı)*
 
 ### 🌐 Ağ ve Altyapı
-- [ ] **TLS/HTTPS**: Sunucu iletişimini SSL sertifikası ile şifreleme (transit encryption)
-- [ ] **Docker Compose**: Sunucu + veritabanı için tek komutla dağıtım
+- [x] **TLS/HTTPS**: Caddy ile iki mod — alan adı + Let's Encrypt ya da yalnızca IP + kendinden imzalı sertifika; masaüstü https/wss + SHA-256 parmak izi sabitleme (`desktop/tls_pin.py`) ✅ *(Docker'da doğrulama bekliyor — KNOWN_ISSUES §8)*
+- [x] **Docker Compose**: `docker compose up -d --build` — app + Caddy + isteğe bağlı coturn (`turn` profili); Cloudflare Tunnel demosu (`docker-compose.demo.yml`); rehber `DEPLOY.md` ✅ *(Docker'da doğrulama bekliyor — KNOWN_ISSUES §8)*
+- [x] **PWA**: kurulabilir web uygulaması (manifest, ikonlar, önce-ağ service worker) ✅ *(gerçek tarayıcı testi bekliyor)*
+- [x] **STUN/TURN seçimi**: Google STUN aç/kapa (`HYBRIDP2P_PUBLIC_STUN`), kendi coturn'ünüz, kısa ömürlü TURN kimliği ✅
 - [ ] **JWT Kimlik Doğrulama**: REST API için token tabanlı yetkilendirme
 - [ ] **NAT Traversal (STUN/TURN)**: Farklı ağlardaki cihazlar arası doğrudan bağlantı
 - [ ] **Çoklu Sunucu (Federation)**: Farklı sunuculardaki kullanıcılar arası mesajlaşma (Matrix protokolü gibi)
@@ -171,10 +173,10 @@ Eğer projeye devam etmek istersen, şu sırayla ilerlemeni öneririm:
 | ✅ Tamam | Tek Gorunumlu Mesaj | Tamamlandi — 10s countdown, kayit yok |
 | ✅ Tamam | Dosya/Resim Gonderimi | Tamamlandi — E2EE, inline resim |
 | ✅ Tamam | Grup Sohbeti | E2EE paylasimli simetrik anahtar ve rekeying |
-| Yuksek | TLS/HTTPS | Transit sifreleme — Phase 2 |
+| ✅ | TLS/HTTPS | Caddy, iki mod + parmak izi sabitleme |
 | Orta | Private Key Sifrelemesi | Cihaz guvenligi |
 | Orta | Mesaj Imzalama | Gonderen kimlik dogrulama |
-| Dusuk | Docker Compose | Dagilim kolayligi |
+| ✅ | Docker Compose | DEPLOY.md |
 | Dusuk | Mobil Paketleme | Flet zaten destekliyor |
 
 ---

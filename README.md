@@ -215,7 +215,7 @@ HybridP2P Messenger features a military-grade, secure, and low-latency voice and
 
 ### 1. Peer-to-Peer STUN-First Architecture
 To bypass firewall constraints and establish direct device-to-device streaming without expensive relay server costs:
-* **STUN Signaling:** The clients query public, free STUN servers (e.g., Google or Cloudflare) via `GET /api/ice_servers` to discover their external public IP addresses and ports.
+* **STUN Signaling:** The clients get the ICE server list from `GET /api/ice_servers` (signed request) to discover their external public IP addresses and ports. By default this is Google's public STUN; a self-hosted coturn can replace it entirely (`HYBRIDP2P_PUBLIC_STUN=0`), see [DEPLOY.md §6](DEPLOY.md). The serverless Pure P2P mode has no server to ask and uses public STUN.
 * **Direct P2P UDP:** Using the gathered ICE candidates, the clients negotiate a direct UDP session (WebRTC). In over 85-90% of household networks, this allows media traffic (audio/video packets) to flow directly between devices.
 * **Zero Server Media Burden:** The main server (`server.py`) acts purely as a routing channel for the initialization handshakes (SDP Offer/Answer and ICE candidates) and maintains no contact with the actual media stream.
 
@@ -255,7 +255,8 @@ HybridP2P-Messenger/
 │   └── routes/            # APIRouters: users, messages, groups, voip
 ├── client.py              # Thin entry point — MessengerApp wiring only
 ├── desktop/                # Flet desktop client package (mixins on MessengerApp)
-│   ├── net_config.py       # Server URL state, file-type helpers
+│   ├── net_config.py       # Server URL (http/https, ws/wss) state, file-type helpers
+│   ├── tls_pin.py          # Certificate pinning for self-signed (IP-only) servers
 │   ├── theme.py            # Dark/light palette — the ONLY place hex colors live (C.accent, C.text …)
 │   ├── settings_store.py   # Device-wide prefs (theme, notification sound, link previews) in settings.json
 │   ├── notify.py           # Synthesized new-message sound (sounddevice)
@@ -273,9 +274,21 @@ HybridP2P-Messenger/
 │   ├── chat_screen.py        # Active chat: connect, send, recipient status
 │   ├── pure_p2p.py           # Serverless manual-SDP P2P calling dialog
 │   └── call_screen.py        # Server-mediated VoIP call screen & WebRTC
+├── static/                # Web client (served by the relay at /)
+│   ├── index.html, css/   # Markup and styles (theme tokens, light/dark)
+│   ├── js/                # ES modules: app, ui, ws, crypto, db, avatar, voice, linkpreview, prefs, voip, state
+│   ├── manifest.webmanifest, icons/  # PWA (installable app)
+│   └── sw.js              # Network-first service worker (offline app shell)
 ├── crypto_utils.py        # RSA/AES key pair generation, E2EE encryption/decryption
 ├── message_store.py       # Client-side SQLite for message logs and keys
-├── requirements.txt       # Project dependencies
+├── Dockerfile             # Relay server image (server-only dependencies, non-root)
+├── docker-compose.yml     # Production: app + Caddy (TLS) + optional coturn
+├── docker-compose.demo.yml # Demo via Cloudflare Tunnel (no ports, no domain needed)
+├── deploy/                # Caddyfile, gen_cert.py (self-signed cert for IP-only mode)
+├── .env.example           # Deployment settings with step-by-step comments
+├── DEPLOY.md              # Self-hosting guide (Turkish)
+├── requirements.txt       # Desktop client + server dependencies
+├── requirements-server.txt # Server-only dependencies (Docker image)
 ├── progress.md            # Feature checklist and current status
 └── futures.md             # Long-term feature roadmap
 ```
@@ -296,6 +309,7 @@ Start the FastAPI server:
 python server.py
 ```
 The server will run on `http://127.0.0.1:8000`. You can inspect the interactive documentation at `http://127.0.0.1:8000/docs`.
+Auto-reload on code changes is off by default (production-safe); for development use `HYBRIDP2P_RELOAD=1 python server.py`.
 
 ### 3. Running the Client
 Open two separate terminals and launch the messenger client for different users:
@@ -335,6 +349,13 @@ Each test session starts its own relay server on a free port with a throwaway da
 A single WebSocket or REST-fallback message is capped at 256 KB (`HYBRIDP2P_MAX_WS_MESSAGE_SIZE`). Oversized or malformed frames are rejected with an `error` frame and the connection stays open; frames above twice the limit are cut off at the protocol level before being buffered. Files are not affected — they go through `/api/upload_file` with their own 10 MB limit.
 
 ### 6. Hosting Your Own E2EE Server (LAN & Internet Access)
+
+**For a real deployment, see [DEPLOY.md](DEPLOY.md)**: one `docker compose up` gives you the relay, the web client and automatic HTTPS (Caddy). Two TLS modes, chosen with a single line in `.env`:
+* **Domain + Let's Encrypt** — no browser warnings.
+* **IP only + self-signed certificate** — no domain or certificate authority needed (censorship-resistant). The desktop client pins the certificate's SHA-256 fingerprint and refuses to connect if it changes (possible MITM).
+
+Optional: your own STUN/TURN server (coturn) for calls, so nothing depends on Google; a free Cloudflare Tunnel demo; installable PWA. The methods below are quick ways to try it without Docker.
+
 You can turn your local PC into an active web messenger server for clients on other networks or mobile/browser devices:
 
 #### Method A: Local Network (LAN) Hosting
@@ -354,5 +375,5 @@ To allow users outside your local network (anywhere in the world) to connect to 
    ngrok http 8000
    ```
 4. Ngrok will generate a secure public HTTPS URL (e.g., `https://xxxx-xx-xx.ngrok-free.app`).
-5. Share this URL with your friends! They can open it directly in their browser to load the E2EE Web Client, or type the host address (e.g., `xxxx-xx-xx.ngrok-free.app`) in the **Server Address** field of the desktop client.
+5. Share this URL with your friends! They can open it directly in their browser to load the E2EE Web Client, or type the full URL including `https://` (e.g., `https://xxxx-xx-xx.ngrok-free.app`) in the **Server Address** field of the desktop client.
    * *Note:* The Web Client automatically connects its WebSockets dynamically to the hosting origin (secure or insecure), allowing zero-configuration E2EE out-of-the-box.

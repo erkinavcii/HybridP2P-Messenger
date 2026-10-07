@@ -114,6 +114,8 @@ server.py → StaticFiles("/", "static/")
 ```
 Şu an böyle çalışıyor. Küçük/orta ölçek için yeterli.
 
+> **Güncelleme (2026-10-07):** Uygulanan çözüm Caddy oldu (otomatik sertifika, `tls internal`/kendinden imzalı mod, WebSocket ayarsız) — bkz. `DEPLOY.md`, `docker-compose.yml`, `deploy/Caddyfile`. Aşağıdaki nginx örneği tarihçe için duruyor; güncel nginx alternatifi `DEPLOY.md §11`'de.
+
 **Seçenek B — Nginx reverse proxy (Önerilen):**
 ```nginx
 server {
@@ -218,6 +220,8 @@ Mevcut `static/index.html`'yi tam özellikli hale getirmek:
 
 ### Faz 4: Deployment (1 gün)
 
+> ✅ **Uygulandı (2026-10-07), Docker'da doğrulanması bekliyor (KNOWN_ISSUES §8).** Aşağıdaki systemd/certbot betiği yerine Docker Compose kullanıldı: `Dockerfile` (yalnızca sunucu bağımlılıkları, root olmayan kullanıcı), `docker-compose.yml` (app + Caddy + isteğe bağlı coturn), iki TLS modu (alan adı + Let's Encrypt / yalnızca IP + kendinden imzalı sertifika ve masaüstünde parmak izi sabitleme), `docker-compose.demo.yml` (Cloudflare Tunnel demosu). Kurulum rehberi: `DEPLOY.md`.
+
 #### 4.1 — VPS Kurulum Scripti
 
 ```bash
@@ -294,6 +298,8 @@ https://mesaj.example.com/#/settings → Ayarlar (key backup/import)
 ```
 
 #### 5.2 — PWA (Progressive Web App) Desteği
+
+> ✅ **Uygulandı (2026-10-07):** `static/manifest.webmanifest`, `static/icons/`, önce-ağ politikalı `static/sw.js` (API/WS asla önbelleğe alınmaz). Gerçek tarayıcıda kurulum testi bekliyor (KNOWN_ISSUES §8).
 
 ```json
 // manifest.json

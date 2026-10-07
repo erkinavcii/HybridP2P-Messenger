@@ -70,17 +70,20 @@ class RestClientMixin:
 
     def signed_get(self, path: str, timeout: int = 5):
         headers = self.make_auth_headers(self.state["username"], self.state["private_key"], "GET", path)
-        return requests.get(f"{net_config.BASE_URL}{path}", headers=headers, timeout=timeout)
+        return requests.get(f"{net_config.BASE_URL}{path}", headers=headers, timeout=timeout,
+                            verify=net_config.TLS_VERIFY)
 
     def signed_delete(self, path: str, timeout: int = 5):
         headers = self.make_auth_headers(self.state["username"], self.state["private_key"], "DELETE", path)
-        return requests.delete(f"{net_config.BASE_URL}{path}", headers=headers, timeout=timeout)
+        return requests.delete(f"{net_config.BASE_URL}{path}", headers=headers, timeout=timeout,
+                               verify=net_config.TLS_VERIFY)
 
     def signed_post(self, path: str, payload: dict, timeout: int = 5):
         body_text = self._canonical_json(payload)
         headers = self.make_auth_headers(self.state["username"], self.state["private_key"], "POST", path, body_text)
         headers["Content-Type"] = "application/json"
-        return requests.post(f"{net_config.BASE_URL}{path}", data=body_text.encode("utf-8"), headers=headers, timeout=timeout)
+        return requests.post(f"{net_config.BASE_URL}{path}", data=body_text.encode("utf-8"), headers=headers,
+                             timeout=timeout, verify=net_config.TLS_VERIFY)
 
     def register_with_server(self, username: str, public_key, private_key) -> bool:
         from datetime import datetime, timezone
@@ -100,7 +103,13 @@ class RestClientMixin:
                 "public_key": pem_key,
                 "timestamp": timestamp,
                 "signature": sig_b64
-            }, timeout=5)
+            }, timeout=5, verify=net_config.TLS_VERIFY)
+        except requests.exceptions.SSLError as ssl_err:
+            # SSLError, ConnectionError'ın alt sınıfı: ondan önce yakalanmalı
+            raise Exception(
+                "Sunucunun TLS sertifikası doğrulanamadı. Sunucu kendinden imzalı sertifika "
+                "kullanıyorsa (yalnızca IP modu) yöneticisinden aldığınız parmak izini "
+                f"'Sertifika parmak izi' alanına girin. Ayrıntı: {ssl_err}")
         except requests.exceptions.Timeout:
             raise Exception("Server request timed out after 5 seconds.")
         except requests.exceptions.ConnectionError as conn_err:

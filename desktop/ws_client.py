@@ -50,7 +50,11 @@ class WsClientMixin:
         reconnect_delay = 2
         while self.state.get("logged_in", False):
             try:
-                async with websockets.connect(f"{net_config.WS_URL}/ws/{self.state['username']}") as ws:
+                # wss: sabitlenmiş sertifika varsa yalnızca ona güvenen TLS bağlamı
+                ssl_ctx = net_config.ws_ssl_context()
+                connect_kwargs = {"ssl": ssl_ctx} if ssl_ctx is not None else {}
+                async with websockets.connect(f"{net_config.WS_URL}/ws/{self.state['username']}",
+                                              **connect_kwargs) as ws:
                     if not self.state.get("logged_in", False):
                         break
                     # Challenge-Response Handshake:

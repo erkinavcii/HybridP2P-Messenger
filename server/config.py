@@ -36,8 +36,26 @@ ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_raw.split(",")] if allowed_hos
 
 START_TIME = time.time()
 
-# VoIP TURN sunucu ayarları
+# ── Aramalar (WebRTC) için STUN/TURN ──────────────────────────────────
+# Yalnızca sesli/görüntülü aramaları etkiler; mesajlar her zaman röle WebSocket'inden gider.
+#  • STUN: cihaza dış IP:port'unu söyler, ses/görüntü yine DOĞRUDAN cihazdan cihaza akar.
+#    STUN sunucusu içeriği görmez ama arayanın IP'sini görür.
+#  • TURN: doğrudan yol kurulamazsa (CGNAT, simetrik NAT) akışı aktarır; akış
+#    DTLS-SRTP ile şifreli kalır, TURN dinleyemez.
+
+# Herkese açık STUN (varsayılan Google). 0 → hiçbir üçüncü tarafa istek gitmez;
+# o zaman kendi coturn'ünüzü (TURN_HOST) kurun, yoksa yalnızca aynı ağdaki aramalar çalışır.
+PUBLIC_STUN = _env_flag("HYBRIDP2P_PUBLIC_STUN", "1")
+PUBLIC_STUN_URLS = [u.strip() for u in os.getenv(
+    "HYBRIDP2P_PUBLIC_STUN_URLS",
+    "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302",
+).split(",") if u.strip()]
+
+# Kendi STUN/TURN sunucunuz (docker-compose "turn" profili → coturn)
 TURN_HOST       = os.getenv("TURN_HOST", "")
+TURN_PORT       = int(os.getenv("TURN_PORT", "3478"))
+# TURN-over-TLS (turns:) yalnızca coturn'e sertifika verildiyse açılmalı; boş = kapalı
+TURN_TLS_PORT   = os.getenv("TURN_TLS_PORT", "")
 TURN_USERNAME   = os.getenv("TURN_USERNAME", "")
 TURN_CREDENTIAL = os.getenv("TURN_CREDENTIAL", "")
-TURN_SECRET     = os.getenv("TURN_SECRET", "")
+TURN_SECRET     = os.getenv("TURN_SECRET", "")   # önerilen: kısa ömürlü kimlik bilgisi (HMAC)

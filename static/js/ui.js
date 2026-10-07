@@ -21,6 +21,10 @@ import {
     fetchGroupName
 } from './db.js';
 import { avatarInnerHtml, maybeSendAvatar, forgetAvatar } from './avatar.js';
+import {
+    audioUrl, fmtDuration, isRecording, startRecording, stopRecording, cancelRecording, sendVoice, MAX_SECONDS
+} from './voice.js';
+import { domainOf } from './linkpreview.js';
 import { getFingerprintJS } from './crypto.js';
 import { listContacts, deleteContact } from './db.js';
 import {
@@ -173,7 +177,8 @@ export function renderInbox(query = "") {
         
         // Global Message text search
         for (let c of chatEntries) {
-            const matches = c.messages.filter(m => m.content && m.content.toLowerCase().includes(queryClean) && !m.view_once);
+            const matches = c.messages.filter(m => m.content && m.content.toLowerCase().includes(queryClean)
+                                                   && !m.view_once && !m.is_voice && !m.deleted);
             for (let m of matches) {
                 filteredMsgs.push({ partner: c.partner, msg: m });
             }
@@ -294,7 +299,8 @@ export function renderInbox(query = "") {
 
 // Select active chat session
 export async function selectChat(partner, publicKeyPem, isGroup = false) {
-    // Önceki sohbetten kalan "yazıyor…" göstergesini temizle
+    if (isRecording()) { cancelRecording(); setRecordingUi(false); }
+// Önceki sohbetten kalan "yazıyor…" göstergesini temizle
     clearTimeout(typingTimer);
     statusLabel.classList.remove("typing-label");
     delete statusLabel.dataset.prev;
@@ -327,6 +333,7 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
         ephemeralBtn.classList.add("hidden");
         viewOnceBtn.classList.add("hidden");
         attachBtn.classList.add("hidden");
+        if (voiceBtn) voiceBtn.classList.add("hidden");
         groupRekeyBtn.classList.remove("hidden");
         leaveGroupBtn.classList.remove("hidden");
     } else {
@@ -335,6 +342,7 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
         ephemeralBtn.classList.remove("hidden");
         viewOnceBtn.classList.remove("hidden");
         attachBtn.classList.remove("hidden");
+        if (voiceBtn) voiceBtn.classList.remove("hidden");
         groupRekeyBtn.classList.add("hidden");
         leaveGroupBtn.classList.add("hidden");
         
@@ -494,7 +502,15 @@ export function renderMessages() {
         
         let textNodeHtml = "";
         
-        if (m.is_file) {
+        if (m.is_voice) {
+            textNodeHtml = `
+                <div class="voice-bubble">
+                    <span class="voice-icon">🎤</span>
+                    <audio controls preload="metadata" data-voice-id="${escapeHtml(m.file_uuid)}"
+                           data-voice-name="${escapeHtml(m.original_name)}"></audio>
+                    <span class="voice-dur">${fmtDuration(m.duration)}</span>
+                </div>`;
+        } else if (m.is_file) {
             const isViewOnce = m.view_once;
             const icon = getFileIconEmoji(m.file_type);
             
@@ -555,7 +571,7 @@ export function renderMessages() {
         } else if (m.deleted) {
             textNodeHtml = `<span class="msg-deleted">🚫 Bu mesaj silindi</span>`;
         } else {
-            textNodeHtml = `<span class="msg-text">${escapeHtml(m.content || "")}</span>`;
+            textNodeHtml = linkPreviewCardHtml(m.preview) + `<span class="msg-text">${escapeHtml(m.content || "")}</span>`;
         }
 
         // Düzenle/sil menüsü: yalnızca kendi, kimlikli, kalıcı birebir metin mesajları
@@ -578,8 +594,94 @@ export function renderMessages() {
         chatBody.appendChild(container);
     });
     
+    hydrateVoiceBubbles();
+
     // Scroll to bottom
     chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+// Sesli mesaj oynatıcılarına yerel (şifresi çözülmüş) ses verisini bağla
+async function hydrateVoiceBubbles() {
+    for (const el of chatBody.querySelectorAll("audio[data-voice-id]")) {
+        const url = await audioUrl(el.dataset.voiceId, el.dataset.voiceName);
+        if (url) el.src = url;
+        else el.closest(".voice-bubble").classList.add("voice-missing");
+    }
+}
+
+// Gönderenin ürettiği, doğrulanmış ve temizlenmiş önizleme. Resim zaten yerelde
+// (şifreli gelmiş); görüntülemek için siteye istek atılmaz.
+function linkPreviewCardHtml(p) {
+    if (!p || !p.url) return "";
+    const img = p.image ? `<img class="lp-img" src="data:image/jpeg;base64,${p.image}" alt="">` : "";
+    return `
+        <a class="link-preview" href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer nofollow"
+           title="${escapeHtml(p.url)}">
+            ${img}
+            <span class="lp-domain">${escapeHtml(domainOf(p.url))}</span>
+            ${p.title ? `<span class="lp-title">${escapeHtml(p.title)}</span>` : ""}
+            ${p.description ? `<span class="lp-desc">${escapeHtml(p.description)}</span>` : ""}
+        </a>`;
+}
+
+// ── Sesli mesaj kaydı ──
+const voiceBtn = document.getElementById("voice-btn");
+const recordingBar = document.getElementById("recording-bar");
+const recordingTime = document.getElementById("recording-time");
+let recordingTick = null;
+
+function setRecordingUi(on) {
+    recordingBar.classList.toggle("hidden", !on);
+    voiceBtn.classList.toggle("recording", on);
+    voiceBtn.title = on ? "Kaydı bitir ve gönder" : "Sesli mesaj kaydet";
+    clearInterval(recordingTick);
+    if (on) {
+        const t0 = Date.now();
+        recordingTime.innerText = "0:00";
+        recordingTick = setInterval(() => {
+            recordingTime.innerText = `${fmtDuration((Date.now() - t0) / 1000)} / ${fmtDuration(MAX_SECONDS)}`;
+        }, 250);
+    }
+}
+
+async function finishVoiceRecording() {
+    const target = state.recipient;
+    const pub = state.recipientPubKey;
+    setRecordingUi(false);
+    const rec = await stopRecording();
+    if (!rec) {
+        appendSystemMessage(target, "Sesli mesaj çok kısa, gönderilmedi.");
+        return;
+    }
+    try {
+        const msgObj = await sendVoice(target, pub, rec, sendFrameWithFallback);
+        await saveChatToLocalStorage(target, msgObj);
+        renderMessages();
+        renderInbox();
+    } catch (err) {
+        console.error("Sesli mesaj gönderilemedi:", err);
+        appendSystemMessage(target, "⚠️ Sesli mesaj gönderilemedi: " + escapeHtml(err.message));
+    }
+}
+
+if (voiceBtn) {
+    voiceBtn.addEventListener("click", async () => {
+        if (!state.recipient || state.isGroup) return;
+        if (isRecording()) {
+            await finishVoiceRecording();
+            return;
+        }
+        try {
+            await startRecording(() => finishVoiceRecording());
+            setRecordingUi(true);
+        } catch (err) {
+            alert("Mikrofon kullanılamıyor: " + err.message);
+        }
+    });
+    document.getElementById("recording-cancel-btn").addEventListener("click", () => {
+        cancelRecording();
+        setRecordingUi(false);
+    });
 }
 
 // View-once message handler

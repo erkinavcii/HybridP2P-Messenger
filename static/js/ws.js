@@ -33,6 +33,8 @@ import {
 } from './voip.js';
 import { playNotification } from './prefs.js';
 import { receiveAvatar } from './avatar.js';
+import { isVoiceFile, receiveVoice } from './voice.js';
+import { verifiedPreview } from './linkpreview.js';
 
 // Yeni mesaj sesi (görüşme sırasında çalmaz; tercih kapalıysa prefs.js susturur)
 function notifyIncoming() {
@@ -184,6 +186,7 @@ export function applyMessageChange(partner, msgUid, sender, kind, newText = "") 
     } else {
         m.content = newText;
         m.edited = true;
+        delete m.preview;
     }
     return true;
 }
@@ -247,6 +250,11 @@ export async function fetchOfflineMessages() {
                     };
                     const uid = await verifiedMsgUid(msg.sender, msg.encrypted_payload, msg.msg_uid, msg.uid_sig);
                     if (uid) msgObj.msg_uid = uid;
+                    if (!msg.view_once) {
+                        const preview = await verifiedPreview(msg.sender, msg.encrypted_payload,
+                            msg.encrypted_preview, msg.preview_sig, verifyFrom);
+                        if (preview) msgObj.preview = preview;
+                    }
                     await saveChatToLocalStorage(msg.sender, msgObj);
                 } catch (decryptErr) {
                     console.error("Çevrimdışı mesaj çözülemedi:", decryptErr);
@@ -320,6 +328,11 @@ export function connectWebSocket() {
                     };
                     const uid = await verifiedMsgUid(sender, data.encrypted_payload, data.msg_uid, data.uid_sig);
                     if (uid) msgObj.msg_uid = uid;
+                    if (!data.view_once) {
+                        const preview = await verifiedPreview(sender, data.encrypted_payload,
+                            data.encrypted_preview, data.preview_sig, verifyFrom);
+                        if (preview) msgObj.preview = preview;
+                    }
 
                     if (!state.chats[sender]) {
                         state.chats[sender] = { partner: sender, ephemeral: false, messages: [] };
@@ -367,10 +380,37 @@ export function connectWebSocket() {
             }
 
             // E2E Chat File Message received
+            else if (data.type === "file_message" && !data.view_once
+                     && isVoiceFile(data.original_name, data.file_type)) {
+                const sender = data.sender;
+                if (!state.chats[sender]) {
+                    state.chats[sender] = { partner: sender, ephemeral: false, messages: [] };
+                }
+                if (state.chats[sender].messages.some(m => m.file_uuid === data.file_uuid)) return;
+                try {
+                    const msgObj = await receiveVoice(sender, data.file_uuid, data.original_name,
+                                                      data.timestamp || new Date().toISOString());
+                    state.chats[sender].messages.push(msgObj);
+                    notifyIncoming();
+                    await persistChats();
+                    window.dispatchEvent(new CustomEvent('typing-updated', { detail: { partner: sender, isTyping: false } }));
+                    if (state.recipient === sender) {
+                        window.dispatchEvent(new CustomEvent('messages-updated'));
+                        sendReadReceipt(sender, msgObj.timestamp);
+                    }
+                    window.dispatchEvent(new CustomEvent('chats-updated'));
+                } catch (err) {
+                    console.error(`[Voice] '${sender}' sesli mesajı alınamadı:`, err);
+                    window.dispatchEvent(new CustomEvent('system-message', {
+                        detail: { partner: sender, text: `⚠️ '${sender}' adlısından gelen sesli mesaj alınamadı.` }
+                    }));
+                }
+            }
+
             else if (data.type === "file_message") {
                 const sender = data.sender;
                 const isActive = (state.recipient === sender);
-                
+
                 const msgObj = {
                     sender: sender,
                     is_file: true,

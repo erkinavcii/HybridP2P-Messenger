@@ -1,4 +1,5 @@
 # HybridP2P Messenger — Caddy ters vekil (TLS burada sonlanır, uygulama iç ağda).
+# Bu dosyayı DÜZENLEMENİZE GEREK YOK: mod .env'den seçilir (adımlar .env.example'da).
 # Değerler .env'den gelir; iki mod tek ayarla seçilir:
 #
 #   A) Alan adı:   HYBRIDP2P_SITE=mesaj.example.com

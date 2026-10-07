@@ -1,494 +1,382 @@
-"""desktop/pure_p2p.py — Sunucusuz (Pure P2P) manuel SDP takası ile arama.
+"""desktop/pure_p2p.py — Sunucusuz ("telsiz") bağlantı: manuel kod takasıyla
+yazılı mesajlaşma ya da sesli/görüntülü arama.
 
-client.py'den taşındı (modülerleştirme): open_pure_p2p_dialog.
+Akış: A "teklif kodu" üretir → B'ye herhangi bir kanaldan (kopyala-yapıştır, QR)
+iletir → B kodu doğrular ve "cevap kodu" üretir → A cevabı yapıştırır → iki
+cihaz doğrudan bağlanır. Arada sunucu yoktur; iki taraf da aynı anda açık olmalı.
 
-NOT (bulgu, agents.md'de belgelendi — bu refactor'da davranış değiştirilmedi):
-Bu diyalog hiçbir RSA/AES E2EE çağrısı yapmaz, güvenliği tamamen WebRTC'nin
-kendi DTLS-SRTP'sine bırakır ve `state["ws_loop"]"i (WsClientMixin'in kurduğu
-event loop) yeniden kullanır — giriş yapıldıktan hemen sonra bu diyalog
-açılırsa teorik bir yarış penceresi vardır. KNOWN_ISSUES.md'ye eklendi.
+Kodlar imzalıdır ve karşı tarafın kimliği rehberle karşılaştırılır (ayrıntılar
+ve güvenlik modeli: desktop/p2p_core.py). Engellenen durumlarda (anahtar
+değişmiş, imza geçersiz, başka teklife ait cevap) bağlantı kurulmaz.
+
+aiortc nesneleri sunucu WebSocket'inin loop'unda değil, P2P'nin kendi arka plan
+loop'unda çalışır (p2p_core.get_loop) — sunucu yokken de kullanılabilsin diye.
 """
 
 import asyncio
 import base64
-import json
-import zlib
 
 import flet as ft
-from desktop.theme import C
-from aiortc import (
-    RTCPeerConnection,
-    RTCSessionDescription,
-    RTCConfiguration,
-    RTCIceServer,
-)
+from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 
-from desktop.voip_tracks import MicrophoneTrack, AudioPlayer, CameraTrack
+from desktop import p2p_core
+from desktop.theme import C
+from desktop.voip_tracks import AudioPlayer, CameraTrack, MicrophoneTrack
+
+_BLANK_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+
+MODE_LABELS = {
+    "chat": "Yazılı mesajlaşma",
+    "audio": "Sesli arama",
+    "video": "Görüntülü arama",
+}
+
+
+def _ice_config():
+    # S4'te seçilebilir olacak (Google / Cloudflare / özel / yalnızca yerel ağ)
+    return RTCConfiguration(iceServers=[
+        RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
+        RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
+        RTCIceServer(urls=["stun:stun.cloudflare.com:3478"]),
+    ])
+
+
+def _qr_base64(data_str):
+    """QR (PNG, base64) ya da None. Kod çok uzunsa (≈2,9 KB üstü) QR üretilemez."""
+    try:
+        import qrcode
+        from io import BytesIO
+        qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=3, border=2)
+        qr.add_data(data_str)
+        qr.make(fit=True)
+        buf = BytesIO()
+        qr.make_image(fill_color="black", back_color="white").save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
 
 
 class PureP2PMixin:
 
+    # ── yardımcılar ──
+    def _p2p_contact_pem(self, username):
+        store = self.state.get("store")
+        contact = store.get_contact(username) if store else None
+        return contact.get("public_key") if contact else None
+
+    def _p2p_identity_view(self, ident):
+        """Karşı tarafın kimlik durumunu anlatan kısa metin + renk."""
+        s = ident.status
+        if s == p2p_core.VERIFIED:
+            return f"✓ {ident.username} — kimlik doğrulandı (rehberdeki anahtarla eşleşiyor)", C.success
+        if s == p2p_core.NEW:
+            return (f"? {ident.username} — rehberinizde yok. Parmak izini karşı tarafla "
+                    f"başka bir kanaldan karşılaştırın:\n{ident.fingerprint}"), C.info_text
+        if s == p2p_core.LEGACY:
+            return "⚠ Eski biçim kod: karşı tarafın kimliği doğrulanamıyor.", C.danger
+        who = f"'{ident.username}' " if ident.username else ""
+        return f"⛔ {who}bağlantı engellendi: {ident.detail}", C.danger
+
+    def _p2p_start_media(self, pc, mode):
+        local_audio = MicrophoneTrack()
+        self.state["local_audio_track"] = local_audio
+        pc.addTrack(local_audio)
+        if mode == "video":
+            local_video = CameraTrack()
+            self.state["local_video_track"] = local_video
+            pc.addTrack(local_video)
+            self.start_local_video_rendering()
+
+        @pc.on("track")
+        def on_track(track):
+            print(f"[P2P] Uzak iz: {track.kind}")
+            if track.kind == "audio":
+                player = AudioPlayer(track)
+                self.state["audio_player"] = player
+                player.start()
+            elif track.kind == "video":
+                self.start_remote_video_rendering(track)
+
+    def _p2p_watch_call(self, pc, dialog):
+        @pc.on("iceconnectionstatechange")
+        async def on_ice():
+            print(f"[P2P] ICE durumu: {pc.iceConnectionState}")
+            if pc.iceConnectionState in ("connected", "completed"):
+                self.state["call_state"] = "connected"
+
+                async def _start_ui():
+                    dialog.open = False
+                    self.show_call_screen()
+                    self.call_status_text.value = "Connected"
+                    self.page.update()
+                self.page.run_task(_start_ui)
+                self.page.run_task(self._call_timer_loop)
+            elif pc.iceConnectionState in ("failed", "closed"):
+                self.cleanup_call()
+
+    def _p2p_new_pc(self, role, mode, partner="P2P"):
+        pc = RTCPeerConnection(configuration=_ice_config())
+        self.state.update({"active_pc": pc, "call_loop": p2p_core.get_loop(), "call_role": role,
+                           "call_type": mode, "call_partner": partner})
+        return pc
+
+    @staticmethod
+    async def _p2p_gather(pc):
+        while pc.iceGatheringState != "complete":
+            await asyncio.sleep(0.05)
+
+    def _p2p_open_chat_when_ready(self, pc, channel, ident_getter, dialog):
+        def _open():
+            async def _ui():
+                dialog.open = False
+                self.page.update()
+                self.open_p2p_chat(pc, channel, ident_getter())
+            self.page.run_task(_ui)
+        if channel.readyState == "open":
+            _open()
+        else:
+            channel.on("open", _open)
+
+    # ── ana diyalog ──
     def open_pure_p2p_dialog(self, e):
+        if not self.state.get("private_key"):
+            self.log_status("Sunucusuz mod için önce kimlik anahtarınızla giriş yapın.")
+            return
+        me = self.state["username"]
+        priv, pub = self.state["private_key"], self.state["public_key"]
 
-        def pack_sdp(sdp_str, sdp_type, call_type="audio", compress=True):
-            data = {
-                "sdp": sdp_str,
-                "type": sdp_type,
-                "call_type": call_type
-            }
-            json_str = json.dumps(data)
-            if compress:
-                compressed = zlib.compress(json_str.encode("utf-8"))
-                b64 = base64.b64encode(compressed).decode("ascii")
-                return f"z1:{b64}"
-            else:
-                b64 = base64.b64encode(json_str.encode("utf-8")).decode("ascii")
-                return f"v1:{b64}"
+        def qr_box():
+            img = ft.Image(src=_BLANK_GIF, width=220, height=220, fit="contain", visible=False)
+            note = ft.Text("", size=10, color=C.text_muted)
+            box = ft.Container(ft.Column([note, img], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                               visible=False, alignment=ft.Alignment(0, 0))
 
-        def unpack_sdp(packed_str):
-            packed_str = packed_str.strip()
-            if packed_str.startswith("z1:"):
-                b64 = packed_str[3:]
-                compressed = base64.b64decode(b64)
-                json_bytes = zlib.decompress(compressed)
-                return json.loads(json_bytes.decode("utf-8"))
-            elif packed_str.startswith("v1:"):
-                b64 = packed_str[3:]
-                json_bytes = base64.b64decode(b64)
-                return json.loads(json_bytes.decode("utf-8"))
-            else:
-                try:
-                    decoded = base64.b64decode(packed_str)
-                    try:
-                        decomp = zlib.decompress(decoded)
-                        return json.loads(decomp.decode("utf-8"))
-                    except Exception:
-                        return json.loads(decoded.decode("utf-8"))
-                except Exception:
-                    raise ValueError("Invalid packed SDP format")
+            def show(code):
+                b64 = _qr_base64(code)
+                box.visible = True
+                if b64:
+                    # Flet 0.85'te src_base64 yok (atama sessizce boşa gider); data URL kullanılır
+                    img.src, img.visible = f"data:image/png;base64,{b64}", True
+                    note.value = "QR kod (karşı tarafa okutun; okumazsa kodu kopyalayın):"
+                else:
+                    img.visible = False
+                    note.value = "Kod QR'a sığmayacak kadar uzun — kopyala-yapıştır kullanın."
+            return box, show
 
-        def generate_qr_code_image(data_str):
-            try:
-                import qrcode
-                from io import BytesIO
-                qr = qrcode.QRCode(version=1, box_size=6, border=2)
-                qr.add_data(data_str)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
-                buffered = BytesIO()
-                img.save(buffered, format="PNG")
-                return f"data:image/png;base64,{base64.b64encode(buffered.getvalue()).decode('utf-8')}"
-            except ImportError:
-                return None
+        def code_field(label, read_only):
+            return ft.TextField(label=label, multiline=True, min_lines=3, max_lines=5,
+                                read_only=read_only, border_color=C.surface_alt,
+                                focused_border_color=C.accent, text_size=10)
 
-        # Tab 1: Caller controls
-        caller_call_type = ft.Dropdown(
-            label="Görüşme Tipi",
-            options=[
-                ft.dropdown.Option("audio", "Sesli Arama (Audio)"),
-                ft.dropdown.Option("video", "Görüntülü Arama (Video)"),
-            ],
-            value="audio",
-            border_color=C.surface_alt,
-            focused_border_color=C.accent,
+        # ════════════════ 1. sekme: bağlantıyı başlatan ════════════════
+        mode_dd = ft.Dropdown(
+            label="Bağlantı türü", value="chat", border_color=C.surface_alt, focused_border_color=C.accent,
+            options=[ft.dropdown.Option(k, v) for k, v in MODE_LABELS.items()],
         )
-
-        caller_offer_tf = ft.TextField(
-            label="Arama Teklifiniz (Offer Kodu)",
-            multiline=True,
-            min_lines=3,
-            max_lines=5,
-            read_only=True,
-            border_color=C.surface_alt,
-            focused_border_color=C.accent,
-            text_size=10,
-        )
-
-        caller_qr_image = ft.Image(src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", width=160, height=160, fit="contain", visible=False)
-        caller_qr_container = ft.Container(
-            content=ft.Column([
-                ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color=C.text_muted),
-                caller_qr_image
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            visible=False,
-            alignment=ft.Alignment(0, 0)
-        )
-
-        caller_status_text = ft.Text("", size=11, color=C.accent)
+        caller_offer_tf = code_field("Teklif kodunuz — karşı tarafa gönderin", True)
+        caller_qr, caller_show_qr = qr_box()
+        caller_status = ft.Text("", size=11, color=C.accent)
+        caller_ident = ft.Text("", size=11, selectable=True)
         caller_prog = ft.ProgressBar(color=C.accent, visible=False)
-
         caller_copy_btn = ft.Button(
-            content="Teklifi Kopyala",
-            icon=ft.Icons.COPY,
+            content="Teklifi kopyala", icon=ft.Icons.COPY, disabled=True,
             on_click=lambda e: self.copy_to_clipboard(caller_offer_tf.value) if caller_offer_tf.value else None,
-            disabled=True,
-            style=ft.ButtonStyle(bgcolor=C.surface_alt, color=C.text)
-        )
+            style=ft.ButtonStyle(bgcolor=C.surface_alt, color=C.text))
+        caller_answer_tf = code_field("2. Karşı tarafın cevap kodunu yapıştırın", False)
+        connect_btn = ft.Button(content="3. Doğrula ve bağlan", icon=ft.Icons.PLAY_ARROW, width=300,
+                                disabled=True, style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent))
+        session = {"ident": None, "offer_sdp": "", "channel": None}
 
-        caller_answer_tf = ft.TextField(
-            label="Karşı Tarafın Cevabı (Answer Kodu)",
-            multiline=True,
-            min_lines=3,
-            max_lines=5,
-            border_color=C.surface_alt,
-            focused_border_color=C.accent,
-            text_size=10,
-        )
+        def caller_fail(msg):
+            async def _ui():
+                caller_status.value = f"Hata: {msg}"
+                caller_prog.visible = False
+                gen_offer_btn.disabled = False
+                self.page.update()
+            self.page.run_task(_ui)
 
-        p2p_connect_btn = ft.Button(
-            content="3. Bağlan ve Görüşmeyi Başlat",
-            icon=ft.Icons.PLAY_ARROW,
-            width=300,
-            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent),
-            disabled=True
-        )
-
-        def generate_offer_click(e):
-            p2p_gen_offer_btn.disabled = True
-            caller_status_text.value = "ICE adayları toplanıyor (2-5 sn)..."
+        def gen_offer_click(e):
+            gen_offer_btn.disabled = True
+            mode_dd.disabled = True
+            caller_status.value = "Ağ adresleri toplanıyor (2-5 sn)…"
             caller_prog.visible = True
             self.page.update()
+            mode = mode_dd.value
 
-            async def _setup_offer():
+            async def _setup():
                 try:
-                    config_servers = [
-                        RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
-                        RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
-                        RTCIceServer(urls=["stun:stun.cloudflare.com:3478"])
-                    ]
-                    config = RTCConfiguration(iceServers=config_servers)
-                    pc = RTCPeerConnection(configuration=config)
-                    self.state["active_pc"] = pc
-                    self.state["call_role"] = "caller"
-                    self.state["call_type"] = caller_call_type.value
-                    self.state["call_partner"] = "Pure P2P Peer"
-
-                    local_audio = MicrophoneTrack()
-                    self.state["local_audio_track"] = local_audio
-                    pc.addTrack(local_audio)
-
-                    if self.state["call_type"] == "video":
-                        local_video = CameraTrack()
-                        self.state["local_video_track"] = local_video
-                        pc.addTrack(local_video)
-                        self.start_local_video_rendering()
-
-                    @pc.on("track")
-                    def on_track(track):
-                        print(f"[VoIP] P2P Remote track: {track.kind}")
-                        if track.kind == "audio":
-                            player = AudioPlayer(track)
-                            self.state["audio_player"] = player
-                            player.start()
-                        elif track.kind == "video":
-                            self.start_remote_video_rendering(track)
-
-                    @pc.on("iceconnectionstatechange")
-                    async def on_iceconnectionstatechange():
-                        print(f"[VoIP] P2P ICE state: {pc.iceConnectionState}")
-                        if pc.iceConnectionState in ["connected", "completed"]:
-                            self.state["call_state"] = "connected"
-                            async def _start_ui():
-                                dialog.open = False
-                                self.show_call_screen()
-                                self.call_status_text.value = "Connected"
-                                self.page.update()
-                            self.page.run_task(_start_ui)
-                            self.page.run_task(self._call_timer_loop)
-                        elif pc.iceConnectionState in ["failed", "closed"]:
-                            self.cleanup_call()
-
-                    offer = await pc.createOffer()
-                    await pc.setLocalDescription(offer)
-
-                    while pc.iceGatheringState != "complete":
-                        await asyncio.sleep(0.05)
-
-                    packed = pack_sdp(pc.localDescription.sdp, "offer", call_type=self.state["call_type"])
+                    pc = self._p2p_new_pc("caller", mode)
+                    if mode == "chat":
+                        session["channel"] = pc.createDataChannel(p2p_core.CHANNEL_LABEL)
+                        self._p2p_open_chat_when_ready(pc, session["channel"], lambda: session["ident"], dialog)
+                    else:
+                        self._p2p_start_media(pc, mode)
+                        self._p2p_watch_call(pc, dialog)
+                    await pc.setLocalDescription(await pc.createOffer())
+                    await self._p2p_gather(pc)
+                    session["offer_sdp"] = pc.localDescription.sdp
+                    code = p2p_core.make_envelope("offer", mode, session["offer_sdp"], me, priv, pub)
 
                     async def _done():
-                        caller_offer_tf.value = packed
+                        caller_offer_tf.value = code
                         caller_copy_btn.disabled = False
-                        p2p_connect_btn.disabled = False
-                        caller_status_text.value = "Teklif üretildi! Karşı tarafa gönderin."
+                        connect_btn.disabled = False
                         caller_prog.visible = False
-                        qr_url = generate_qr_code_image(packed)
-                        if qr_url:
-                            caller_qr_image.src_base64 = qr_url.split(",")[1]
-                            caller_qr_image.visible = True
-                            caller_qr_container.visible = True
-                        else:
-                            caller_status_text.value += " (QR kod için 'qrcode' modülü eksik)"
+                        caller_status.value = ("Teklif hazır. Karşı tarafa iletin (kod tek kullanımlıktır) "
+                                               "ve cevabını aşağıya yapıştırın.")
+                        caller_show_qr(code)
                         self.page.update()
                     self.page.run_task(_done)
-
                 except Exception as ex:
-                    print(f"P2P Offer setup error: {ex}")
-                    async def _fail(msg=str(ex)):
-                        caller_status_text.value = f"Hata: {msg}"
-                        caller_prog.visible = False
-                        p2p_gen_offer_btn.disabled = False
-                        self.page.update()
-                    self.page.run_task(_fail)
+                    print(f"[P2P] Teklif hatası: {ex}")
+                    caller_fail(ex)
                     self.cleanup_call()
 
-            asyncio.run_coroutine_threadsafe(_setup_offer(), self.state["ws_loop"])
+            p2p_core.run(_setup())
 
-        p2p_gen_offer_btn = ft.Button(
-            content="1. Arama Teklifi (Offer) Üret",
-            icon=ft.Icons.WIFI,
-            on_click=generate_offer_click,
-            width=300,
-            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent)
-        )
+        gen_offer_btn = ft.Button(content="1. Teklif kodu üret", icon=ft.Icons.WIFI_TETHERING,
+                                  on_click=gen_offer_click, width=300,
+                                  style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent))
 
-        def connect_call_click(e):
-            if not caller_answer_tf.value:
-                caller_status_text.value = "Lütfen karşı tarafın cevap kodunu girin!"
+        def connect_click(e):
+            try:
+                env = p2p_core.parse_code(caller_answer_tf.value or "")
+            except p2p_core.P2PCodeError as ex:
+                caller_status.value = f"Cevap kodu okunamadı: {ex}"
                 self.page.update()
                 return
-
-            caller_status_text.value = "Bağlanıyor..."
+            ident = p2p_core.identify_peer(env, self._p2p_contact_pem, "answer",
+                                           own_offer_sdp=session["offer_sdp"])
+            if ident.status == p2p_core.LEGACY and mode_dd.value == "chat":
+                ident = p2p_core.PeerIdentity(p2p_core.INVALID, detail="eski sürüm yazılı mesajlaşmayı desteklemiyor")
+            elif env.mode != mode_dd.value:
+                ident = p2p_core.PeerIdentity(p2p_core.INVALID, username=ident.username,
+                                              detail="cevap başka bir bağlantı türüne ait")
+            text, color = self._p2p_identity_view(ident)
+            caller_ident.value, caller_ident.color = text, color
+            if ident.blocked:
+                caller_status.value = "Bağlanılmadı."
+                connect_btn.disabled = True
+                self.page.update()
+                self.cleanup_call()
+                return
+            session["ident"] = ident
+            self.state["call_partner"] = ident.username or "P2P"
+            caller_status.value = "Bağlanıyor…"
+            connect_btn.disabled = True
             self.page.update()
 
             async def _connect():
                 try:
-                    raw_answer = caller_answer_tf.value.strip()
-                    unpacked = unpack_sdp(raw_answer)
-                    remote_sdp = unpacked.get("sdp", "")
                     pc = self.state.get("active_pc")
-                    if pc:
-                        await pc.setRemoteDescription(RTCSessionDescription(
-                            sdp=remote_sdp,
-                            type="answer"
-                        ))
-                    else:
-                        raise ValueError("Aktif PeerConnection bulunamadı.")
+                    if not pc:
+                        raise ValueError("aktif bağlantı yok; yeni teklif üretin")
+                    await pc.setRemoteDescription(RTCSessionDescription(sdp=env.sdp, type="answer"))
                 except Exception as ex:
-                    print(f"P2P Connect error: {ex}")
-                    async def _fail(msg=str(ex)):
-                        caller_status_text.value = f"Hata: {msg}"
-                        self.page.update()
-                    self.page.run_task(_fail)
+                    print(f"[P2P] Bağlanma hatası: {ex}")
+                    caller_fail(ex)
                     self.cleanup_call()
 
-            asyncio.run_coroutine_threadsafe(_connect(), self.state["ws_loop"])
+            p2p_core.run(_connect())
 
-        p2p_connect_btn.on_click = connect_call_click
+        connect_btn.on_click = connect_click
 
-        # Tab 2: Callee controls
-        callee_offer_tf = ft.TextField(
-            label="Karşı Tarafın Teklifi (Offer Kodu Yapıştırın)",
-            multiline=True,
-            min_lines=3,
-            max_lines=5,
-            border_color=C.surface_alt,
-            focused_border_color=C.accent,
-            text_size=10,
-        )
-
-        callee_answer_tf = ft.TextField(
-            label="Cevabınız (Answer Kodu)",
-            multiline=True,
-            min_lines=3,
-            max_lines=5,
-            read_only=True,
-            border_color=C.surface_alt,
-            focused_border_color=C.accent,
-            text_size=10,
-        )
-
-        callee_qr_image = ft.Image(src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", width=160, height=160, fit="contain", visible=False)
-        callee_qr_container = ft.Container(
-            content=ft.Column([
-                ft.Text("QR Kod (Karşı tarafa taratın):", size=11, color=C.text_muted),
-                callee_qr_image
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            visible=False,
-            alignment=ft.Alignment(0, 0)
-        )
-
-        callee_status_text = ft.Text("", size=11, color=C.accent)
+        # ════════════════ 2. sekme: koda cevap veren ════════════════
+        callee_offer_tf = code_field("1. Karşı tarafın teklif kodunu yapıştırın", False)
+        callee_answer_tf = code_field("Cevap kodunuz — karşı tarafa gönderin", True)
+        callee_qr, callee_show_qr = qr_box()
+        callee_status = ft.Text("", size=11, color=C.accent)
+        callee_ident = ft.Text("", size=11, selectable=True)
         callee_prog = ft.ProgressBar(color=C.accent, visible=False)
-
         callee_copy_btn = ft.Button(
-            content="Cevabı Kopyala",
-            icon=ft.Icons.COPY,
+            content="Cevabı kopyala", icon=ft.Icons.COPY, disabled=True,
             on_click=lambda e: self.copy_to_clipboard(callee_answer_tf.value) if callee_answer_tf.value else None,
-            disabled=True,
-            style=ft.ButtonStyle(bgcolor=C.surface_alt, color=C.text)
-        )
+            style=ft.ButtonStyle(bgcolor=C.surface_alt, color=C.text))
 
-        def generate_answer_click(e):
-            if not callee_offer_tf.value:
-                callee_status_text.value = "Lütfen önce teklif kodunu girin!"
+        def callee_fail(msg):
+            async def _ui():
+                callee_status.value = f"Hata: {msg}"
+                callee_prog.visible = False
+                gen_answer_btn.disabled = False
+                self.page.update()
+            self.page.run_task(_ui)
+
+        def gen_answer_click(e):
+            try:
+                env = p2p_core.parse_code(callee_offer_tf.value or "")
+            except p2p_core.P2PCodeError as ex:
+                callee_status.value = f"Teklif kodu okunamadı: {ex}"
                 self.page.update()
                 return
-
-            p2p_gen_answer_btn.disabled = True
-            callee_status_text.value = "Cevap hazırlanıyor (2-5 sn)..."
+            ident = p2p_core.identify_peer(env, self._p2p_contact_pem, "offer")
+            text, color = self._p2p_identity_view(ident)
+            callee_ident.value, callee_ident.color = text, color
+            if ident.blocked:
+                callee_status.value = "Cevap üretilmedi."
+                self.page.update()
+                return
+            mode = env.mode
+            callee_status.value = f"{MODE_LABELS[mode]} için cevap hazırlanıyor (2-5 sn)…"
             callee_prog.visible = True
+            gen_answer_btn.disabled = True
             self.page.update()
 
-            async def _setup_answer():
+            async def _setup():
                 try:
-                    raw_offer = callee_offer_tf.value.strip()
-                    unpacked = unpack_sdp(raw_offer)
-                    call_type = unpacked.get("call_type", "audio")
-                    remote_sdp = unpacked.get("sdp", "")
-
-                    config_servers = [
-                        RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
-                        RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
-                        RTCIceServer(urls=["stun:stun.cloudflare.com:3478"])
-                    ]
-                    config = RTCConfiguration(iceServers=config_servers)
-                    pc = RTCPeerConnection(configuration=config)
-                    self.state["active_pc"] = pc
-                    self.state["call_role"] = "callee"
-                    self.state["call_type"] = call_type
-                    self.state["call_partner"] = "Pure P2P Peer"
-
-                    local_audio = MicrophoneTrack()
-                    self.state["local_audio_track"] = local_audio
-                    pc.addTrack(local_audio)
-
-                    if call_type == "video":
-                        local_video = CameraTrack()
-                        self.state["local_video_track"] = local_video
-                        pc.addTrack(local_video)
-                        self.start_local_video_rendering()
-
-                    @pc.on("track")
-                    def on_track(track):
-                        print(f"[VoIP] P2P Remote track: {track.kind}")
-                        if track.kind == "audio":
-                            player = AudioPlayer(track)
-                            self.state["audio_player"] = player
-                            player.start()
-                        elif track.kind == "video":
-                            self.start_remote_video_rendering(track)
-
-                    @pc.on("iceconnectionstatechange")
-                    async def on_iceconnectionstatechange():
-                        print(f"[VoIP] P2P ICE state: {pc.iceConnectionState}")
-                        if pc.iceConnectionState in ["connected", "completed"]:
-                            self.state["call_state"] = "connected"
-                            async def _start_ui():
-                                dialog.open = False
-                                self.show_call_screen()
-                                self.call_status_text.value = "Connected"
-                                self.page.update()
-                            self.page.run_task(_start_ui)
-                            self.page.run_task(self._call_timer_loop)
-                        elif pc.iceConnectionState in ["failed", "closed"]:
-                            self.cleanup_call()
-
-                    await pc.setRemoteDescription(RTCSessionDescription(
-                        sdp=remote_sdp,
-                        type="offer"
-                    ))
-
-                    answer = await pc.createAnswer()
-                    await pc.setLocalDescription(answer)
-
-                    while pc.iceGatheringState != "complete":
-                        await asyncio.sleep(0.05)
-
-                    packed = pack_sdp(pc.localDescription.sdp, "answer", call_type=call_type)
+                    pc = self._p2p_new_pc("callee", mode, ident.username or "P2P")
+                    if mode == "chat":
+                        @pc.on("datachannel")
+                        def on_dc(channel):
+                            if channel.label == p2p_core.CHANNEL_LABEL:
+                                self._p2p_open_chat_when_ready(pc, channel, lambda: ident, dialog)
+                    else:
+                        self._p2p_start_media(pc, mode)
+                        self._p2p_watch_call(pc, dialog)
+                    await pc.setRemoteDescription(RTCSessionDescription(sdp=env.sdp, type="offer"))
+                    await pc.setLocalDescription(await pc.createAnswer())
+                    await self._p2p_gather(pc)
+                    code = p2p_core.make_envelope("answer", mode, pc.localDescription.sdp, me, priv, pub,
+                                                  offer_sdp=env.sdp)
 
                     async def _done():
-                        callee_answer_tf.value = packed
+                        callee_answer_tf.value = code
                         callee_copy_btn.disabled = False
-                        callee_status_text.value = "Cevap üretildi! Karşı tarafa gönderin. Bağlantı bekleniyor..."
                         callee_prog.visible = False
-                        qr_url = generate_qr_code_image(packed)
-                        if qr_url:
-                            callee_qr_image.src_base64 = qr_url.split(",")[1]
-                            callee_qr_image.visible = True
-                            callee_qr_container.visible = True
+                        callee_status.value = "Cevap hazır. Karşı tarafa iletin; bağlantı bekleniyor…"
+                        callee_show_qr(code)
                         self.page.update()
                     self.page.run_task(_done)
-
                 except Exception as ex:
-                    print(f"P2P Answer setup error: {ex}")
-                    async def _fail(msg=str(ex)):
-                        callee_status_text.value = f"Hata: {msg}"
-                        callee_prog.visible = False
-                        p2p_gen_answer_btn.disabled = False
-                        self.page.update()
-                    self.page.run_task(_fail)
+                    print(f"[P2P] Cevap hatası: {ex}")
+                    callee_fail(ex)
                     self.cleanup_call()
 
-            asyncio.run_coroutine_threadsafe(_setup_answer(), self.state["ws_loop"])
+            p2p_core.run(_setup())
 
-        p2p_gen_answer_btn = ft.Button(
-            content="2. Kabul Et ve Cevap (Answer) Üret",
-            icon=ft.Icons.CHECK,
-            on_click=generate_answer_click,
-            width=300,
-            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent)
-        )
+        gen_answer_btn = ft.Button(content="2. Doğrula ve cevap kodu üret", icon=ft.Icons.CHECK,
+                                   on_click=gen_answer_click, width=300,
+                                   style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent))
 
-        caller_tab = ft.Container(
-            content=ft.Column(
-                controls=[
-                    caller_call_type,
-                    p2p_gen_offer_btn,
-                    caller_prog,
-                    caller_offer_tf,
-                    caller_copy_btn,
-                    caller_qr_container,
-                    ft.Divider(color=C.surface_alt, height=10),
-                    caller_answer_tf,
-                    p2p_connect_btn,
-                    caller_status_text,
-                ],
-                spacing=8,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            padding=10
-        )
+        # ════════════════ yerleşim ════════════════
+        def tab_body(controls):
+            return ft.Container(ft.Column(controls, spacing=8, scroll=ft.ScrollMode.AUTO), padding=10)
 
-        callee_tab = ft.Container(
-            content=ft.Column(
-                controls=[
-                    callee_offer_tf,
-                    p2p_gen_answer_btn,
-                    callee_prog,
-                    callee_answer_tf,
-                    callee_copy_btn,
-                    callee_qr_container,
-                    callee_status_text,
-                ],
-                spacing=8,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            padding=10
-        )
-
+        # QR en sonda: görünürken cevap alanını aşağı itmesin
+        caller_tab = tab_body([
+            mode_dd, gen_offer_btn, caller_prog, caller_offer_tf, caller_copy_btn,
+            ft.Divider(color=C.surface_alt, height=10),
+            caller_answer_tf, connect_btn, caller_ident, caller_status, caller_qr,
+        ])
+        callee_tab = tab_body([
+            callee_offer_tf, gen_answer_btn, callee_ident, callee_prog, callee_answer_tf,
+            callee_copy_btn, callee_status, callee_qr,
+        ])
         tabs = ft.Tabs(
-            selected_index=0,
-            length=2,
-            content=ft.Column(
-                controls=[
-                    ft.TabBar(
-                        tabs=[
-                            ft.Tab(label="Arama Başlat (Caller)"),
-                            ft.Tab(label="Aramaya Cevap Ver (Callee)"),
-                        ]
-                    ),
-                    ft.TabBarView(
-                        controls=[
-                            caller_tab,
-                            callee_tab,
-                        ],
-                        expand=True
-                    )
-                ],
-                expand=True
-            ),
-            expand=True
+            selected_index=0, length=2, expand=True,
+            content=ft.Column([
+                ft.TabBar(tabs=[ft.Tab(label="Bağlantı başlat"), ft.Tab(label="Koda cevap ver")]),
+                ft.TabBarView(controls=[caller_tab, callee_tab], expand=True),
+            ], expand=True),
         )
 
         def close_p2p(e):
@@ -498,29 +386,22 @@ class PureP2PMixin:
                 self.cleanup_call()
 
         dialog = ft.AlertDialog(
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.WIFI_TETHERING, color=C.accent),
-                    ft.Text("Pure P2P (Sunucusuz Bağlantı)", size=16, color=C.text, weight=ft.FontWeight.BOLD),
-                    ft.Container(expand=True),
-                    ft.IconButton(
-                        icon=ft.Icons.CLOSE,
-                        icon_size=18,
-                        icon_color=C.text_muted,
-                        on_click=close_p2p,
-                    ),
-                ],
-                spacing=8,
-            ),
+            title=ft.Row([
+                ft.Icon(ft.Icons.WIFI_TETHERING, color=C.accent),
+                ft.Text("Sunucusuz bağlantı", size=16, color=C.text, weight=ft.FontWeight.BOLD),
+                ft.Container(expand=True),
+                ft.IconButton(icon=ft.Icons.CLOSE, icon_size=18, icon_color=C.text_muted, on_click=close_p2p),
+            ], spacing=8),
             content=ft.Container(
-                content=tabs,
-                width=380,
-                height=460,
-                padding=0,
+                ft.Column([
+                    ft.Text("Arada sunucu yok: iki taraf da aynı anda açık olmalı. Kodlar imzalıdır "
+                            "ve tek kullanımlıktır.", size=10, color=C.text_muted),
+                    tabs,
+                ], spacing=6, expand=True),
+                width=400, height=540, padding=0,
             ),
             bgcolor=C.surface,
         )
-
         self.page.overlay.append(dialog)
         dialog.open = True
         self.page.update()

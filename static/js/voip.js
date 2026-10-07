@@ -440,7 +440,19 @@ export async function packSDPJS(sdpStr, sdpType, callType = "audio", compress = 
 }
 
 export async function unpackSDPJS(packedStr) {
-    packedStr = packedStr.trim();
+    packedStr = packedStr.replace(/\s+/g, "");
+    if (packedStr.startsWith("h2:")) {
+        // Masaüstünün imzalı kod biçimi (desktop/p2p_core.py). Web istemcisi şimdilik
+        // yalnızca SDP'yi okur; imza ve kimlik doğrulaması S3'te (serverless.html) gelecek.
+        const b64 = packedStr.substring(3).replace(/-/g, "+").replace(/_/g, "/");
+        const p = JSON.parse(await decompressStringJS(b64));
+        if (p.v !== 2) throw new Error("Desteklenmeyen kod sürümü");
+        if (p.m === "chat") {
+            throw new Error("Bu kod yazılı mesajlaşma için; web istemcisi henüz desteklemiyor (yalnızca sesli/görüntülü arama).");
+        }
+        console.warn("[P2P] İmzalı kod okundu ama web istemcisi henüz kimliği doğrulamıyor:", p.u);
+        return { sdp: p.s, type: p.t, call_type: p.m };
+    }
     if (packedStr.startsWith("z1:")) {
         const b64 = packedStr.substring(3);
         const jsonStr = await decompressStringJS(b64);

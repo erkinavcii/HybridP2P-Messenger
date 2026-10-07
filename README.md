@@ -375,3 +375,11 @@ To allow users outside your local network (anywhere in the world) to connect to 
 4. Ngrok will generate a secure public HTTPS URL (e.g., `https://xxxx-xx-xx.ngrok-free.app`).
 5. Share this URL with your friends! They can open it directly in their browser to load the E2EE Web Client, or type the full URL including `https://` (e.g., `https://xxxx-xx-xx.ngrok-free.app`) in the **Server Address** field of the desktop client.
    * *Note:* The Web Client automatically connects its WebSockets dynamically to the hosting origin (secure or insecure), allowing zero-configuration E2EE out-of-the-box.
+
+---
+
+## 📜 License
+
+HybridP2P Messenger is free software, licensed under the **GNU Affero General Public License v3.0** ([LICENSE](LICENSE)).
+
+You may use, study, modify and share it. If you run a modified version as a network service (for example a relay server other people connect to), the AGPL requires you to offer those users the source code of your modified version. This keeps every self-hosted instance as open as the original.

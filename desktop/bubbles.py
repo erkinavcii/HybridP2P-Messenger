@@ -423,7 +423,7 @@ class BubblesMixin:
                             self.page.update()
                         self.run_on_ui(_failed)
                 except Exception as ex:
-                    def _err():
+                    def _err(ex=ex):   # ex except bitince silinir: değeri şimdi yakala
                         status_text.value = f"Hata: {ex}"
                         self.page.update()
                     self.run_on_ui(_err)

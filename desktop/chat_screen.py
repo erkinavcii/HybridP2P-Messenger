@@ -646,7 +646,7 @@ class ChatScreenMixin:
                     self.run_on_ui(_upload_success)
 
                 except Exception as ex:
-                    def _upload_error():
+                    def _upload_error(ex=ex):   # ex except bitince silinir: değeri şimdi yakala
                         self.status_text.value = f"Upload error: {ex}"
                         self.upload_progress.visible = False
                         self.staged_file_container.disabled = False
@@ -717,7 +717,7 @@ class ChatScreenMixin:
                                      msg_uid=msg_uid, preview=preview)
         except Exception as ex:
             print(f"[Send] mesaj gonderilemedi: {ex}")
-            self.run_on_ui(lambda: self.log_status(f"Gönderim hatası: {ex}"))
+            self.run_on_ui(lambda ex=ex: self.log_status(f"Gönderim hatası: {ex}"))
             return
         if not preview or not msg_uid:
             return

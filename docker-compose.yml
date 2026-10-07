@@ -58,6 +58,41 @@ services:
     depends_on:
       - app
 
+  # İsteğe bağlı kendi STUN/TURN sunucunuz (aramalar için). Açmak için .env'de:
+  #   COMPOSE_PROFILES=turn, TURN_HOST, TURN_SECRET  (adımlar .env.example'da)
+  coturn:
+    image: coturn/coturn:4.6
+    profiles: ["turn"]
+    restart: unless-stopped
+    # TURN çok sayıda UDP portu kullanır; Linux VPS'te host ağı en sorunsuz yoldur
+    # (Docker Desktop'ta — Windows/macOS — host ağı sınırlıdır, bkz. DEPLOY.md)
+    network_mode: host
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=${TURN_PORT:-3478}
+      - --min-port=49160
+      - --max-port=49200
+      - --fingerprint
+      - --use-auth-secret                    # kısa ömürlü kimlik (sunucu HMAC ile üretir)
+      - --static-auth-secret=${TURN_SECRET:?turn profili için .env içinde TURN_SECRET gerekli}
+      - --realm=${HYBRIDP2P_SITE}
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      # Güvenlik: TURN'ün iç/özel ağlara aktarım yapmasını yasakla (SSRF/ağ tarama köprüsü olmasın)
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --denied-peer-ip=::1
+      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+      - --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
 volumes:
   data:          # relay_server.db — mesaj kuyruğu, kullanıcılar, şifreli dosyalar (YEDEKLEYİN)
   certs:         # kendinden imzalı sertifika (değişirse tüm sabitlemeler kırılır)

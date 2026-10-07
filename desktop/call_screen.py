@@ -82,14 +82,13 @@ class CallScreenMixin:
 
         async def _setup():
             try:
+                # ICE listesi sunucudan (STUN/TURN ayarı orada). Alınamazsa üçüncü
+                # tarafa sessizce dönülmez: boş liste = yalnızca yerel ağ adayları.
                 try:
                     r = self.signed_get("/api/ice_servers")
-                    if r.status_code == 200:
-                        ice_data = r.json().get("ice_servers", [])
-                    else:
-                        ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+                    ice_data = r.json().get("ice_servers", []) if r.status_code == 200 else []
                 except Exception:
-                    ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+                    ice_data = []
 
                 config_servers = []
                 for s in ice_data:
@@ -173,14 +172,13 @@ class CallScreenMixin:
 
         async def _accept():
             try:
+                # ICE listesi sunucudan (STUN/TURN ayarı orada). Alınamazsa üçüncü
+                # tarafa sessizce dönülmez: boş liste = yalnızca yerel ağ adayları.
                 try:
                     r = self.signed_get("/api/ice_servers")
-                    if r.status_code == 200:
-                        ice_data = r.json().get("ice_servers", [])
-                    else:
-                        ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+                    ice_data = r.json().get("ice_servers", []) if r.status_code == 200 else []
                 except Exception:
-                    ice_data = [{"urls": "stun:stun.l.google.com:19302"}]
+                    ice_data = []
 
                 config_servers = []
                 for s in ice_data:

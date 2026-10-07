@@ -1,20 +1,29 @@
 // static/js/voip.js
 
 import { state, API_URL } from './state.js';
+import { makeAuthHeadersJS } from './crypto.js';
 
-/** Fetch ICE server config from server (Google STUN + optional self-hosted TURN) */
+/** ICE (STUN/TURN) listesini sunucudan alır. İstek İMZALI olmalı: sunucu imzasız
+ *  isteği 401 ile reddeder (eskiden imzasızdı → liste hep boş kalıyor, aramalar
+ *  yalnızca aynı ağda kurulabiliyordu). TURN kimliği 6 saat geçerli; 1 saatte yenilenir.
+ *  Alınamazsa üçüncü tarafa sessizce dönülmez: boş liste = yalnızca yerel ağ. */
+const ICE_CACHE_MS = 60 * 60 * 1000;
+
 export async function fetchIceServers() {
-    if (state.voip.iceServers) return state.voip.iceServers;
+    const cached = state.voip.iceServers;
+    if (cached && Date.now() - (state.voip.iceFetchedAt || 0) < ICE_CACHE_MS) return cached;
     try {
-        const res = await fetch(`${API_URL}/api/ice_servers`);
+        const path = "/api/ice_servers";
+        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+        const res = await fetch(`${API_URL}${path}`, { headers });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        state.voip.iceServers = json.ice_servers;
+        state.voip.iceServers = Array.isArray(json.ice_servers) ? json.ice_servers : [];
+        state.voip.iceFetchedAt = Date.now();
     } catch (e) {
-        // Fallback to Google STUN if server unreachable
-        state.voip.iceServers = [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-        ];
+        console.warn("ICE sunucuları alınamadı; yalnızca yerel ağ adayları kullanılacak:", e);
+        state.voip.iceServers = [];
+        state.voip.iceFetchedAt = 0;   // sonraki aramada yeniden dene
     }
     return state.voip.iceServers;
 }

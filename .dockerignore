@@ -1,0 +1,27 @@
+# İmaja yalnızca Dockerfile'da açıkça COPY edilenler girer; bu liste build
+# bağlamını küçültür ve gizli/yerel dosyaların yanlışlıkla sızmasını önler.
+.git
+.github
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite*
+*.pem
+*.key
+*.crt
+build
+dist
+scratch
+tests
+desktop
+client.py
+message_store.py
+*.spec
+*.md

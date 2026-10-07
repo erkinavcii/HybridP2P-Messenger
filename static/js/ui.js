@@ -20,6 +20,9 @@ import {
     getContactPubKey,
     fetchGroupName
 } from './db.js';
+import { avatarInnerHtml, maybeSendAvatar, forgetAvatar } from './avatar.js';
+import { getFingerprintJS } from './crypto.js';
+import { listContacts, deleteContact } from './db.js';
 import {
     sendReadReceipt,
     queryUserPresence,
@@ -202,11 +205,13 @@ export function renderInbox(query = "") {
         const tile = document.createElement("div");
         tile.className = `chat-tile ${activeClass}`;
         
-        const displayName = c.isGroup ? c.groupName : c.partner;
+        // Grup adı serbest metin: HTML olarak basılmadan önce kaçışlanmalı
+        const displayName = escapeHtml(c.isGroup ? (c.groupName || c.partner) : c.partner);
         const avatarText = displayName.substring(0, 2).toUpperCase();
-        
+        const avatarHtml = c.isGroup ? avatarText : avatarInnerHtml(c.partner, avatarText);
+
         tile.innerHTML = `
-            <div class="avatar ${c.isGroup ? 'group' : ''}">${avatarText}</div>
+            <div class="avatar ${c.isGroup ? 'group' : ''}">${avatarHtml}</div>
             <div class="chat-tile-content">
                 <div class="chat-tile-header">
                     <span class="chat-tile-name">${displayName}</span>
@@ -348,17 +353,19 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
     const chatObj = state.chats[partner];
     const displayName = (isGroup && chatObj) ? chatObj.groupName : partner;
     chatPartnerName.innerText = displayName;
-    document.getElementById("chat-avatar").innerText = displayName.substring(0, 2).toUpperCase();
-    
+    renderChatHeaderAvatar();
+
     if (isGroup) {
         document.getElementById("chat-avatar").classList.add("group");
     } else {
         document.getElementById("chat-avatar").classList.remove("group");
     }
-    
+
     renderMessages();
     renderInbox();
-    
+    // Karşı taraf avatarımızın güncel sürümünü almadıysa şimdi gönder (masaüstündeki gibi)
+    if (!isGroup) maybeSendAvatar(partner, sendFrameWithFallback);
+
     // Set online indicator dynamically
     if (isGroup) {
         chatPartnerStatus.style.visibility = "hidden";
@@ -386,6 +393,76 @@ export function formatDayLabel(isoStr, now = new Date()) {
     if (key === dayKey(y.toISOString())) return "Dün";
     const yearPart = d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : "";
     return `${d.getDate()} ${TR_MONTHS[d.getMonth()]}${yearPart}`;
+}
+
+// Sohbet başlığındaki avatar (foto varsa foto, yoksa baş harfler)
+export function renderChatHeaderAvatar() {
+    const el = document.getElementById("chat-avatar");
+    if (!el || !state.recipient) return;
+    const chatObj = state.chats[state.recipient];
+    const name = (state.isGroup && chatObj) ? (chatObj.groupName || state.recipient) : state.recipient;
+    const initials = escapeHtml(name.substring(0, 2).toUpperCase());
+    el.innerHTML = state.isGroup ? initials : avatarInnerHtml(state.recipient, initials);
+}
+
+// ── Kişi rehberi ──
+const contactsModal = document.getElementById("contacts-modal");
+const contactsList = document.getElementById("contacts-list");
+const contactsSearch = document.getElementById("contacts-search");
+
+export async function openContactsDialog() {
+    if (!contactsModal) return;
+    contactsSearch.value = "";
+    await renderContacts();
+    contactsModal.classList.add("active");
+    contactsSearch.focus();
+}
+
+async function renderContacts() {
+    const q = contactsSearch.value.trim().toLowerCase();
+    const contacts = (await listContacts()).filter(c => !q || c.username.includes(q));
+    contactsList.innerHTML = "";
+    if (contacts.length === 0) {
+        contactsList.innerHTML = `<div class="contacts-empty">${q ? "Eşleşen kişi yok." : "Rehberiniz boş. Biriyle sohbet başlattığınızda burada görünür."}</div>`;
+        return;
+    }
+    for (const c of contacts) {
+        const fp = c.publicKey ? await getFingerprintJS(c.publicKey) : "";
+        const row = document.createElement("div");
+        row.className = "contact-row";
+        const initials = escapeHtml(c.username.substring(0, 2).toUpperCase());
+        row.innerHTML = `
+            <div class="avatar" style="width:36px; height:36px; font-size:13px;">${avatarInnerHtml(c.username, initials)}</div>
+            <div class="contact-info">
+                <span class="contact-name">${escapeHtml(c.username)}</span>
+                <span class="contact-fp" title="${escapeHtml(fp)}">${escapeHtml(fp)}</span>
+            </div>
+            <div class="contact-actions">
+                <button class="action-icon-btn" data-act="chat" title="Sohbet aç">💬</button>
+                <button class="action-icon-btn" data-act="copy" title="Parmak izini kopyala">📋</button>
+                <button class="action-icon-btn" data-act="delete" title="Kişiyi sil" style="color: var(--danger);">🗑</button>
+            </div>`;
+        row.querySelector('[data-act="chat"]').addEventListener("click", () => {
+            contactsModal.classList.remove("active");
+            selectChat(c.username, c.publicKey, false);
+        });
+        row.querySelector('[data-act="copy"]').addEventListener("click", (e) => {
+            navigator.clipboard.writeText(fp).then(() => { e.target.innerText = "✓"; });
+        });
+        row.querySelector('[data-act="delete"]').addEventListener("click", async () => {
+            if (!confirm(`'${c.username}' rehberden silinsin mi? Sohbet geçmişi silinmez; tekrar yazışırsanız anahtarı yeniden doğrulamanız gerekir.`)) return;
+            await deleteContact(c.username);
+            forgetAvatar(c.username);
+            await renderContacts();
+            renderInbox();
+        });
+        contactsList.appendChild(row);
+    }
+}
+
+if (contactsModal) {
+    contactsSearch.addEventListener("input", renderContacts);
+    document.getElementById("contacts-close-btn").addEventListener("click", () => contactsModal.classList.remove("active"));
 }
 
 // Render message balloons in chat window
@@ -952,6 +1029,7 @@ window.addEventListener('chats-updated', () => renderInbox());
 window.addEventListener('messages-updated', () => renderMessages());
 window.addEventListener('presence-updated', (e) => setPresenceUI(e.detail.partner, e.detail.online));
 window.addEventListener('typing-updated', (e) => showTyping(e.detail.partner, e.detail.isTyping));
+window.addEventListener('avatars-updated', () => { renderInbox(); renderChatHeaderAvatar(); });
 window.addEventListener('system-message', (e) => appendSystemMessage(e.detail.partner, e.detail.text));
 window.addEventListener('ephemeral-status-synced', (e) => {
     if (state.recipient === e.detail.partner) {

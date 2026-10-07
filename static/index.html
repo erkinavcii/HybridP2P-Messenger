@@ -104,6 +104,13 @@
                         <button id="pure-p2p-btn" class="action-icon-btn" title="Pure P2P (Sunucusuz Bağlantı)">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
                         </button>
+                        <button id="contacts-btn" class="action-icon-btn" title="Kişi rehberi">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        </button>
+                        <button id="own-avatar-btn" class="action-icon-btn own-avatar-btn" title="Profil fotoğrafı (kişilerinize uçtan uca şifreli gönderilir)">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.88 17.8M15 10a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        </button>
+                        <input type="file" id="own-avatar-input" accept="image/*" class="hidden">
                         <button id="theme-toggle-btn" class="action-icon-btn" title="Tema değiştir (açık / koyu)">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
                         </button>
@@ -412,6 +419,19 @@
             <div class="modal-footer">
                 <button id="backup-key-copy-btn" class="btn" style="background-color: var(--border-color); width: auto; padding: 10px 20px;">Copy PEM</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal: Kişi rehberi -->
+    <div id="contacts-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 440px;">
+            <div class="modal-header">
+                <span class="modal-title">Kişi rehberi</span>
+                <button id="contacts-close-btn" class="action-icon-btn">✕</button>
+            </div>
+            <input type="text" id="contacts-search" class="input-control" placeholder="İsme göre ara...">
+            <div id="contacts-list" class="contacts-list"></div>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Parmak izini karşı tarafla başka bir kanaldan (yüz yüze, telefon) karşılaştırarak anahtarın gerçekten ona ait olduğunu doğrulayın.</p>
         </div>
     </div>
 

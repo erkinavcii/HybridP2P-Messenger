@@ -32,6 +32,7 @@ import {
     handleIceCandidate
 } from './voip.js';
 import { playNotification } from './prefs.js';
+import { receiveAvatar } from './avatar.js';
 
 // Yeni mesaj sesi (görüşme sırasında çalmaz; tercih kapalıysa prefs.js susturur)
 function notifyIncoming() {
@@ -120,7 +121,7 @@ export async function verifyDirectMessage(sender, encryptedPayload, signatureB64
     return true;
 }
 
-async function verifyFrom(sender, dataBytes, signatureB64) {
+export async function verifyFrom(sender, dataBytes, signatureB64) {
     if (!signatureB64) return false;
     const pub = await getContactPubKey(sender);
     if (!pub) return false;
@@ -343,6 +344,13 @@ export function connectWebSocket() {
                 }
             }
             
+            // Kişinin E2EE profil fotoğrafı (imza zorunlu)
+            else if (data.type === "avatar_update") {
+                if (await receiveAvatar(data.sender, data.encrypted_payload || "", data.signature || "", verifyFrom)) {
+                    window.dispatchEvent(new CustomEvent('avatars-updated'));
+                }
+            }
+
             // Karşı taraf kendi mesajını düzenledi / herkesten sildi
             else if (data.type === "message_edit" || data.type === "message_delete") {
                 if (await receiveMessageChange(data.type, data.sender, data.msg_uid,

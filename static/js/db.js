@@ -4,7 +4,7 @@ import { state, API_URL } from './state.js';
 import { makeAuthHeadersJS } from './crypto.js';
 
 const dbName = "hybridp2p_db";
-const dbVersion = 2;
+const dbVersion = 3;   // 3: "media" deposu (sesli mesaj ses verisi)
 
 export function getDB() {
     return new Promise((resolve, reject) => {
@@ -20,8 +20,17 @@ export function getDB() {
             if (!db.objectStoreNames.contains("group_keys")) {
                 db.createObjectStore("group_keys");
             }
+            // Ses gibi büyük ikili veriler sohbet JSON'unu şişirmesin diye ayrı depoda
+            if (!db.objectStoreNames.contains("media")) {
+                db.createObjectStore("media");
+            }
         };
-        request.onsuccess = (e) => resolve(e.target.result);
+        request.onsuccess = (e) => {
+            const db = e.target.result;
+            // Başka sekme şemayı yükseltirse bu bağlantı yükseltmeyi kilitlemesin
+            db.onversionchange = () => db.close();
+            resolve(db);
+        };
         request.onerror = (e) => reject(e.target.error);
     });
 }
@@ -57,6 +66,35 @@ export async function dbDel(storeName, key) {
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
     });
+}
+
+export async function dbKeys(storeName) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+        const request = db.transaction(storeName, "readonly").objectStore(storeName).getAllKeys();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// ── Kişi rehberi: "keys" deposundaki pubkey_<kullanıcı> kayıtları ──
+export async function listContacts() {
+    const names = (await dbKeys("keys"))
+        .filter(k => typeof k === "string" && k.startsWith("pubkey_"))
+        .map(k => k.slice("pubkey_".length))
+        .filter(n => n !== state.username)
+        .sort();
+    const out = [];
+    for (const username of names) out.push({ username, publicKey: await dbGet("keys", `pubkey_${username}`) });
+    return out;
+}
+
+// Masaüstündeki delete_contact ile aynı kapsam: anahtar, imzalama bayrağı, avatar.
+// Sohbet geçmişi silinmez; kişiyle tekrar konuşulursa anahtar sunucudan yeniden alınır (TOFU).
+export async function deleteContact(username) {
+    for (const k of [`pubkey_${username}`, `signs_${username}`, `avatar_${username}`, `avatar_sent_${username}`]) {
+        await dbDel("keys", k);
+    }
 }
 
 export async function persistChats() {

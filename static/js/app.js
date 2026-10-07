@@ -5,14 +5,16 @@ import {
     connectWebSocket,
     fetchOfflineMessages,
     queryUserPresence,
-    sendTyping
+    sendTyping,
+    sendFrameWithFallback
 } from './ws.js';
 import {
     renderInbox,
     selectChat,
     sendMessage,
     formatBytes,
-    appendSystemMessage
+    appendSystemMessage,
+    openContactsDialog
 } from './ui.js';
 import {
     generateKeyPair,
@@ -37,6 +39,7 @@ import {
 } from './db.js';
 import { initVoipEvents } from './voip.js';
 import { applyTheme, toggleTheme, getPref, setPref } from './prefs.js';
+import { loadAvatarCache, setOwnAvatar, broadcastAvatar, avatarUrl } from './avatar.js';
 
 // Initialize VoIP events
 initVoipEvents();
@@ -399,6 +402,8 @@ window.addEventListener("load", async () => {
             // Sohbetler "chats_<kullanıcı>" anahtarında (persistChats ile aynı). Eskiden
             // "history" okunuyordu: boş durum geri yazılıp her yenilemede geçmiş siliniyordu.
             await loadChatsFromLocalStorage();
+            await loadAvatarCache();
+            refreshOwnAvatarButton();
             
             await fetchOfflineMessages();
             await syncChatSettingsFromServer();
@@ -595,6 +600,8 @@ if (loginBtn) {
                 // Sohbetler "chats_<kullanıcı>" anahtarında (persistChats ile aynı). Eskiden
                 // "history" okunuyordu: boş durum geri yazılıp her yenilemede geçmiş siliniyordu.
                 await loadChatsFromLocalStorage();
+                await loadAvatarCache();
+                refreshOwnAvatarButton();
                 
                 loginScreen.classList.remove("active");
                 chatScreen.classList.add("active");
@@ -767,6 +774,35 @@ if (messageInput) {
             stopTypingSignal();
             sendMessage();
         }
+    });
+}
+
+// ── Kişi rehberi ve profil fotoğrafı ──
+const contactsBtn = document.getElementById("contacts-btn");
+const ownAvatarBtn = document.getElementById("own-avatar-btn");
+const ownAvatarInput = document.getElementById("own-avatar-input");
+
+function refreshOwnAvatarButton() {
+    const url = avatarUrl(state.username);
+    if (ownAvatarBtn && url) ownAvatarBtn.innerHTML = `<img class="avatar-img" src="${url}" alt="">`;
+}
+
+if (contactsBtn) contactsBtn.addEventListener("click", openContactsDialog);
+if (ownAvatarBtn && ownAvatarInput) {
+    ownAvatarBtn.addEventListener("click", () => ownAvatarInput.click());
+    ownAvatarInput.addEventListener("change", async () => {
+        const file = ownAvatarInput.files[0];
+        ownAvatarInput.value = "";
+        if (!file) return;
+        try {
+            await setOwnAvatar(await file.arrayBuffer());
+        } catch (err) {
+            alert("Fotoğraf kullanılamadı: " + err.message);
+            return;
+        }
+        refreshOwnAvatarButton();
+        const sent = await broadcastAvatar(sendFrameWithFallback);
+        console.log(`Profil fotoğrafı ${sent} kişiye şifreli gönderildi.`);
     });
 }
 

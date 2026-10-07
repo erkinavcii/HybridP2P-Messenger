@@ -1,0 +1,27 @@
+# HybridP2P Messenger — Caddy ters vekil (TLS burada sonlanır, uygulama iç ağda).
+# Değerler .env'den gelir; iki mod tek ayarla seçilir:
+#
+#   A) Alan adı:   HYBRIDP2P_SITE=mesaj.example.com
+#                  HYBRIDP2P_TLS=sen@example.com        → Let's Encrypt (otomatik al/yenile)
+#   B) Yalnız IP:  HYBRIDP2P_SITE=203.0.113.5
+#                  HYBRIDP2P_TLS=/certs/cert.pem /certs/key.pem
+#                  → deploy/gen_cert.py'nin ürettiği kendinden imzalı sertifika
+#                    (masaüstü parmak izini sabitler; alan adı / CA bağımlılığı yok)
+#
+# {$VAR} Caddyfile okunmadan önce yerine konur; B'deki iki yol iki argüman olur.
+
+{$HYBRIDP2P_SITE} {
+	tls {$HYBRIDP2P_TLS}
+
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	# REST, WebSocket (/ws/…) ve web istemcisi aynı uygulamada; Caddy
+	# WebSocket yükseltmesini kendiliğinden geçirir ve X-Forwarded-For ekler.
+	reverse_proxy app:8000
+}

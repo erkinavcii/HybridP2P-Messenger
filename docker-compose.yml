@@ -1,0 +1,62 @@
+# HybridP2P Messenger — tek komutla kurulum:
+#     cp .env.example .env    (düzenleyin: HYBRIDP2P_SITE ve HYBRIDP2P_TLS)
+#     docker compose up -d --build
+# Ayrıntılar: DEPLOY.md
+name: hybridp2p
+
+services:
+  # Yalnızca IP modunda kendinden imzalı sertifika üretir (bir kez); parmak izini
+  # yazdırır:  docker compose logs certgen
+  certgen:
+    build: .
+    image: hybridp2p-messenger:latest
+    command: ["python", "deploy/gen_cert.py"]
+    environment:
+      HYBRIDP2P_SITE: ${HYBRIDP2P_SITE:?.env içinde HYBRIDP2P_SITE ayarlanmalı}
+      HYBRIDP2P_TLS: ${HYBRIDP2P_TLS:?.env içinde HYBRIDP2P_TLS ayarlanmalı}
+    volumes:
+      - certs:/certs
+    restart: "no"
+
+  app:
+    image: hybridp2p-messenger:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HYBRIDP2P_DB_PATH: /data/relay_server.db
+      HYBRIDP2P_RELOAD: "0"
+      # Uygulama portu dışarıya kapalı; tek komşu Caddy → başlığa güvenmek güvenli
+      HYBRIDP2P_FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - data:/data
+    expose:
+      - "8000"
+    depends_on:
+      certgen:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    environment:
+      HYBRIDP2P_SITE: ${HYBRIDP2P_SITE}
+      HYBRIDP2P_TLS: ${HYBRIDP2P_TLS}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - certs:/certs:ro
+      - caddy_data:/data        # Let's Encrypt sertifikaları (kaybolursa yeniden alınır)
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  data:          # relay_server.db — mesaj kuyruğu, kullanıcılar, şifreli dosyalar (YEDEKLEYİN)
+  certs:         # kendinden imzalı sertifika (değişirse tüm sabitlemeler kırılır)
+  caddy_data:
+  caddy_config:

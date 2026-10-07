@@ -1,0 +1,64 @@
+# HybridP2P Messenger — DEMO / deneme kurulumu (Cloudflare Tunnel).
+#
+# Kendi bilgisayarınızda (ya da port açamadığınız bir makinede) çalışır; port
+# yönlendirme, alan adı ve sertifika gerekmez. Cloudflare herkese açık bir
+# https adresi verir ve trafiği bu makineye tüneller.
+#
+# DİKKAT: Demo içindir. Trafik Cloudflare üzerinden geçer — mesaj/dosya içerikleri
+# uçtan uca şifreli kaldığı için okunamaz, ama Cloudflare kimin ne zaman bağlandığını
+# görebilir. Sansüre dayanıklı gerçek kurulum için docker-compose.yml (Caddy) kullanın.
+#
+# ── Seçenek 1: Quick Tunnel (alan adı YOK, Cloudflare hesabı YOK) ──────────
+#   docker compose -f docker-compose.demo.yml --profile quick up -d --build
+#   docker compose -f docker-compose.demo.yml logs tunnel-quick
+#     → çıktıdaki https://<rastgele>.trycloudflare.com adresini paylaşın.
+#   Adres her yeniden başlatmada DEĞİŞİR; kalıcı değildir.
+#
+# ── Seçenek 2: Adlandırılmış tünel (kendi alan adınız, Cloudflare hesabı) ──
+#   1) Cloudflare panelinde: Zero Trust → Networks → Tunnels → Create tunnel,
+#      "Public hostname" olarak alan adınızı ve servis olarak  http://app:8000  girin.
+#   2) Verilen jetonu .env dosyasına yazın:  CLOUDFLARE_TUNNEL_TOKEN=...
+#   3) docker compose -f docker-compose.demo.yml --profile named up -d --build
+#
+# Her iki seçenekte de sertifikayı Cloudflare sağlar (tarayıcıda uyarı yok,
+# masaüstünde parmak izi gerekmez): masaüstüne  https://<adres>  yazın.
+name: hybridp2p-demo
+
+services:
+  app:
+    build: .
+    image: hybridp2p-messenger:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HYBRIDP2P_DB_PATH: /data/relay_server.db
+      HYBRIDP2P_RELOAD: "0"
+      # Uygulamaya yalnızca cloudflared ulaşır (port dışarıya açık değil)
+      HYBRIDP2P_FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - demo_data:/data
+    expose:
+      - "8000"
+
+  tunnel-quick:
+    image: cloudflare/cloudflared:latest
+    profiles: ["quick"]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--url", "http://app:8000"]
+    depends_on:
+      - app
+
+  tunnel-named:
+    image: cloudflare/cloudflared:latest
+    profiles: ["named"]
+    restart: unless-stopped
+    # ${VAR:?} kullanılmaz: Compose onu profil kapalıyken de değerlendirip quick
+    # profilini bozardı. Jeton boşsa cloudflared kendisi hata verip durur.
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN:-}"]
+    depends_on:
+      - app
+
+volumes:
+  demo_data:

@@ -67,31 +67,36 @@ services:
     # TURN çok sayıda UDP portu kullanır; Linux VPS'te host ağı en sorunsuz yoldur
     # (Docker Desktop'ta — Windows/macOS — host ağı sınırlıdır, bkz. DEPLOY.md)
     network_mode: host
+    # Not: ${VAR:?} burada KULLANILMAZ — Compose bunu profil kapalıyken bile
+    # değerlendirir ve TURN kullanmayan herkesin kurulumunu bozar. Kontrol,
+    # yalnızca coturn gerçekten başlarken aşağıdaki kabuk satırında yapılır.
+    environment:
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_REALM: ${HYBRIDP2P_SITE:-hybridp2p}
+      TURN_PORT: ${TURN_PORT:-3478}
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - -n
-      - --log-file=stdout
-      - --listening-port=${TURN_PORT:-3478}
-      - --min-port=49160
-      - --max-port=49200
-      - --fingerprint
-      - --use-auth-secret                    # kısa ömürlü kimlik (sunucu HMAC ile üretir)
-      - --static-auth-secret=${TURN_SECRET:?turn profili için .env içinde TURN_SECRET gerekli}
-      - --realm=${HYBRIDP2P_SITE}
-      - --no-cli
-      - --no-tls
-      - --no-dtls
-      - --no-multicast-peers
-      # Güvenlik: TURN'ün iç/özel ağlara aktarım yapmasını yasakla (SSRF/ağ tarama köprüsü olmasın)
-      - --denied-peer-ip=0.0.0.0-0.255.255.255
-      - --denied-peer-ip=10.0.0.0-10.255.255.255
-      - --denied-peer-ip=100.64.0.0-100.127.255.255
-      - --denied-peer-ip=127.0.0.0-127.255.255.255
-      - --denied-peer-ip=169.254.0.0-169.254.255.255
-      - --denied-peer-ip=172.16.0.0-172.31.255.255
-      - --denied-peer-ip=192.168.0.0-192.168.255.255
-      - --denied-peer-ip=::1
-      - --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
-      - --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+      - |
+        if [ -z "$$TURN_SECRET" ]; then
+          echo "HATA: turn profili için .env içinde TURN_SECRET ayarlanmalı (adımlar .env.example'da)"
+          exit 1
+        fi
+        # denied-peer-ip satırları: TURN iç/özel ağlara aktarım yapamaz
+        # (sunucunun yerel ağına ulaşmak için köprü olarak kullanılamasın)
+        exec turnserver -n --log-file=stdout \
+          --listening-port="$$TURN_PORT" --min-port=49160 --max-port=49200 \
+          --fingerprint --use-auth-secret --static-auth-secret="$$TURN_SECRET" \
+          --realm="$$TURN_REALM" --no-cli --no-tls --no-dtls --no-multicast-peers \
+          --denied-peer-ip=0.0.0.0-0.255.255.255 \
+          --denied-peer-ip=10.0.0.0-10.255.255.255 \
+          --denied-peer-ip=100.64.0.0-100.127.255.255 \
+          --denied-peer-ip=127.0.0.0-127.255.255.255 \
+          --denied-peer-ip=169.254.0.0-169.254.255.255 \
+          --denied-peer-ip=172.16.0.0-172.31.255.255 \
+          --denied-peer-ip=192.168.0.0-192.168.255.255 \
+          --denied-peer-ip=::1 \
+          --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff \
+          --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
 
 volumes:
   data:          # relay_server.db — mesaj kuyruğu, kullanıcılar, şifreli dosyalar (YEDEKLEYİN)

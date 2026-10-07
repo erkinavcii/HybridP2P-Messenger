@@ -165,7 +165,9 @@ Bölüm 1'deki not güncellendi, bkz. yukarısı.
 - **Gecikme:** önizleme hazırlanırken (en fazla ~8 sn) o mesaj ve arkasındaki birebir mesajlar sırayla bekler; sıra bozulmaz, ekranda mesaj hemen görünür.
 - **Düzenleme önizlemeyi kaldırır:** düzenlenen mesajın eski önizlemesi her iki tarafta silinir, yenisi üretilmez.
 - **DNS yeniden bağlama (rebinding):** adres kontrolü ile bağlantı arasında DNS yanıtı değişirse koruma teorik olarak aşılabilir. Pratikte risk düşük; tam çözüm, kontrol edilen IP'ye doğrudan bağlanmaktır.
-- **Kapsam dışı:** gruplar, tek görünümlük mesajlar ve (şimdilik) web istemcisi. Web istemcisi `encrypted_preview` alanını yok sayar.
+- **Kapsam dışı:** gruplar ve tek görünümlük mesajlar.
+- **Web istemcisi yalnızca gösterir:** gelen önizlemeyi doğrular, temizler ve kart olarak gösterir; kendisi üretemez (tarayıcı CORS nedeniyle başka sitenin sayfasını okuyamaz). Web'den gönderilen linkler önizlemesiz gider.
+- **Sesli mesaj biçimi (web):** Chrome yalnızca WebM/Opus kaydedebildiği için web `voice-…webm` gönderir; masaüstü iki uzantıyı da tanır, eski masaüstü sürümleri `.webm`'i sıradan dosya olarak gösterir. Ogg/Opus oynatma tarayıcı desteğine bağlıdır (Chrome/Firefox/Edge oynatır; eski Safari sürümleri oynatamayabilir).
 
 ---
 

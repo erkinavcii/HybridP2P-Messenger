@@ -112,7 +112,7 @@
 ### 💬 Mesajlaşma Özellikleri
 - [x] **Tek Gorunumlu Mesaj (View-Once)** — per-mesaj toggle, 10s countdown, hic kaydedilmez ✅
 - [x] **Dosya/Resim Gonderimi** — AES-256-GCM sifreleme, sunucu Zero-Knowledge, inline resim ✅
-- [x] **Sesli Mesaj**: Mikrofon kaydi → Opus/Ogg (~4 KB/sn) → mevcut E2EE dosya yolu; alici hemen indirip yerelde saklar, yeniden baslatinca da dinlenebilir, ephemeral sohbette diske yazilmaz (masaustu) ✅ *(grup sohbetlerinde yok)*
+- [x] **Sesli Mesaj**: Mikrofon kaydi → Opus/Ogg (~4 KB/sn) → mevcut E2EE dosya yolu; alici hemen indirip yerelde saklar, yeniden baslatinca da dinlenebilir, ephemeral sohbette diske yazilmaz (masaustu + web; web Chrome'da WebM/Opus kaydeder, masaustu ikisini de tanir) ✅ *(grup sohbetlerinde yok)*
 - [x] **Grup Sohbeti**: Birden fazla aliciya sifreli simetrik mesaj (Shared Group Key + Rekeying) ✅
 - [x] **Mesaj Duzenleme/Silme**: Kendi mesajini duzenle / herkesten sil — imzali msg_uid (sunucu kimlikleri degistiremez), imzali message_edit/message_delete, yalnizca yazar (masaustu + web, birebir) ✅ *(grup ve ephemeral sohbetlerde, msg_uid oncesi eski mesajlarda yok)*
 - [x] **Okundu Bilgisi (Read Receipt)**: Mesajin alici tarafindan okunup okunmadigi (masaüstü & web tarafında çift yeşil tik) ✅
@@ -128,12 +128,12 @@
 
 ### 🎨 Arayüz ve UX İyileştirmeleri
 - [x] **Çoklu Sohbet Sekmesi**: Birden fazla kişiyle eş zamanlı sohbet (WhatsApp tarzı Inbox / Sohbet Listesi) ✅
-- [x] **Kişi Listesi / Rehber**: Yerel rehber diyaloğu — kişi listesi, isme göre arama, parmak izi kopyalama, sohbet açma, kişi silme (masaüstü) ✅ *(favoriler henüz yok)*
+- [x] **Kişi Listesi / Rehber**: Yerel rehber diyaloğu — kişi listesi, isme göre arama, parmak izi kopyalama, sohbet açma, kişi silme (masaüstü + web) ✅ *(favoriler henüz yok)*
 - [ ] **Bildirim Sistemi**: Masaüstü / mobil push bildirimleri
 - [x] **Tema Seçimi**: Açık/koyu mod — ayarlardan canlı geçiş, cihazda kalıcı; tüm renkler `desktop/theme.py` paletinde (masaüstü); web'de kenar çubuğu düğmesi + `styles.css` belirteçleri (web) ✅ *(özel renk temaları henüz yok)*
-- [x] **Profil Fotoğrafı / Avatar**: E2EE — her kişiye kendi anahtarıyla şifreli + imzalı (`avatar_update`), sunucu göremez; gelen resim 128px JPEG'e yeniden kodlanır, EXIF atılır (masaüstü) ✅
+- [x] **Profil Fotoğrafı / Avatar**: E2EE — her kişiye kendi anahtarıyla şifreli + imzalı (`avatar_update`), sunucu göremez; gelen resim 128px JPEG'e yeniden kodlanır, EXIF atılır (masaüstü + web; web'de canvas ile) ✅
 - [x] **Mesaj Tarih Ayracı**: Gün bazında mesaj gruplama — "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025" (masaüstü + web; web mesajları zaman damgasına göre sıralar) ✅
-- [x] **Link Önizleme**: gönderen çeker, alıcıya şifreli + mesaja bağlı imzalı gönderir (`encrypted_preview`); alıcı siteye bağlanmaz, sunucu URL'yi görmez; yerel ağ adresleri reddedilir; ayarlardan kapatılabilir (masaüstü) ✅
+- [x] **Link Önizleme**: gönderen çeker, alıcıya şifreli + mesaja bağlı imzalı gönderir (`encrypted_preview`); alıcı siteye bağlanmaz, sunucu URL'yi görmez; yerel ağ adresleri reddedilir; ayarlardan kapatılabilir (masaüstü üretir + gösterir; web yalnızca gösterir — tarayıcı CORS yüzünden siteyi okuyamaz) ✅
 - [x] **Ses ve Titreşim**: Yeni mesaj/dosya geldiğinde bildirim sesi — sounddevice ile üretilen çift ton, harici ses dosyası gerektirmez, arama sırasında susar (masaüstü; web'de WebAudio ile aynı ton, kenar çubuğundan kapatılabilir) ✅ *(titreşim mobil özelliği, kapsam dışı)*
 
 ### 🌐 Ağ ve Altyapı

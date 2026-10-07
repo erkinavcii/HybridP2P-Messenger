@@ -189,3 +189,22 @@ Doğrulama hâlâ geçiş kuralıyla çalışıyor:
 - **Web uyarısı kalıcı değil:** masaüstü engellenen mesaj uyarısını sohbet geçmişine yazıyor; web yalnızca o an açık sohbette gösteriyor.
 
 **Not:** Grup mesajlarında imza zaten **zorunlu** (imzasız/geçersiz grup mesajı her zaman reddediliyor).
+
+---
+
+## 8. Deployment — Docker ile Henüz Doğrulanmadı (2026-10-07)
+
+**Durum: BEKLEMEDE.** Geliştirme makinesinde Docker kurulu olmadığı için aşağıdakiler yazıldı ve testlerle kısmen doğrulandı, ama **Docker'da hiç çalıştırılmadı**. Kullanıcı kararı: deployment işleri (D1–D5, PWA, belgeler) bittikten sonra Docker Desktop kurulup topluca test edilecek.
+
+Docker olmadan doğrulananlar (pytest): üretim giriş noktası (`python server.py`), vekil arkasında gerçek istemci IP'si / sahte `X-Forwarded-For` reddi, `deploy/gen_cert.py` sertifika üretimi ve TLS el sıkışması, masaüstü https/wss + parmak izi sabitleme (gerçek uvicorn TLS sunucusuyla uçtan uca).
+
+**Docker kurulunca yapılacak test listesi:**
+1. `docker compose build` — imaj derleniyor mu, boyutu makul mü (yalnızca `requirements-server.txt`).
+2. B modu (yalnızca IP): `.env` → `HYBRIDP2P_SITE=127.0.0.1`; `docker compose up -d`; `docker compose logs certgen` parmak izini yazıyor mu; tarayıcı `https://127.0.0.1` (uyarı sonrası) çalışıyor mu; masaüstü parmak iziyle bağlanıyor mu; WebSocket `wss://` üzerinden geçiyor mu.
+3. Caddyfile: `{$HYBRIDP2P_TLS}` iki argümana (cert + key) doğru açılıyor mu; HTTP→HTTPS yönlendirmesi.
+4. Kalıcılık: `docker compose down && up` sonrası kullanıcılar/kuyruk duruyor mu (`data` volume); sertifika değişmiyor mu (`certs` volume).
+5. Konteyner sağlık kontrolü (`/health`) ve root olmayan kullanıcıyla `/data` yazma izni.
+6. Rate limit Caddy arkasında istemci başına mı çalışıyor (`HYBRIDP2P_FORWARDED_ALLOW_IPS=*`).
+7. `env_file: required: false` sözdizimi Docker Compose v2.24+ ister — eski sürümde hata verirse belgeye yazılmalı.
+8. coturn profili (D5) ve Cloudflare Tunnel demosu (D4) — eklendiklerinde.
+

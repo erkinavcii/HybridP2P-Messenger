@@ -44,6 +44,15 @@ import { loadAvatarCache, setOwnAvatar, broadcastAvatar, avatarUrl } from './ava
 // Initialize VoIP events
 initVoipEvents();
 
+// PWA service worker (kurulabilir uygulama + çevrimdışı arayüz kabuğu).
+// Yalnızca güvenli bağlamda çalışır: https veya localhost.
+if ("serviceWorker" in navigator && window.isSecureContext) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch((err) =>
+            console.warn("Service worker kaydedilemedi:", err));
+    });
+}
+
 // ── UI Interactions & Event Binding ──
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");

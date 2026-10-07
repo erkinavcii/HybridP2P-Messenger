@@ -206,5 +206,7 @@ Docker olmadan doğrulananlar (pytest): üretim giriş noktası (`python server.
 5. Konteyner sağlık kontrolü (`/health`) ve root olmayan kullanıcıyla `/data` yazma izni.
 6. Rate limit Caddy arkasında istemci başına mı çalışıyor (`HYBRIDP2P_FORWARDED_ALLOW_IPS=*`).
 7. `env_file: required: false` sözdizimi Docker Compose v2.24+ ister — eski sürümde hata verirse belgeye yazılmalı.
-8. coturn profili (D5) ve Cloudflare Tunnel demosu (D4) — eklendiklerinde.
+8. coturn profili (D5): `COMPOSE_PROFILES=turn` ile başlıyor mu; iki farklı ağdan (biri mobil veri) arama TURN üzerinden kuruluyor mu; özel IP'lere aktarım reddediliyor mu.
+9. Cloudflare Tunnel demosu (D4) — eklendiğinde.
+10. **PWA (D3), gerçek Chrome/Edge ile:** Claude'un gömülü tarayıcı paneli service worker kaydına izin vermiyor ("unknown error when fetching the script"), bu yüzden orada doğrulanamadı. Kontrol: adres çubuğunda "Uygulamayı yükle" çıkıyor mu; kurulan uygulama ayrı pencerede açılıyor mu; sunucu kapatılınca arayüz önbellekten açılıyor mu (bağlantı yok uyarısıyla); sunucu açılınca yeni sürüm hemen geliyor mu (önce-ağ politikası). pytest yalnızca manifest/ikonları ve önbellek listesinin eksiksiz ve sunulabilir olduğunu doğrular.
 

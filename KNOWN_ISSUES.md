@@ -137,13 +137,16 @@ Bu iş sırasında tam kod taraması yapılırken iki bulgu ortaya çıktı:
 ### 4.1 — Düzeltildi: `_update_ephemeral_ui`'da sarmalanmamış `page.update()`
 Bölüm 1'deki not güncellendi, bkz. yukarısı.
 
-### 4.2 — Belgelendi (düzeltilmedi, kapsam dışı): Pure P2P dialogu ile `ws_loop` arasında yarış penceresi
-`desktop/pure_p2p.py` (`open_pure_p2p_dialog`), WebRTC teklif/cevap üretimini `state["ws_loop"]` üzerinde `asyncio.run_coroutine_threadsafe(...)` ile çalıştırır. Bu event loop, `desktop/ws_client.py`'deki `_ws_listen` coroutine'i tarafından `WsClientMixin._run_ws_loop`'un başlattığı arka plan thread'inde kurulur (`self.state["ws_loop"] = asyncio.get_running_loop()`). Pure P2P dialogu sadece giriş yaptıktan sonra (inbox ekranından) açılabildiği ve giriş `background_sync` içinde `start_websocket_listener()`'ı hemen tetiklediği için pratikte bu sorun neredeyse hiç tetiklenmez — ama teorik olarak, kullanıcı giriş yaptıktan hemen sonra, WS thread'i `ws_loop`'u set etmeden önce Pure P2P dialogunu açarsa `state["ws_loop"]` hâlâ `None` olabilir ve `asyncio.run_coroutine_threadsafe(_setup_offer(), None)` hata fırlatır.
+### 4.2 — ✅ Çözüldü (2026-10-08, S1): Pure P2P ile `ws_loop` arasında yarış penceresi
+Sunucusuz bağlantılar artık sunucu WebSocket'inin loop'unu (`state["ws_loop"]`) kullanmıyor; `desktop/p2p_core.py` kendi arka plan loop'unu kuruyor (`get_loop()` / `run()`). `cleanup_call()` hangi loop'ta açıldıysa (`state["call_loop"]`) bağlantıyı orada kapatıyor. Yarış penceresi ortadan kalktı ve sunucu yokken kullanım (S2) için engel kalmadı.
 
-**Durum:** Bu modülerleştirme kapsamında davranış değiştirilmedi (agents.md §2.3 gereği, plan onaylanmadan davranış değişikliği yapılmaz) — sadece bulgu olarak belgeleniyor. Düzeltme önerisi: `open_pure_p2p_dialog` başında `if not self.state.get("ws_loop"): log_status("Lütfen birkaç saniye bekleyip tekrar deneyin"); return` gibi bir ön kontrol eklemek.
+### 4.3 — ✅ Çözüldü (2026-10-08, S1): Pure P2P kimlik doğrulaması
+Eskiden bağlantı kodları imzasızdı: kodu taşıyan kanalda araya giren biri kodu kendi koduyla değiştirip iki tarafla da (DTLS uçtan uca şifreli olsa bile) kendisi konuşabilirdi. Artık `h2` kodları gönderenin RSA kimlik anahtarıyla imzalı; imza SDP'nin tamamını (dolayısıyla DTLS parmak izini) ve cevap kodunda yanıtlanan teklifin özetini kapsıyor. Karşı taraf rehberle karşılaştırılıyor (doğrulandı / yeni / anahtar değişmiş → engel / imza geçersiz → engel). Eski `z1`/`v1` kodlar yalnızca uyarıyla ve yalnızca aramalar için kabul ediliyor. Ayrıntı: `desktop/p2p_core.py` başlığı.
 
-### 4.3 — Ayrıca belgelenmiş: Pure P2P güvenlik notu
-`open_pure_p2p_dialog`, hiçbir RSA/AES E2EE çağrısı yapmaz (sıfır çağrı `encrypt_message`/`decrypt_message`/`sign_data`/`verify_signature`'a) — güvenliği tamamen WebRTC'nin kendi DTLS-SRTP'sine bırakır ve genel STUN sunucularını sabit kodlar (`/api/ice_servers`'ı kullanmaz). Bu, tasarım gereği (sunucusuz mod E2EE anahtar değişimi altyapısına ihtiyaç duymaz) — bir hata değil, ama README'nin genel E2EE iddialarıyla karıştırılmaması için burada not edildi.
+**Kalan sınırlar:**
+- İmzalı kod ~2,8 KB: QR'ın en büyük boyutuna ancak sığıyor, ekrandan okutmak zor olabilir; kopyala-yapıştır her zaman çalışır.
+- Sunucusuz mod hâlâ herkese açık STUN kullanıyor (§9); STUN seçimi S4'te.
+- Web istemcisi `h2` kodlarını okuyor ama kimliği henüz doğrulamıyor ve yazılı mesajlaşmayı desteklemiyor (S3).
 
 ---
 

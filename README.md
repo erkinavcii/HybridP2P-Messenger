@@ -17,6 +17,7 @@ A secure, private, and lightweight hybrid peer-to-peer messaging application des
   * **TURN Fallback (Optional):** When a direct path is impossible (CGNAT, symmetric NAT), calls can be relayed through a TURN server such as the bundled coturn profile; the stream stays encrypted.
   * **Audio Processing:** The web client enables WebRTC echo cancellation, noise suppression and automatic gain control. *(Adaptive resolution/frame rate on weak connections is planned, not yet implemented.)*
 * **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with cryptographic rekeying upon member additions/removals (a removed member cannot read new messages), keeping upload bandwidth constant at $O(1)$. *(Per-message forward secrecy à la Signal's Double Ratchet is not implemented.)*
+* **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat today; file transfer and a server-free start are in progress.
 * **Secure Passwordless Authentication:** Connections and modifying API requests are authenticated using cryptographic challenges and RSA-PSS signatures.
 
 ---

@@ -31,6 +31,7 @@ from desktop.login_screen import LoginScreenMixin
 from desktop.inbox_screen import InboxScreenMixin
 from desktop.chat_screen import ChatScreenMixin
 from desktop.pure_p2p import PureP2PMixin
+from desktop.p2p_chat import P2PChatMixin
 from desktop.call_screen import CallScreenMixin
 
 
@@ -44,6 +45,7 @@ class MessengerApp(
     InboxScreenMixin,
     ChatScreenMixin,
     PureP2PMixin,
+    P2PChatMixin,
     CallScreenMixin,
 ):
     def __init__(self, page: ft.Page):

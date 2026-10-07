@@ -385,10 +385,13 @@ class CallScreenMixin:
         pc = self.state.get("active_pc")
         if pc:
             try:
-                asyncio.run_coroutine_threadsafe(pc.close(), self.state["ws_loop"])
+                # Sunucusuz bağlantılar kendi loop'unda yaşar (p2p_core); sunucu aramaları ws_loop'ta
+                loop = self.state.get("call_loop") or self.state["ws_loop"]
+                asyncio.run_coroutine_threadsafe(pc.close(), loop)
             except Exception as e:
                 pass
             self.state["active_pc"] = None
+            self.state["call_loop"] = None
 
         self.state["active_call_id"] = None
         self.state["call_role"] = None

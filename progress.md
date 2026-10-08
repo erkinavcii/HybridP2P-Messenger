@@ -145,7 +145,7 @@
 - [x] **NAT Traversal (STUN/TURN)**: Farklı ağlardaki cihazlar arası doğrudan bağlantı — STUN (Google ya da kendi coturn'ünüz), TURN aktarımı (coturn profili, kısa ömürlü kimlik) ✅
 - [ ] **Çoklu Sunucu (Federation)**: Farklı sunuculardaki kullanıcılar arası mesajlaşma (Matrix protokolü gibi)
 - [ ] **Tor/Onion Routing**: Anonim bağlantı desteği
-- [ ] **Tamamen Sunucusuz P2P Modu**: Manuel SDP (QR Kod/Metin) ve BitTorrent DHT sinyalleşme ile sıfır sunucu iletişimi *(kısmen: masaüstünde imzalı tek kullanımlık kodlarla doğrudan yazılı mesajlaşma ve arama (S1) ✅, dosya aktarımı (S1b) ✅; sunucusuz giriş / serverless_client.py (S2), serverless.html (S3), STUN seçimi (S4) ve DHT bekliyor)*
+- [ ] **Tamamen Sunucusuz P2P Modu**: Manuel SDP (QR Kod/Metin) ve BitTorrent DHT sinyalleşme ile sıfır sunucu iletişimi *(kısmen: masaüstünde imzalı tek kullanımlık kodlarla doğrudan yazılı mesajlaşma ve arama (S1) ✅, dosya aktarımı (S1b) ✅, sunucu olmadan başlatma — giriş ekranında "Sunucusuz başlat" ve `serverless_client.py` (S2) ✅; serverless.html (S3), STUN seçimi (S4) ve DHT bekliyor)*
 
 ### 📱 Platform Desteği
 - [ ] **Android APK Derleme**: Flet ile Android paketleme

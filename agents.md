@@ -61,7 +61,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 
 ### 5.1. Standalone / Basit Sunucusuz Uygulama (P2P Standalone)
 *Masaüstü ve web uygulamalarında P2P kodunu entegre ettik ancak bunu tamamen bağımsız, sunucu gerektirmeyen bağımsız tek bir script/sayfa olarak da sunacağız.*
-- [ ] **`serverless_client.py`:** Masaüstü için sadece manual SDP kopyala-yapıştır ile sesli/görüntülü P2P görüşme yapabilen, sunucuya kaydolma gerektirmeyen minimalist Python scripti.
+- [x] **`serverless_client.py`:** Sunucuya hiç bağlanmadan/kaydolmadan açılan masaüstü başlatıcısı: imzalı tek kullanımlık kodlarla doğrudan yazılı mesajlaşma, dosya aktarımı ve sesli/görüntülü arama. Aynı mod normal istemcide giriş ekranındaki "Sunucusuz başlat" ile de açılır.
 - [ ] **`static/serverless.html`:** Web tarayıcısı için sadece getUserMedia + RTCPeerConnection ile çalışan, sunucu bağlantısı veya IndexedDB gerektirmeyen tek sayfalık HTML/JS P2P arayüzü.
 
 ### 5.2. Modülerleştirme ve Refactoring (Modularization & Refactoring)

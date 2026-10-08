@@ -2,7 +2,8 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- resizes-content: klavye açılınca sayfa küçülür (sohbet başlığı ve kimlik rozeti kaybolmaz) -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <!--
   HybridP2P Messenger — sunucusuz ("telsiz") mod, tek dosya.
 
@@ -70,7 +71,12 @@
              justify-content: center; z-index: 10; }
   .qr-full img { width: min(96vw, 96vh); image-rendering: pixelated; }
   video.scan { width: 100%; border-radius: 8px; margin-top: 8px; }
-  #chat { display: flex; flex-direction: column; height: calc(100vh - 40px); max-height: 900px; }
+  /* Sohbet ekrana sabit: sayfa kaymaz (telefonda klavye açılınca başlık ve kimlik rozeti
+     yukarıda kaybolmasın); yalnızca mesaj listesi kayar. dvh: adres çubuğu/klavyeye uyar. */
+  #chat { display: flex; flex-direction: column; position: fixed; inset: 0; height: 100vh; height: 100dvh;
+          max-width: 560px; margin: 0 auto; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+          background: var(--bg); }
+  #chat.hidden { display: none; }
   #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
   .msg { max-width: 82%; padding: 8px 12px; border-radius: 14px; background: var(--surface-alt); word-wrap: break-word; }
   .msg.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
@@ -2955,12 +2961,16 @@ var qrcode = function() {
   }
   function openChat(id) {
     show("connect", false); show("contacts", false); show("identity", false); show("chat");
+    // Sayfa başlığını gizle: telefonda kiminle konuşulduğu ve doğrulama rozeti hep görünür kalsın
+    document.querySelector("main > h1").classList.add("hidden");
+    document.querySelector("main > p.sub").classList.add("hidden");
     $("peer-name").textContent = `Doğrudan bağlantı: ${id.username || "karşı taraf"}`;
     renderBadge(id);
     session.pc.onconnectionstatechange = () => {
       if (["failed", "closed", "disconnected"].includes(session.pc.connectionState)) closedChat(session.pc.connectionState);
     };
-    $("msg-input").focus();
+    // Dokunmatik cihazda otomatik odak klavyeyi açıp ekranı kaydırır; yalnızca fare/klavye ile odakla
+    if (!matchMedia("(pointer: coarse)").matches) $("msg-input").focus();
   }
   function renderBadge(id) {
     const b = $("peer-badge"); b.textContent = "";

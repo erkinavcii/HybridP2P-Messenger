@@ -47,7 +47,18 @@ export async function sha256(text) {
 }
 
 export async function getFingerprintJS(publicKeyPem) {
-    const normalizedPem = publicKeyPem.replace(/\r\n/g, "\n");
+    // Masaüstüyle (crypto_utils.get_public_key_fingerprint) birebir aynı olmalı: insanlar
+    // bu değeri karşılaştırarak araya girmeyi (MITM) yakalar. Python, standart PEM'in
+    // (64 karakterlik satırlar + SONDA satır sonu) SHA-256'sını alır. Eskiden burada PEM
+    // olduğu gibi özetleniyordu; web'de üretilen anahtarların PEM'i sondaki satır sonu
+    // olmadan saklandığı için web ve masaüstü AYNI anahtara FARKLI parmak izi gösteriyordu.
+    const body = publicKeyPem
+        .replace(/-----BEGIN PUBLIC KEY-----/, "")
+        .replace(/-----END PUBLIC KEY-----/, "")
+        .replace(/\s+/g, "");
+    let normalizedPem = "-----BEGIN PUBLIC KEY-----\n";
+    for (let i = 0; i < body.length; i += 64) normalizedPem += body.substring(i, i + 64) + "\n";
+    normalizedPem += "-----END PUBLIC KEY-----\n";
     const encoder = new TextEncoder();
     const pemBytes = encoder.encode(normalizedPem);
     const hashBuffer = await window.crypto.subtle.digest("SHA-256", pemBytes);

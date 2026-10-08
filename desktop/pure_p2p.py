@@ -168,6 +168,20 @@ class PureP2PMixin:
                                 read_only=read_only, border_color=C.surface_alt,
                                 focused_border_color=C.accent, text_size=10)
 
+        def paste_btn(field):
+            """Uzun kodu tek tıkla yapıştırmak için (klavye kısayolu gerekmez)."""
+            async def _paste(e):
+                try:
+                    text = await ft.Clipboard().get()
+                except Exception as ex:
+                    print(f"[P2P] Pano okunamadı: {ex}")
+                    text = None
+                if text:
+                    field.value = text.strip()
+                    self.page.update()
+            return ft.TextButton("Panodan yapıştır", icon=ft.Icons.CONTENT_PASTE, on_click=_paste,
+                                 style=ft.ButtonStyle(color=C.accent))
+
         # ════════════════ 1. sekme: bağlantıyı başlatan ════════════════
         mode_dd = ft.Dropdown(
             label="Bağlantı türü", value="chat", border_color=C.surface_alt, focused_border_color=C.accent,
@@ -365,10 +379,10 @@ class PureP2PMixin:
         caller_tab = tab_body([
             mode_dd, gen_offer_btn, caller_prog, caller_offer_tf, caller_copy_btn,
             ft.Divider(color=C.surface_alt, height=10),
-            caller_answer_tf, connect_btn, caller_ident, caller_status, caller_qr,
+            caller_answer_tf, paste_btn(caller_answer_tf), connect_btn, caller_ident, caller_status, caller_qr,
         ])
         callee_tab = tab_body([
-            callee_offer_tf, gen_answer_btn, callee_ident, callee_prog, callee_answer_tf,
+            callee_offer_tf, paste_btn(callee_offer_tf), gen_answer_btn, callee_ident, callee_prog, callee_answer_tf,
             callee_copy_btn, callee_status, callee_qr,
         ])
         tabs = ft.Tabs(

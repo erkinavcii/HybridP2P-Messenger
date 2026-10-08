@@ -32,6 +32,7 @@ from desktop.inbox_screen import InboxScreenMixin
 from desktop.chat_screen import ChatScreenMixin
 from desktop.pure_p2p import PureP2PMixin
 from desktop.p2p_chat import P2PChatMixin
+from desktop.serverless_screen import ServerlessScreenMixin
 from desktop.call_screen import CallScreenMixin
 
 
@@ -46,12 +47,15 @@ class MessengerApp(
     ChatScreenMixin,
     PureP2PMixin,
     P2PChatMixin,
+    ServerlessScreenMixin,
     CallScreenMixin,
 ):
-    def __init__(self, page: ft.Page):
+    def __init__(self, page: ft.Page, serverless_only: bool = False):
+        # serverless_only: serverless_client.py — sunucu alanları gizli, yalnızca "telsiz" modu
+        self.serverless_only = serverless_only
         # ── Sayfa Ayarları ────────────────────────────────────────────
         self.page = page
-        page.title       = "HybridP2P Messenger"
+        page.title       = "HybridP2P Messenger — Sunucusuz" if serverless_only else "HybridP2P Messenger"
         page.window.width  = 480
         page.window.height = 820
         page.padding     = 0
@@ -84,6 +88,7 @@ class MessengerApp(
             "audio_player":      None,
             "call_duration":     0,
             "remote_sdp":        None,
+            "serverless":        False,   # sunucusuz ("telsiz") modda mı
         }
 
         # Dosya seçici — Flet 0.85'te bir "servis"; yalnızca bir kez oluşturulur
@@ -124,7 +129,9 @@ class MessengerApp(
         # gerçek bağlantı durumunu geri yükle
         self.update_connection_status(self.is_ws_connected())
 
-        if not self.state.get("logged_in"):
+        if self.state.get("serverless"):
+            self.show_serverless_screen()
+        elif not self.state.get("logged_in"):
             self.show_login_screen()
         elif self.state.get("recipient"):
             # Kontroller yeni olduğundan yarım kalmış dosya/tek-görünüm seçimleri sıfırlanır
@@ -255,6 +262,28 @@ class MessengerApp(
             width=280, height=52,
         )
 
+        # Sunucu olmadan başlat: kayıt/WebSocket yok, yalnızca doğrudan bağlantılar
+        self.serverless_btn = ft.TextButton(
+            content=ft.Row([ft.Icon(ft.Icons.WIFI_TETHERING, size=18),
+                            ft.Text("Sunucusuz başlat (sunucu olmadan)", size=13)],
+                           alignment=ft.MainAxisAlignment.CENTER, spacing=6, tight=True),
+            on_click=self.on_serverless_start_click,
+            tooltip="Sunucuya bağlanmadan, iki taraf da açıkken bağlantı kodlarıyla doğrudan mesajlaşma",
+            style=ft.ButtonStyle(color=C.accent),
+        )
+        if self.serverless_only:
+            self.server_address_field.visible = False
+            self.tls_pin_field.visible = False
+            self.login_btn.visible = False
+            self.serverless_btn = ft.Button(
+                content=ft.Row([ft.Icon(ft.Icons.WIFI_TETHERING, size=20),
+                                ft.Text("Sunucusuz başlat", size=15, weight=ft.FontWeight.BOLD)],
+                               alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+                on_click=self.on_serverless_start_click, width=280, height=52,
+                style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent,
+                                     shape=ft.RoundedRectangleBorder(radius=8)),
+            )
+
         self.login_view = ft.Container(
             content=ft.Column(
                 controls=[
@@ -287,6 +316,8 @@ class MessengerApp(
                                 self.import_key_field,
                                 ft.Container(height=16),
                                 self.login_btn,
+                                ft.Container(height=6),
+                                self.serverless_btn,
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0,
                         ),

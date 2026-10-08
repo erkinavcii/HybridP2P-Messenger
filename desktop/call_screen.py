@@ -407,7 +407,9 @@ class CallScreenMixin:
             self.remote_video_view.visible = False
             self.call_timer_text.visible = False
 
-            if self.state.get("logged_in", False):
+            if self.state.get("serverless"):
+                self.show_serverless_screen()          # sunucusuz moddaki arama bitti
+            elif self.state.get("logged_in", False):
                 self.show_chat_screen()
             else:
                 self.show_login_screen()

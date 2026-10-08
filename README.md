@@ -17,7 +17,7 @@ A secure, private, and lightweight hybrid peer-to-peer messaging application des
   * **TURN Fallback (Optional):** When a direct path is impossible (CGNAT, symmetric NAT), calls can be relayed through a TURN server such as the bundled coturn profile; the stream stays encrypted.
   * **Audio Processing:** The web client enables WebRTC echo cancellation, noise suppression and automatic gain control. *(Adaptive resolution/frame rate on weak connections is planned, not yet implemented.)*
 * **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with cryptographic rekeying upon member additions/removals (a removed member cannot read new messages), keeping upload bandwidth constant at $O(1)$. *(Per-message forward secrecy à la Signal's Double Ratchet is not implemented.)*
-* **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat and file transfer (accept/reject, SHA-256 verified, up to 1 GB) work today, and the mode starts without contacting any server: use **"Sunucusuz başlat"** on the login screen or run `python serverless_client.py`. A standalone web page and STUN choice are in progress.
+* **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat and file transfer (accept/reject, SHA-256 verified, up to 1 GB) work today, and the mode starts without contacting any server: use **"Sunucusuz başlat"** on the login screen or run `python serverless_client.py`. On phones (or any browser) use **`serverless.html`**: a single self-contained file that can be opened from the relay (`/serverless.html`), any static host, or shared as a file; it talks to the desktop with the same signed codes, chat and file transfer, and its CSP forbids every network request except WebRTC. STUN choice is in progress.
 * **Secure Passwordless Authentication:** Connections and modifying API requests are authenticated using cryptographic challenges and RSA-PSS signatures.
 
 ---
@@ -279,6 +279,7 @@ HybridP2P-Messenger/
 │   ├── serverless_screen.py  # Server-free start screen (identity, contacts, contact cards)
 │   └── call_screen.py        # Server-mediated VoIP call screen & WebRTC
 ├── static/                # Web client (served by the relay at /)
+│   ├── serverless.html    # Single-file serverless page for phones (no server, shareable as a file)
 │   ├── index.html, css/   # Markup and styles (theme tokens, light/dark)
 │   ├── js/                # ES modules: app, ui, ws, crypto, db, avatar, voice, linkpreview, prefs, voip, state
 │   ├── manifest.webmanifest, icons/  # PWA (installable app)

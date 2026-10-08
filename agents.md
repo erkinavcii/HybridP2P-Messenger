@@ -62,7 +62,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 ### 5.1. Standalone / Basit Sunucusuz Uygulama (P2P Standalone)
 *Masaüstü ve web uygulamalarında P2P kodunu entegre ettik ancak bunu tamamen bağımsız, sunucu gerektirmeyen bağımsız tek bir script/sayfa olarak da sunacağız.*
 - [x] **`serverless_client.py`:** Sunucuya hiç bağlanmadan/kaydolmadan açılan masaüstü başlatıcısı: imzalı tek kullanımlık kodlarla doğrudan yazılı mesajlaşma, dosya aktarımı ve sesli/görüntülü arama. Aynı mod normal istemcide giriş ekranındaki "Sunucusuz başlat" ile de açılır.
-- [ ] **`static/serverless.html`:** Web tarayıcısı için sadece getUserMedia + RTCPeerConnection ile çalışan, sunucu bağlantısı veya IndexedDB gerektirmeyen tek sayfalık HTML/JS P2P arayüzü.
+- [x] **`static/serverless.html`:** Tek dosyalık, sunucusuz telefon/tarayıcı sayfası: masaüstüyle aynı imzalı kodlar, kimlik doğrulama, yazılı mesaj ve dosya aktarımı. Varsayılan hiçbir şey saklamaz; isteğe bağlı "Bu cihazda hatırla" IndexedDB kullanır. CSP WebRTC dışında her ağ isteğini yasaklar. Masaüstüyle uyumu Node.js üzerinden test edilir. *(Sesli/görüntülü arama S3b'de.)*
 
 ### 5.2. Modülerleştirme ve Refactoring (Modularization & Refactoring)
 *Tek dosyada biriken ve boyutu aşırı büyüyen web istemcisi (`static/index.html` — 4400+ satır), röle sunucusu (`server.py` — 1800+ satır) ve masaüstü istemcisi (`client.py` — 4372 satır) dosyalarının daha temiz, okunabilir ve yönetilebilir modüllere ayrılması.*

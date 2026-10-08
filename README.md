@@ -17,7 +17,7 @@ A secure, private, and lightweight hybrid peer-to-peer messaging application des
   * **TURN Fallback (Optional):** When a direct path is impossible (CGNAT, symmetric NAT), calls can be relayed through a TURN server such as the bundled coturn profile; the stream stays encrypted.
   * **Audio Processing:** The web client enables WebRTC echo cancellation, noise suppression and automatic gain control. *(Adaptive resolution/frame rate on weak connections is planned, not yet implemented.)*
 * **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with cryptographic rekeying upon member additions/removals (a removed member cannot read new messages), keeping upload bandwidth constant at $O(1)$. *(Per-message forward secrecy à la Signal's Double Ratchet is not implemented.)*
-* **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat and file transfer (accept/reject, SHA-256 verified, up to 1 GB) work today; starting this mode without any server, a standalone web page and STUN choice are in progress.
+* **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat and file transfer (accept/reject, SHA-256 verified, up to 1 GB) work today, and the mode starts without contacting any server: use **"Sunucusuz başlat"** on the login screen or run `python serverless_client.py`. A standalone web page and STUN choice are in progress.
 * **Secure Passwordless Authentication:** Connections and modifying API requests are authenticated using cryptographic challenges and RSA-PSS signatures.
 
 ---
@@ -253,6 +253,7 @@ HybridP2P-Messenger/
 │   ├── websocket_manager.py # ConnectionManager, online-user tracking
 │   └── routes/            # APIRouters: users, messages, groups, voip
 ├── client.py              # Thin entry point — MessengerApp wiring only
+├── serverless_client.py   # Starts straight into serverless mode (no server contact at all)
 ├── desktop/                # Flet desktop client package (mixins on MessengerApp)
 │   ├── net_config.py       # Server URL (http/https, ws/wss) state, file-type helpers
 │   ├── tls_pin.py          # Certificate pinning for self-signed (IP-only) servers
@@ -271,7 +272,11 @@ HybridP2P-Messenger/
 │   ├── login_screen.py       # Login flow & key import
 │   ├── inbox_screen.py       # Chat list, new-chat/group/settings dialogs
 │   ├── chat_screen.py        # Active chat: connect, send, recipient status
-│   ├── pure_p2p.py           # Serverless manual-SDP P2P calling dialog
+│   ├── pure_p2p.py           # Serverless connection dialog (signed one-time codes)
+│   ├── p2p_core.py           # Serverless core: signed codes, identity check, data-channel protocol
+│   ├── p2p_chat.py           # Serverless chat + file transfer window
+│   ├── p2p_files.py          # Serverless file transfer (accept, chunks, SHA-256, safe names)
+│   ├── serverless_screen.py  # Server-free start screen (identity, contacts, contact cards)
 │   └── call_screen.py        # Server-mediated VoIP call screen & WebRTC
 ├── static/                # Web client (served by the relay at /)
 │   ├── index.html, css/   # Markup and styles (theme tokens, light/dark)

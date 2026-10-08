@@ -146,7 +146,8 @@ Eskiden bağlantı kodları imzasızdı: kodu taşıyan kanalda araya giren biri
 **Kalan sınırlar:**
 - İmzalı kod ~2,8 KB: QR'ın en büyük boyutuna ancak sığıyor, ekrandan okutmak zor olabilir; kopyala-yapıştır her zaman çalışır.
 - Sunucusuz mod hâlâ herkese açık STUN kullanıyor (§9); STUN seçimi S4'te.
-- Web istemcisi `h2` kodlarını okuyor ama kimliği henüz doğrulamıyor ve yazılı mesajlaşmayı desteklemiyor (S3).
+- Web istemcisi `h2` kodlarını okuyor ama kimliği henüz doğrulamıyor ve yazılı mesajlaşmayı / dosya aktarımını desteklemiyor (S3).
+- Dosya aktarımı (S1b): yalnızca iki taraf da açıkken; yarıda kesilirse kaldığı yerden devam etmez (yeniden gönderilmeli). aiortc'nin veri kanalı hızı sınırlıdır — çok büyük dosyalar (yüzlerce MB) yavaş olabilir. Sohbet geçmişine dosyanın kendisi değil, yalnızca "gönderildi/alındı" kaydı düşer.
 
 ---
 

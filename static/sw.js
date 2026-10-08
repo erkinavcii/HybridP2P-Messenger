@@ -9,9 +9,10 @@
 // veriler) ve başka sitelerden gelen istekler. Şifresi çözülmüş mesaj/medya
 // zaten IndexedDB'de durur; service worker hiçbir içeriği görmez/saklamaz.
 
-const CACHE = "hybridp2p-shell-v1";
+const CACHE = "hybridp2p-shell-v2";
 const SHELL = [
     "/",
+    "/serverless.html",
     "/manifest.webmanifest",
     "/css/styles.css",
     "/js/app.js", "/js/avatar.js", "/js/crypto.js", "/js/db.js", "/js/linkpreview.js",

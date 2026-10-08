@@ -28,6 +28,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import re
 import secrets
 import threading
 import time
@@ -52,6 +53,7 @@ MAX_CODE_AGE_SEC = 24 * 3600       # bayat kodlar reddedilir
 MAX_CLOCK_SKEW_SEC = 15 * 60       # karşı tarafın saati ileride olabilir
 CHANNEL_LABEL = "hp2p"             # veri kanalı adı (sohbet + dosya)
 MAX_TEXT_CHARS = 8000
+FILE_FRAME_TYPES = ("file_offer", "file_accept", "file_reject", "file_end", "file_cancel")
 MAX_FRAME_BYTES = 256 * 1024
 
 VERIFIED, NEW, KEY_CHANGED, INVALID, LEGACY = "verified", "new", "key_changed", "invalid", "legacy"
@@ -231,7 +233,6 @@ def identify_peer(env: Envelope, contact_lookup, expected_type: str, own_offer_s
 
 
 def _valid_username(name: str) -> bool:
-    import re
     return bool(re.fullmatch(r"[a-z0-9_]{2,32}", name or ""))
 
 
@@ -251,7 +252,7 @@ def ack_frame(msg_id: str) -> str:
 def parse_frame(raw) -> dict | None:
     """Gelen çerçeveyi doğrular. Geçersiz/bilinmeyen → None."""
     if isinstance(raw, bytes):
-        return None                               # ikili çerçeveler dosya aktarımına ait (S1b)
+        return None                               # ikili çerçeveler dosya parçasıdır (p2p_files)
     if not isinstance(raw, str) or len(raw) > MAX_FRAME_BYTES:
         return None
     try:
@@ -266,6 +267,16 @@ def parse_frame(raw) -> dict | None:
         return {"t": "msg", "id": f["id"][:64], "text": f["text"][:MAX_TEXT_CHARS], "ts": ts}
     if t == "ack" and isinstance(f.get("id"), str):
         return {"t": "ack", "id": f["id"][:64]}
+    # Dosya aktarımı (desktop/p2p_files.py): fid = 32 onaltılık karakter
+    fid = f.get("fid")
+    if t in FILE_FRAME_TYPES and isinstance(fid, str) and re.fullmatch(r"[0-9a-f]{32}", fid):
+        if t == "file_offer":
+            name, size, digest = f.get("name"), f.get("size"), f.get("sha256")
+            if (isinstance(name, str) and isinstance(size, int) and not isinstance(size, bool)
+                    and isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest)):
+                return {"t": t, "fid": fid, "name": name[:255], "size": size, "sha256": digest}
+            return None
+        return {"t": t, "fid": fid}
     return None
 
 

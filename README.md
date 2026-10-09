@@ -231,7 +231,8 @@ For scenarios where both devices are restricted behind strict symmetric NAT fire
 
 ### 4. Audio Processing & Planned Quality Adaptation
 * **Implemented:** the web client requests WebRTC's echo cancellation (AEC), noise suppression (ANS) and automatic gain control (AGC) for the microphone.
-* **Planned (not yet implemented):** adapting resolution and frame rate to connection quality (e.g. 720p@30 → 360p@15 based on `getStats()`), keeping audio prioritised over video, and preferring hardware-accelerated codecs. Tracked in AGENTS.md §5.3.
+* **Adaptive quality on weak links:** every 2 s the call reads packet loss and round-trip time from `getStats()`. Sustained loss or delay steps video down (browser: 720p@30 → 480p@24 → 360p@15 → 180p@10; desktop: 640×480@15 → … → 160×120@8) and a stable link steps it back up, with back-off so a borderline link does not flap. Audio is never reduced and gets high network priority. The same rule runs on desktop, the web client and `serverless.html` (KNOWN_ISSUES §10).
+* **Planned:** preferring hardware-accelerated codecs.
 
 ---
 

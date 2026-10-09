@@ -617,7 +617,7 @@ Tarayıcılar WebRTC'yi yerleşik olarak destekler. `RTCPeerConnection`, `getUse
 #### 2.4 — Bağlantı Kalitesi İzleme
 
 - [x] **ICE bağlantı durumu:** `peerConnection.oniceconnectionstatechange` ile bağlantı durumunu izle (`checking`, `connected`, `disconnected`, `failed`). `failed` durumunda otomatik yeniden bağlanma dene veya aramayı sonlandır.
-- [ ] **Ağ istatistikleri:** `peerConnection.getStats()` ile periyodik olarak RTT (gecikme), packet loss, jitter değerlerini oku. Bağlantı kalitesi düşükse kullanıcıya bilgi ikonu göster.
+- [x] **Ağ istatistikleri:** `peerConnection.getStats()` ile her 2 sn RTT ve kayıp okunur; zayıf bağlantıda görüntü otomatik düşürülür ve "Bağlantı zayıf" gösterilir (`static/js/quality.js`, 2026-10-09).
 
 ---
 
@@ -746,7 +746,7 @@ Grup aramaları için iki mimari seçenek vardır:
   - `echoCancellation: true` (Akustik Yankı Giderici)
   - `noiseSuppression: true` (Gürültü Bastırma)
   - `autoGainControl: true` (Otomatik Kazanç Kontrolü)
-- [ ] **Ağ İstatistiklerini İzleme ve Kullanıcı Bildirimi:** `RTCPeerConnection.getStats()` API'sini her 2 saniyede bir sorgulayarak packet loss, jitter ve RTT (Round Trip Time) değerlerini oku. Bağlantı kalitesi bozulduğunda arayüzde bir "Zayıf Bağlantı" uyarısı göster.
+- [x] **Ağ İstatistiklerini İzleme ve Kullanıcı Bildirimi:** Masaüstünde `desktop/call_quality.py` her 2 sn aiortc istatistiğinden kayıp/RTT okur, kamerayı küçültür ve arama ekranında uyarı gösterir (2026-10-09).
 
 
 ---

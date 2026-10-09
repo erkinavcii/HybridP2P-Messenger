@@ -236,3 +236,26 @@ Kurallar `desktop/p2p_core.py` (`ice_servers_for`) ve sayfadaki `P2PCore.iceServ
 - Özel TURN şifresi ayarlarda düz metin durur (masaüstü `settings.json`, sayfada "hatırla" açıksa IndexedDB).
 - Ana web istemcisinin (`index.html`) eski sunucusuz arama kodu hâlâ sabit Google + Cloudflare kullanıyor (`static/js/voip.js`); tarayıcıda sunucusuz kullanım için `serverless.html` önerilir.
 
+---
+
+## 10. Arama Kalitesi ve Masaüstü Arama Medyası (2026-10-09)
+
+### 10.1 — ✅ Düzeltildi: masaüstü aramalarda ses/görüntü hiç gitmiyor ve duyulmuyordu
+Otomatik kalite işi sırasında yazılan testler, masaüstü aramalarında eskiden beri duran üç hata buldu (`desktop/voip_tracks.py`, `desktop/call_screen.py`):
+- **Ses ve görüntü gönderilmiyordu:** `MicrophoneTrack` ve `CameraTrack` zaman tabanı için `av.Fraction` kullanıyordu; PyAV 16'da (requirements: `av>=16.0.1`) bu yok — ikisi de ilk karede çöküyordu. Artık `fractions.Fraction`.
+- **Karşı tarafın sesi duyulmuyordu:** aiortc Opus'u her zaman stereo çözer; `AudioPlayer` bunu mono tampona yazmaya çalışıyor, boyut hatası yutulup sessizlik çalınıyordu. Artık mono'ya çevriliyor; ses kartı iş parçacığıyla güvenli, en fazla 0,5 sn'lik bir tampon kullanılıyor.
+- **Görüntü çizilmiyordu:** `Image.src_base64` Flet 0.85'te yok (atama sessizce boşa gidiyordu). Artık data URL. Kendi önizlemeniz de gönderilen akıştan kare "çalmıyor" (gönderilen kare hızı yarıya düşüyordu); gönderilen son kareyi gösteriyor.
+
+Bu düzeltmeler birim testleriyle doğrulandı (gerçek Opus kodlama/çözme dahil). **Gerçek mikrofon/kamerayla masaüstü ↔ masaüstü ya da masaüstü ↔ telefon araması henüz yapılmadı** — ilk gerçek denemede ses gecikmesi/yankısı gözlenmeli (masaüstünde yankı giderme yok).
+
+### 10.2 — Zayıf bağlantıda otomatik kalite
+Her 2 sn'de kayıp ve RTT okunur (`desktop/call_quality.py`, `static/js/quality.js`, `serverless.html` içinde aynı kural; testlerle karşılaştırılıyor):
+- kayıp > %8 ya da RTT > 400 ms üst üste 2 kez → görüntü bir basamak düşer; kayıp < %2 ve RTT < 250 ms üst üste 5 kez → bir basamak çıkar. Yükseltmeden kısa süre sonra yine düşerse sonraki yükseltme için gereken sayı ikiye katlanır (en fazla 30 ≈ 60 sn).
+- Tarayıcı: 720p@30 → 480p@24 → 360p@15 → 180p@10 (çözünürlük, kare hızı ve bit hızı sınırı); ses akışına yüksek ağ önceliği. Masaüstü: 640×480@15 → 480×360@12 → 320×240@10 → 160×120@8.
+- Ses hiç kısılmaz. Arama ekranında "Bağlantı zayıf…" etiketi görünür.
+
+**Bilinçli karar:** tarayıcının bant tahmini ("bandwidth" kısıtı / `availableOutgoingBitrate`) kullanılmıyor. Emülatör denemesinde bizim bit hızı sınırımızın tahmini aşağıda tuttuğu, böylece "kısıtlı" sinyalinin kendini beslediği ve ağ düzelince kalitenin hiç geri çıkmadığı görüldü. Tarayıcı bant uyarlamasını zaten kendisi yapıyor; bu katman yalnızca gerçek tıkanıklığa (kayıp, gecikme) tepki veriyor.
+
+**Doğrulama:** Android emülatöründe (Chrome) telefon ↔ masaüstü (aiortc) görüntülü aramada, masaüstü tarafı gelen görüntü paketlerinin %25'ini atarak gerçek RTCP kaybı üretti: telefon ~7 sn'de 480p → 360p → 180p'ye indi, kayıp bitince ~35 sn'de basamak basamak tam kaliteye döndü; normal ağda yanlış alarm olmadı, ses hiç kesilmedi. (Emülatörün `network speed/delay` komutları Wi-Fi trafiğini kısmadığı için kayıp bu yolla üretildi.) Masaüstünün kendi kamerasını küçültmesi birim testleriyle doğrulandı; gerçek ağda denenmedi.
+
+**Sınırlar:** Masaüstü gelen görüntüyü (aiortc) değil yalnızca kendi gönderdiğini ayarlar. Sesli aramalarda düşürülecek görüntü olmadığından yalnızca uyarı gösterilir. Eşikler deneyle seçildi; gerçek mobil ağlarda ayar gerekebilir.

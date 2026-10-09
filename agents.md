@@ -73,7 +73,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 
 ### 5.3. Sinyalleşme ve NAT Optimizasyonları
 - [ ] **BitTorrent DHT Prototipi:** `serverless_client.py` içerisinde oda ismi/parolası hash'i üzerinden infohash arayarak otomatik P2P buluşma (rendezvous) prototipi.
-- [ ] **Dinamik Kalite Adaptasyonu (VoIP Polish):** `getStats()` verisine göre zayıf bağlantılarda çözünürlüğü ve kare hızını dinamik düşürme (örn. 720p@30fps -> 360p@15fps), ses önceliğini yüksek tutma.
+- [x] **Dinamik Kalite Adaptasyonu (VoIP Polish):** `getStats()` kaybı/RTT'si ile görüntü basamak basamak düşer/çıkar (geri çekilmeli), ses öncelikli. Aynı kural `desktop/call_quality.py`, `static/js/quality.js` ve `serverless.html`'de; testlerle karşılaştırılıyor. Bu iş sırasında masaüstü arama medyasındaki eski hatalar da düzeltildi (KNOWN_ISSUES §10).
 
 ### 5.4. Eksik UX & Güvenlik Özellikleri
 - [ ] **Özel Anahtar Şifreleme (Private Key Encryption):** Yerel cihazdaki private key'lerin kullanıcı şifresiyle şifrelenip PEM olarak diske yazılması. *(Geliştirme sürecinde anahtara kolay erişim için bilinçli olarak ertelendi; yayın öncesi ele alınacak.)*

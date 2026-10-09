@@ -63,6 +63,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 *Masaüstü ve web uygulamalarında P2P kodunu entegre ettik ancak bunu tamamen bağımsız, sunucu gerektirmeyen bağımsız tek bir script/sayfa olarak da sunacağız.*
 - [x] **`serverless_client.py`:** Sunucuya hiç bağlanmadan/kaydolmadan açılan masaüstü başlatıcısı: imzalı tek kullanımlık kodlarla doğrudan yazılı mesajlaşma, dosya aktarımı ve sesli/görüntülü arama. Aynı mod normal istemcide giriş ekranındaki "Sunucusuz başlat" ile de açılır.
 - [x] **`static/serverless.html`:** Tek dosyalık, sunucusuz telefon/tarayıcı sayfası: masaüstüyle aynı imzalı kodlar, kimlik doğrulama, yazılı mesaj ve dosya aktarımı. Varsayılan hiçbir şey saklamaz; isteğe bağlı "Bu cihazda hatırla" IndexedDB kullanır. CSP WebRTC dışında her ağ isteğini yasaklar. Masaüstüyle uyumu Node.js üzerinden test edilir. Sesli/görüntülü arama da var (S3b).
+- [x] **Android uygulaması (APK):** `android/` — `serverless.html`'i saran Java uygulaması (`com.erkin.hybridp2p`, debug imzalı); köprüyle dosya kaydetme, paylaşma, pano, ZXing QR okuma, ekranı açık tutma. Emülatörde doğrulandı (KNOWN_ISSUES §11).
 - [x] **STUN seçimi (S4):** Masaüstü ve `serverless.html`'de Google + Cloudflare / yalnızca biri / özel STUN-TURN / yalnızca yerel ağ. Kurallar `p2p_core.ice_servers_for` ile sayfadaki `P2PCore.iceServersFor`'da birebir (KNOWN_ISSUES §9).
 
 ### 5.2. Modülerleştirme ve Refactoring (Modularization & Refactoring)

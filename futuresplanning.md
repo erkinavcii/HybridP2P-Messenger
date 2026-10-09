@@ -841,5 +841,6 @@ Kullanıcıların fiziki olarak kod taşımak istemediği durumlarda, merkeziyet
 - [x] **Manuel Giriş Alanları:** QR kod kamerası olmayan masaüstü kullanıcıları için SDP yapıştırma textbox'ları ekle.
 - [ ] **DHT Entegrasyonu:** Python tarafında hafif bir DHT kütüphanesi (örn. `bittorrent-dht` veya `kademlia` türevi) kullanarak eş bulma ve sinyalleşme mekanizmasını prototiple.
 - [x] **STUN Entegrasyonu:** Pure P2P modunda sadece ücretsiz ve güvenilir genel STUN sunucularını (Google, Cloudflare) kullanacak şekilde WebRTC yapılandırmasını kısıtla.
+- [x] **STUN Seçimi (S4, 2026-10-09):** Masaüstü ve `serverless.html`'de "Bağlantı yardımcısı": Google + Cloudflare (varsayılan), yalnızca biri, özel STUN/TURN (kullanıcı/şifre ile) ya da yalnızca yerel ağ (hiçbir dış istek yok). Ayrıntı: KNOWN_ISSUES §9.
 
 

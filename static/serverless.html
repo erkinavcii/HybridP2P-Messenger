@@ -2925,6 +2925,8 @@ var qrcode = function() {
 (function () {
   const C = window.P2PCore;
   const $ = (id) => document.getElementById(id);
+  // Android uygulamasında (android/) WebView'in yapamadıklarını yapan köprü; tarayıcıda yok
+  const NATIVE = window.HybridP2PAndroid || null;
   const me = { username: "", priv: null, pubDer: null, fp: "", remember: false };
   const contacts = new Map();                 // kullanıcı adı → { fp, pubDer }
   const session = { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" };
@@ -3038,6 +3040,7 @@ var qrcode = function() {
 
   // ── pano, paylaşım, QR ──
   async function copyText(text, note) {
+    if (NATIVE) { NATIVE.copy(text); return toast(note || "Kopyalandı."); }
     try { await navigator.clipboard.writeText(text); toast(note || "Kopyalandı."); }
     catch (e) { toast("Panoya yazılamadı; metni seçip elle kopyalayın."); }
   }
@@ -3047,11 +3050,12 @@ var qrcode = function() {
     if (t.dataset.copy) copyText($(t.dataset.copy).value);
     if (t.dataset.share) {
       const text = $(t.dataset.share).value;
-      if (navigator.share) { try { await navigator.share({ text }); } catch (e) {} }
+      if (NATIVE) NATIVE.share(text);
+      else if (navigator.share) { try { await navigator.share({ text }); } catch (e) {} }
       else copyText(text, "Paylaşım desteklenmiyor; kod panoya kopyalandı.");
     }
     if (t.dataset.paste) {
-      try { $(t.dataset.paste).value = (await navigator.clipboard.readText()).trim(); }
+      try { $(t.dataset.paste).value = (NATIVE ? NATIVE.paste() : await navigator.clipboard.readText()).trim(); }
       catch (e) { toast("Panoya erişilemedi; kodu alana uzun basıp yapıştırın."); }
     }
     if (t.dataset.scan) scanInto($(t.dataset.scan));
@@ -3077,10 +3081,17 @@ var qrcode = function() {
       box.append(note);
     }
   }
-  // QR okuma: tarayıcının yerleşik BarcodeDetector'ı (Android Chrome var; iOS Safari yok)
-  const canScan = "BarcodeDetector" in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+  // QR okuma: Android uygulamasında ZXing (köprü), tarayıcıda yerleşik BarcodeDetector
+  // (Android Chrome'da var; iOS Safari'de yok)
+  const canScan = !!NATIVE || ("BarcodeDetector" in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   document.querySelectorAll(".scan-btn").forEach((b) => b.classList.toggle("hidden", !canScan));
   async function scanInto(target) {
+    if (NATIVE) {
+      const text = await new Promise((res) => { window.__hp2pScanResult = res; NATIVE.scanQr(); });
+      window.__hp2pScanResult = null;
+      if (text) target.value = text.trim(); else toast("QR okunmadı.");
+      return;
+    }
     const video = $("scan-video"); let stream;
     try {
       const det = new BarcodeDetector({ formats: ["qr_code"] });
@@ -3307,6 +3318,7 @@ var qrcode = function() {
       setStatus($("call-quality"), C.qualityLabel(level, hasVideo), ""));
     call.started = Date.now();
     call.timer = setInterval(() => { $("call-timer").textContent = fmtDuration(Date.now() - call.started); }, 1000);
+    if (NATIVE) NATIVE.keepScreenOn(true);
     try { call.wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { call.wakeLock = null; }
   }
   function fmtDuration(ms) {
@@ -3322,6 +3334,7 @@ var qrcode = function() {
     if (call.stopQuality) { call.stopQuality(); call.stopQuality = null; }
     clearInterval(call.timer); call.timer = null;
     if (call.wakeLock) { call.wakeLock.release().catch(() => {}); call.wakeLock = null; }
+    if (NATIVE) NATIVE.keepScreenOn(false);
     const dur = call.started ? " · süre " + fmtDuration(Date.now() - call.started) : "";
     if (!call.open) {                                       // bağlanmadan bitti: kod ekranında bildir
       const target = $("offer-box").classList.contains("hidden") ? $("answer-status") : $("start-status");
@@ -3371,6 +3384,7 @@ var qrcode = function() {
     clearInterval(call.timer);
     if (call.stopQuality) call.stopQuality();
     if (call.wakeLock) { call.wakeLock.release().catch(() => {}); }
+    if (NATIVE) NATIVE.keepScreenOn(false);
     Object.assign(session, { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" });
     Object.assign(call, { open: false, ended: false, timer: null, started: 0, wakeLock: null, stopQuality: null });
     micOn = camOn = true; ["btn-mic", "btn-cam"].forEach((b) => $(b).classList.remove("off"));
@@ -3551,9 +3565,29 @@ var qrcode = function() {
     const blob = new Blob(inc.parts); inc.parts = [];
     if (await C.sha256hex(await blob.arrayBuffer()) !== inc.offer.sha256)
       return inc.card.done("⛔ SHA-256 tutmuyor — dosya bozuk ya da değiştirilmiş; atıldı.", "bad");
+    const name = C.safeFilename(inc.offer.name);
+    if (NATIVE) {                    // WebView "blob:" indiremez: uygulama İndirilenler'e yazar
+      const btn = button("💾 Kaydet", async () => {
+        btn.disabled = true;
+        const where = await nativeSave(blob, name);
+        if (where) inc.card.done(`✓ Kaydedildi: ${where}/${name}`, "ok");
+        else { inc.card.done("Kaydedilemedi.", "bad", [btn]); btn.disabled = false; }
+      }, "primary");
+      return inc.card.done("✓ Alındı ve doğrulandı.", "ok", [btn]);
+    }
     const a = document.createElement("a"); a.className = "btn"; a.href = URL.createObjectURL(blob);
-    a.download = C.safeFilename(inc.offer.name); a.textContent = "💾 Kaydet";
+    a.download = name; a.textContent = "💾 Kaydet";
     inc.card.done("✓ Alındı ve doğrulandı.", "ok", [a]);
+  }
+  async function nativeSave(blob, name) {
+    const id = NATIVE.saveBegin(name);
+    if (!id) return "";
+    const CH = 512 * 1024;                                   // köprüden parça parça (bellek)
+    for (let off = 0; off < blob.size; off += CH) {
+      const part = new Uint8Array(await blob.slice(off, off + CH).arrayBuffer());
+      if (!NATIVE.saveChunk(id, C.b64(part))) { NATIVE.saveAbort(id); return ""; }
+    }
+    return NATIVE.saveEnd(id);
   }
 
   // ── açılış: hatırlanan kimlik varsa yükle ──

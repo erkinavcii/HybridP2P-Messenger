@@ -1,0 +1,40 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.erkin.hybridp2p"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.erkin.hybridp2p"
+        // 29 (Android 10): dosyalar izin istemeden MediaStore ile İndirilenler'e kaydedilir
+        minSdk 29
+        targetSdk 36
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Şimdilik yayın anahtarı yok: test için debug imzası kullanılır (assembleDebug)
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Sayfanın tek kaynağı static/serverless.html: derlemede kopyalanır, elle senkronize edilmez
+    sourceSets {
+        main.assets.srcDirs += layout.buildDirectory.dir("generated/page")
+    }
+}
+
+def copyServerlessPage = tasks.register("copyServerlessPage", Copy) {
+    from(rootProject.file("../static/serverless.html"))
+    into(layout.buildDirectory.dir("generated/page"))
+}
+tasks.named("preBuild") { dependsOn(copyServerlessPage) }

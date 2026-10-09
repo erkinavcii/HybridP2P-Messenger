@@ -259,3 +259,18 @@ Her 2 sn'de kayıp ve RTT okunur (`desktop/call_quality.py`, `static/js/quality.
 **Doğrulama:** Android emülatöründe (Chrome) telefon ↔ masaüstü (aiortc) görüntülü aramada, masaüstü tarafı gelen görüntü paketlerinin %25'ini atarak gerçek RTCP kaybı üretti: telefon ~7 sn'de 480p → 360p → 180p'ye indi, kayıp bitince ~35 sn'de basamak basamak tam kaliteye döndü; normal ağda yanlış alarm olmadı, ses hiç kesilmedi. (Emülatörün `network speed/delay` komutları Wi-Fi trafiğini kısmadığı için kayıp bu yolla üretildi.) Masaüstünün kendi kamerasını küçültmesi birim testleriyle doğrulandı; gerçek ağda denenmedi.
 
 **Sınırlar:** Masaüstü gelen görüntüyü (aiortc) değil yalnızca kendi gönderdiğini ayarlar. Sesli aramalarda düşürülecek görüntü olmadığından yalnızca uyarı gösterilir. Eşikler deneyle seçildi; gerçek mobil ağlarda ayar gerekebilir.
+
+---
+
+## 11. Android Uygulaması (APK) — Durum ve Sınırlar (2026-10-10)
+
+`android/` — `static/serverless.html`'i saran küçük bir uygulama (Java, paket `com.erkin.hybridp2p`, minSdk 29 / Android 10). Sayfa derlemede kopyalanır ve APK'nın içinden `https://appassets.androidplatform.net/serverless.html` adresiyle sunulur (güvenli bağlam: WebCrypto, kamera, mikrofon çalışır). İnternetten hiçbir şey yüklenmez, başka adrese gidilemez. Sayfa, `window.HybridP2PAndroid` köprüsü varsa onu kullanır: dosyayı İndirilenler/HybridP2P'ye kaydetme, paylaş menüsü, pano, QR okuma (ZXing), arama sırasında ekranı açık tutma.
+
+**Emülatörde doğrulananlar** (Pixel 8a, Android, masaüstü tarafı aiortc): kimlik üretimi, imzalı kod takası, mesajlaşma, gelen dosyanın İndirilenler'e kaydı (SHA-256 aynı), görüntülü arama (uygulamanın kamera/mikrofon izin akışıyla), ekranı açık tutma, pano, paylaş menüsü, QR okuyucunun açılması ve vazgeçince sayfaya boş sonuç dönmesi.
+
+**Sınırlar / açık işler:**
+- **Debug imzası:** test ve elden kurulum için. Mağaza/F-Droid ya da güncellenebilir dağıtım için kullanıcının kendi yayın anahtarı gerekir (anahtar repoda tutulmaz).
+- **QR'ı gerçekten çözme denenmedi:** emülatörün sanal kamerasına QR verilemedi; gerçek telefonda denenmeli. İmzalı görüntülü arama kodları (~4 KB) QR'a sığmaz; sayfa bunu söyler, kopyala/paylaş kullanılır.
+- **ZXing (`zxing-android-embedded` 4.3.0) 2021'den beri güncellenmiyor** ve çalışırken `androidx.core`'u kullandığı hâlde POM'unda bildirmiyor; bildirilmeyince tarayıcı ilk açılışta çöküyordu. Bu yüzden `androidx.core:core:1.17.0` açıkça eklendi; APK bu bağımlılıkların yüzünden ~7 MB (yalnızca köprüyle ~0,7 MB idi). Yayın derlemesinde küçültme (R8) açılarak boyut düşürülebilir.
+- **Geri tuşu** bağlantıyı kapatmasın diye uygulamayı arka plana alır; Android arka plandaki uygulamayı bir süre sonra durdurabilir (uzun görüşmeler için ön plan hizmeti yok).
+- Gerçek telefonda (özellikle Google'sız Android'de) denenmedi.

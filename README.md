@@ -17,7 +17,7 @@ A secure, private, and lightweight hybrid peer-to-peer messaging application des
   * **TURN Fallback (Optional):** When a direct path is impossible (CGNAT, symmetric NAT), calls can be relayed through a TURN server such as the bundled coturn profile; the stream stays encrypted.
   * **Audio Processing:** The web client enables WebRTC echo cancellation, noise suppression and automatic gain control. *(Adaptive resolution/frame rate on weak connections is planned, not yet implemented.)*
 * **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with cryptographic rekeying upon member additions/removals (a removed member cannot read new messages), keeping upload bandwidth constant at $O(1)$. *(Per-message forward secrecy à la Signal's Double Ratchet is not implemented.)*
-* **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat and file transfer (accept/reject, SHA-256 verified, up to 1 GB) work today, and the mode starts without contacting any server: use **"Sunucusuz başlat"** on the login screen or run `python serverless_client.py`. On phones (or any browser) use **`serverless.html`**: a single self-contained file that can be opened from the relay (`/serverless.html`), any static host, or shared as a file; it talks to the desktop with the same signed codes: chat, file transfer and voice/video calls (front/back camera, mute, camera off), and its CSP forbids every network request except WebRTC. You choose who helps the two devices find each other ("Bağlantı yardımcısı"): Google + Cloudflare STUN (default), only one of them, your own STUN/TURN server, or LAN-only with no outside request at all.
+* **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat and file transfer (accept/reject, SHA-256 verified, up to 1 GB) work today, and the mode starts without contacting any server: use **"Sunucusuz başlat"** on the login screen or run `python serverless_client.py`. On phones (or any browser) use **`serverless.html`**: a single self-contained file that can be opened from the relay (`/serverless.html`), any static host, or shared as a file; it talks to the desktop with the same signed codes: chat, file transfer and voice/video calls (front/back camera, mute, camera off), and its CSP forbids every network request except WebRTC. You choose who helps the two devices find each other ("Bağlantı yardımcısı"): Google + Cloudflare STUN (default), only one of them, your own STUN/TURN server, or LAN-only with no outside request at all. An **Android app** (`android/`, package `com.erkin.hybridp2p`) wraps the same page so it runs without a browser or any network fetch: it adds saving received files to Downloads, the share sheet, clipboard, QR scanning (ZXing, no Google services) and keeping the screen on during calls.
 * **Secure Passwordless Authentication:** Connections and modifying API requests are authenticated using cryptographic challenges and RSA-PSS signatures.
 
 ---
@@ -293,6 +293,7 @@ HybridP2P-Messenger/
 ├── deploy/                # Caddyfile, gen_cert.py (self-signed cert for IP-only mode)
 ├── .env.example           # Deployment settings with step-by-step comments
 ├── DEPLOY.md              # Self-hosting guide (Turkish)
+├── android/               # Android app wrapping static/serverless.html (Java, debug-signed for now)
 ├── requirements.txt       # Desktop client + server dependencies
 ├── requirements-server.txt # Server-only dependencies (Docker image)
 ├── progress.md            # Feature checklist and current status
@@ -341,6 +342,13 @@ The server automatically hosts a self-contained, browser-side Zero-Knowledge E2E
 * **Private Key Import & Export (Device/Account Transfer):**
   * To log in as your existing desktop user on the Web Client, click **Import existing Private Key (.pem)** on the web login screen, and paste your private key PEM. The client will derive your public key using WebCrypto SubtleCrypto and authenticate securely.
   * You can retrieve your private key from the Web Client anytime by clicking the key icon (`🔑`) in the sidebar header to copy/backup it.
+
+### 6. Building the Android App (serverless only)
+Needs the Android SDK and a JDK 17–21 (Android Studio's bundled one works). The page is copied from `static/serverless.html` at build time, so there is a single source.
+```bash
+cd android && ./gradlew assembleDebug
+```
+The APK is `android/app/build/outputs/apk/debug/app-debug.apk` (debug-signed: fine for testing and side-loading, not for a store release). Install it with `adb install -r` or by opening the file on the phone. See KNOWN_ISSUES §11 for what was verified.
 
 ### Running the Tests
 ```bash

@@ -842,6 +842,7 @@ Kullanıcıların fiziki olarak kod taşımak istemediği durumlarda, merkeziyet
 - [ ] **DHT Entegrasyonu:** Python tarafında hafif bir DHT kütüphanesi (örn. `bittorrent-dht` veya `kademlia` türevi) kullanarak eş bulma ve sinyalleşme mekanizmasını prototiple.
 - [x] **STUN Entegrasyonu:** Pure P2P modunda sadece ücretsiz ve güvenilir genel STUN sunucularını (Google, Cloudflare) kullanacak şekilde WebRTC yapılandırmasını kısıtla.
 - [x] **STUN Seçimi (S4, 2026-10-09):** Masaüstü ve `serverless.html`'de "Bağlantı yardımcısı": Google + Cloudflare (varsayılan), yalnızca biri, özel STUN/TURN (kullanıcı/şifre ile) ya da yalnızca yerel ağ (hiçbir dış istek yok). Ayrıntı: KNOWN_ISSUES §9.
+- [x] **Android uygulaması (2026-10-10):** `android/` klasöründe `serverless.html`'i internete bağlı olmadan açan APK (Google servisi yok); köprü ile dosya kaydetme, paylaşma, pano, QR okuma (ZXing). Yayın imzası ve gerçek telefon testi bekliyor (KNOWN_ISSUES §11).
 - [x] **Telefon sayfasında arama (S3b, 2026-10-09):** `serverless.html` sesli/görüntülü arama yapar ve masaüstünün sunucusuz aramalarıyla birlikte çalışır (aynı imzalı kodlar). Ön/arka kamera, mikrofon/kamera kapatma; görüşme bitince sayfa yenilenmeden yeni bağlantı kurulur.
 
 

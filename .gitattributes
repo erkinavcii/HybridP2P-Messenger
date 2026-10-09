@@ -1,6 +1,8 @@
 # Linux konteynerlerinde çalışan/okunan dosyalar Windows'ta da LF satır sonuyla
 # kalmalı (CRLF, kabuk betiklerini ve bazı yapılandırma ayrıştırıcılarını bozar).
 *.sh                  text eol=lf
+android/gradlew       text eol=lf
+*.jar                 binary
 Dockerfile            text eol=lf
 deploy/Caddyfile      text eol=lf
 docker-compose*.yml   text eol=lf

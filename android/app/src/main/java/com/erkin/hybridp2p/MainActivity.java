@@ -20,6 +20,12 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import com.google.zxing.client.android.Intents;
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
+
+import org.json.JSONObject;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -39,6 +45,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_MEDIA = 1;
     private static final int REQ_FILE = 2;
+    private static final int REQ_SCAN_CAMERA = 3;
 
     private WebView web;
     private PermissionRequest pendingPermission;
@@ -73,6 +80,8 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);  // karşı tarafın sesi/görüntüsü kendiliğinden çalsın
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
+        // Kaydetme, paylaşma, pano, QR okuma, ekranı açık tutma (bkz. AndroidBridge)
+        web.addJavascriptInterface(new AndroidBridge(this), "HybridP2PAndroid");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -132,6 +141,26 @@ public class MainActivity extends Activity {
         else web.loadUrl(PAGE_URL);
     }
 
+    /** QR okuyucuyu (ZXing) açar; sonuç sayfadaki window.__hp2pScanResult'a gider. */
+    void startQrScan() {
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_SCAN_CAMERA);
+            return;
+        }
+        IntentIntegrator scan = new IntentIntegrator(this);
+        scan.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
+        scan.setPrompt("Bağlantı kodunun QR'ını çerçeveye getirin");
+        scan.setBeepEnabled(false);
+        scan.setOrientationLocked(false);
+        scan.addExtra(Intents.Scan.SCAN_TYPE, Intents.Scan.MIXED_SCAN);   // açık ve koyu zeminli QR
+        scan.initiateScan();
+    }
+
+    private void deliverScan(String text) {
+        web.evaluateJavascript("window.__hp2pScanResult && window.__hp2pScanResult("
+                + JSONObject.quote(text == null ? "" : text) + ")", null);
+    }
+
     private static WebResourceResponse notFound() {
         WebResourceResponse r = new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
         r.setStatusCodeAndReasonPhrase(404, "Not Found");
@@ -144,6 +173,11 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code == REQ_SCAN_CAMERA) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) startQrScan();
+            else deliverScan("");
+            return;
+        }
         if (code != REQ_MEDIA || pendingPermission == null) return;
         boolean all = true;
         for (int r : results) all &= r == PackageManager.PERMISSION_GRANTED;
@@ -155,6 +189,11 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
+        IntentResult scanned = IntentIntegrator.parseActivityResult(code, result, data);
+        if (scanned != null) {
+            deliverScan(scanned.getContents());                    // vazgeçilirse null → ""
+            return;
+        }
         if (code == REQ_FILE && pendingFiles != null) {
             pendingFiles.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
             pendingFiles = null;

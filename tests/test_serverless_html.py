@@ -158,3 +158,25 @@ def test_page_is_self_contained_and_network_locked():
     # dış kaynak yok: tek dosya olarak paylaşılabilir ve hiçbir yere istek atmaz
     assert not re.search(r'<(script|link|img|iframe)[^>]+(src|href)=["\']https?:', html)
     assert "Kazuhiko Arase" in html and "MIT" in html                # gömülü kütüphanenin lisansı
+
+
+# ─────────────────────────── STUN/TURN seçimi (S4) ───────────────────────────
+
+def test_ice_choice_matches_desktop():
+    from test_p2p_core import ICE_CUSTOM_BAD, ICE_CUSTOM_OK
+    cases = [(p, "") for p in core.ICE_PRESETS if p != "custom"] + [("bilinmeyen", "")]
+    cases += [("custom", ICE_CUSTOM_OK), ("custom", ICE_CUSTOM_OK.replace("\n", "\r\n")), ("custom", "")]
+    cases += [("custom", bad) for bad in ICE_CUSTOM_BAD]
+    page = node(*({"op": "ice", "preset": p, "custom": c} for p, c in cases))
+    for (preset, custom), got in zip(cases, page):
+        try:
+            want = {"servers": core.ice_servers_for(preset, custom)}
+        except core.IceConfigError as ex:
+            want = {"error": str(ex)}
+        assert got == want, (preset, custom)
+
+
+def test_page_lists_same_presets():
+    html = HTML.read_text(encoding="utf-8")
+    for key, label in core.ICE_PRESETS.items():
+        assert f'"{key}": "{label}"' in html

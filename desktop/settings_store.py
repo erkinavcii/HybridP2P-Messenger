@@ -16,6 +16,8 @@ DEFAULTS = {
     "theme": "dark",          # "dark" | "light"
     "sound_enabled": True,    # yeni mesaj bildirim sesi
     "link_previews": True,    # gönderirken link önizlemesi üret (site gönderenin IP'sini görür)
+    "p2p_ice": "google+cloudflare",  # sunucusuz mod STUN seçimi (desktop/p2p_core.ICE_PRESETS)
+    "p2p_ice_custom": "",     # "custom" seçiliyse satır başına bir STUN/TURN sunucusu
 }
 
 _lock = threading.Lock()

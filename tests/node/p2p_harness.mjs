@@ -61,6 +61,10 @@ for (const cmd of input) {
       out.push({ fid: r.fid, data_b64: b64(r.data) });
       break;
     }
+    case "ice":                             // { preset, custom } → sunucu listesi ya da hata
+      try { out.push({ servers: C.iceServersFor(cmd.preset, cmd.custom || "") }); }
+      catch (e) { out.push({ error: e instanceof C.IceConfigError ? e.message : "BEKLENMEYEN: " + e }); }
+      break;
     default:
       throw new Error("bilinmeyen komut: " + cmd.op);
   }

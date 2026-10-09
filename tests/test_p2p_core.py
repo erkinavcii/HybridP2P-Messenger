@@ -186,3 +186,62 @@ def test_two_peers_chat_end_to_end_without_server(keys):
 
     msg, ack = core.run(scenario()).result(timeout=60)
     assert msg["text"] == "merhaba bob, sunucu yok 📻" and ack == {"t": "ack", "id": "m1"}
+
+
+# ─────────────────────────── STUN/TURN seçimi (S4) ───────────────────────────
+
+ICE_CUSTOM_OK = """# kendi coturn sunucum
+stun:turn.ornek.com:3478
+turn:turn.ornek.com:3478?transport=udp alice s3cr3t!
+turns:[2001:db8::1]:5349 1700000000:alice abc=="""
+
+ICE_CUSTOM_BAD = [
+    "http://ornek.com",                         # şema
+    "stun:ornek.com:70000",                     # port
+    "stun:ornek.com user pass",                 # STUN'a kimlik
+    "stun:ornek.com?transport=udp",             # STUN'a transport
+    "turn:ornek.com:3478",                      # TURN'de kimlik yok
+    "turn:ornek.com:3478 kullanıcı şifre",      # ASCII dışı kimlik
+    "stun:ornek.com:३४७८",                      # ASCII dışı rakam
+    "\n".join(f"stun:s{i}.ornek.com" for i in range(9)),   # 8'den fazla
+]
+
+
+def test_ice_presets():
+    assert core.ice_servers_for("lan") == []
+    assert core.ice_servers_for("cloudflare") == [{"urls": "stun:stun.cloudflare.com:3478"}]
+    assert [s["urls"] for s in core.ice_servers_for("google")] == [
+        "stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]
+    default = core.ice_servers_for(core.ICE_DEFAULT)
+    assert len(default) == 3 and core.ice_servers_for("bilinmeyen") == default
+
+
+def test_ice_custom_list():
+    servers = core.ice_servers_for("custom", ICE_CUSTOM_OK)
+    assert servers == [
+        {"urls": "stun:turn.ornek.com:3478"},
+        {"urls": "turn:turn.ornek.com:3478?transport=udp", "username": "alice", "credential": "s3cr3t!"},
+        {"urls": "turns:[2001:db8::1]:5349", "username": "1700000000:alice", "credential": "abc=="},
+    ]
+    with pytest.raises(core.IceConfigError, match="boş"):
+        core.ice_servers_for("custom", "# yalnızca yorum\n\n")
+    for bad in ICE_CUSTOM_BAD:
+        with pytest.raises(core.IceConfigError):
+            core.ice_servers_for("custom", bad)
+
+
+def test_ice_config_reaches_aiortc(monkeypatch):
+    from desktop import pure_p2p, settings_store
+    values = {"p2p_ice": "custom", "p2p_ice_custom": ICE_CUSTOM_OK}
+    monkeypatch.setattr(settings_store, "get", values.get)
+    cfg = pure_p2p._ice_config()
+    assert [(s.urls, s.username, s.credential) for s in cfg.iceServers] == [
+        (["stun:turn.ornek.com:3478"], None, None),
+        (["turn:turn.ornek.com:3478?transport=udp"], "alice", "s3cr3t!"),
+        (["turns:[2001:db8::1]:5349"], "1700000000:alice", "abc=="),
+    ]
+    values["p2p_ice"] = "lan"
+    assert pure_p2p._ice_config().iceServers == []
+    values.update(p2p_ice="custom", p2p_ice_custom="turn:x")
+    with pytest.raises(core.IceConfigError):
+        pure_p2p._ice_config()

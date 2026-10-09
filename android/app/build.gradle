@@ -33,6 +33,14 @@ android {
     }
 }
 
+dependencies {
+    // QR okuma — Apache-2.0, Google servisi gerektirmez; tek bağımlılığı com.google.zxing:core
+    implementation "com.journeyapps:zxing-android-embedded:4.3.0"
+    // ZXing tarayıcısı çalışırken ContextCompat/ActivityCompat kullanır ama POM'unda bildirmez
+    // (bildirilmeyince ilk açılışta NoClassDefFoundError). Apache-2.0; Google Play Services değil.
+    implementation "androidx.core:core:1.17.0"
+}
+
 def copyServerlessPage = tasks.register("copyServerlessPage", Copy) {
     from(rootProject.file("../static/serverless.html"))
     into(layout.buildDirectory.dir("generated/page"))

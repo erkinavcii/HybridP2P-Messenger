@@ -145,7 +145,7 @@ Eskiden bağlantı kodları imzasızdı: kodu taşıyan kanalda araya giren biri
 
 **Kalan sınırlar:**
 - İmzalı kod ~2,8 KB: QR'ın en büyük boyutuna ancak sığıyor, ekrandan okutmak zor olabilir; kopyala-yapıştır her zaman çalışır.
-- Sunucusuz mod hâlâ herkese açık STUN kullanıyor (§9); STUN seçimi S4'te.
+- Sunucusuz modda STUN seçimi var (S4, §9); varsayılan hâlâ herkese açık Google + Cloudflare STUN.
 - Ana web istemcisi (`index.html`) sunucusuz modda `h2` kodlarını yalnızca aramalar için okuyor, kimliği doğrulamıyor. Tarayıcıda sunucusuz mesajlaşma/dosya için `serverless.html` kullanılmalı (S3: tam doğrulama, mesaj, dosya).
 - `serverless.html`: sesli/görüntülü arama henüz yok (S3b). Tarayıcıda alınan/gönderilen dosya en fazla 256 MB (dosya bellekte tutulur). QR'ı kamerayla okutma yalnızca BarcodeDetector'ı olan tarayıcılarda (Android Chrome); iPhone'da kopyala/paylaş kullanılır. Sayfa dosyadan (`file://`) açıldığında Chrome bunu güvenli sayar; bazı mobil dosya yöneticileri sayfayı güvenli olmayan bir bağlamda açabilir — o durumda şifreleme API'si çalışmaz ve sayfa kimlik üretemez (gerçek telefonda test edilmedi; Android emülatöründe — Pixel, Chrome — localhost üzerinden uçtan uca doğrulandı: kimlik, imzalı kod takası, iki yönde mesaj ve dosya).
 - Dosya aktarımı (S1b): yalnızca iki taraf da açıkken; yarıda kesilirse kaldığı yerden devam etmez (yeniden gönderilmeli). aiortc'nin veri kanalı hızı sınırlıdır — çok büyük dosyalar (yüzlerce MB) yavaş olabilir. Sohbet geçmişine dosyanın kendisi değil, yalnızca "gönderildi/alındı" kaydı düşer.
@@ -217,9 +217,22 @@ Docker olmadan doğrulananlar (pytest): üretim giriş noktası (`python server.
 
 ---
 
-## 9. Pure P2P (Sunucusuz) Mod Herkese Açık STUN Kullanır (2026-10-07)
+## 9. Pure P2P (Sunucusuz) Mod — STUN Seçimi (2026-10-07, S4 ile güncellendi 2026-10-09)
 
-Sunucu üzerinden yapılan aramalarda STUN/TURN listesi sunucudan gelir ve `HYBRIDP2P_PUBLIC_STUN=0` ile Google tamamen devre dışı bırakılabilir (D5). **Pure P2P modu ise bir sunucuya bağlanmadığı için** bu ayarı göremez; `desktop/pure_p2p.py` Google ve Cloudflare STUN sunucularını sabit kullanır. STUN olmadan farklı ağlardaki iki cihaz birbirini bulamayacağı için bu bilinçli bir tercih; bedeli, STUN sağlayıcısının arayanların IP adresini görmesi (içerik değil).
+Sunucu üzerinden yapılan aramalarda STUN/TURN listesi sunucudan gelir ve `HYBRIDP2P_PUBLIC_STUN=0` ile Google tamamen devre dışı bırakılabilir (D5). Sunucusuz mod bir sunucuya bağlanmadığı için bu ayarı göremez; bu yüzden **S4** ile masaüstü bağlantı penceresine ve `serverless.html`'e kendi seçimi eklendi ("Bağlantı yardımcısı (STUN)"):
 
-İleride yapılabilir: masaüstü ayarlarına "özel STUN adresi" alanı (ör. kendi coturn'ünüz) ve web'deki sunucusuz moda aynısı.
+| Seçenek | Kim IP'nizi görür | Ne zaman bağlanır |
+|---|---|---|
+| Google + Cloudflare (varsayılan) | Google ve Cloudflare | Çoğu ev/mobil ağ |
+| Yalnızca Cloudflare / yalnızca Google | Yalnızca o sağlayıcı | Aynı |
+| Özel sunucu (`stun:` / `turn:` + kullanıcı + şifre) | Yalnızca sizin sunucunuz | TURN girilirse en zor NAT'larda da |
+| Yalnızca yerel ağ | Hiç kimse (dış istek yok) | Yalnızca aynı ağda ya da açık IP'li cihazlar |
+
+Kurallar `desktop/p2p_core.py` (`ice_servers_for`) ve sayfadaki `P2PCore.iceServersFor` içinde birebir aynı; pytest + Node ile karşılaştırılıyor. Masaüstünde ayar `settings.json`'da (cihaz başına), sayfada yalnızca "Bu cihazda hatırla" açıksa IndexedDB'de saklanır.
+
+**Sınırlar:**
+- Seçim iki tarafta bağımsızdır; iki taraf da "yalnızca yerel ağ" seçerse farklı ağlardaki cihazlar bağlanamaz.
+- Tarayıcılar yerel ağ adreslerini `.local` (mDNS) adlarıyla gizler. aiortc bunları çözüyor: "yalnızca yerel ağ"da tarayıcı ↔ masaüstü bağlantısı aynı makinede doğrulandı. Gerçek iki cihazlı bir yerel ağda (ve mDNS'i engelleyen ağlarda) henüz denenmedi.
+- Özel TURN şifresi ayarlarda düz metin durur (masaüstü `settings.json`, sayfada "hatırla" açıksa IndexedDB).
+- Ana web istemcisinin (`index.html`) eski sunucusuz arama kodu hâlâ sabit Google + Cloudflare kullanıyor (`static/js/voip.js`); tarayıcıda sunucusuz kullanım için `serverless.html` önerilir.
 

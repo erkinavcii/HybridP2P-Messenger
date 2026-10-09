@@ -2800,11 +2800,120 @@ var qrcode = function() {
     return names.flatMap((n) => PUBLIC_STUN[n].map((urls) => ({ urls })));
   }
 
+  // ── zayıf bağlantıda otomatik kalite düşürme — static/js/quality.js'in AYNISI
+  //    (desktop/call_quality.py ile birebir kural; tests/test_serverless_html.py) ──
+  const LOSS_BAD = 0.08, RTT_BAD = 0.40;
+  const LOSS_GOOD = 0.02, RTT_GOOD = 0.25;
+  const BAD_SAMPLES_TO_DROP = 2, GOOD_SAMPLES_TO_RAISE = 5, MAX_LEVEL = 3;
+  const MAX_GOOD_SAMPLES = 30, RECENT_RAISE_SAMPLES = 15;
+  const INTERVAL_MS = 2000;
+  // Kısa kenar yüksekliği, kare hızı, üst bit hızı
+  const WEB_LEVELS = [
+      { height: 720, fps: 30, bitrate: 1_500_000 },
+      { height: 480, fps: 24, bitrate: 800_000 },
+      { height: 360, fps: 15, bitrate: 400_000 },
+      { height: 180, fps: 10, bitrate: 150_000 },
+  ];
+
+  function classify(loss, rtt) {
+      if ((loss != null && loss > LOSS_BAD) || (rtt != null && rtt > RTT_BAD)) return "bad";
+      if ((loss == null || loss < LOSS_GOOD) && (rtt == null || rtt < RTT_GOOD)) return "good";
+      return "neutral";
+  }
+
+  class QualityPolicy {
+      constructor() {
+          this.level = 0; this.bad = 0; this.good = 0;
+          this.needGood = GOOD_SAMPLES_TO_RAISE;
+          this.sinceRaise = null;       // son yükseltmeden beri örnek sayısı (hiç yoksa null)
+      }
+      /** Yeni örneği işler; basamak değiştiyse true. */
+      step(loss, rtt) {
+          const kind = classify(loss, rtt);
+          if (this.sinceRaise !== null) this.sinceRaise += 1;
+          if (kind === "bad") {
+              this.bad += 1; this.good = 0;
+              if (this.bad >= BAD_SAMPLES_TO_DROP && this.level < MAX_LEVEL) {
+                  if (this.sinceRaise !== null && this.sinceRaise <= RECENT_RAISE_SAMPLES)
+                      this.needGood = Math.min(MAX_GOOD_SAMPLES, this.needGood * 2);
+                  this.level += 1; this.bad = 0; return true;
+              }
+          } else if (kind === "good") {
+              this.good += 1; this.bad = 0;
+              if (this.good >= this.needGood && this.level > 0) { this.level -= 1; this.good = 0; this.sinceRaise = 0; return true; }
+          } else { this.bad = 0; this.good = 0; }
+          return false;
+      }
+  }
+
+  /** RTCStatsReport → { loss (0-1), rtt (sn) }. Görüntü akışı varsa onunki. */
+  function statsSample(report) {
+      let best = null, pairRtt = null;
+      report.forEach((r) => {
+          if (r.type === "remote-inbound-rtp" && (!best || (r.kind === "video" && best.kind !== "video"))) best = r;
+          if (r.type === "candidate-pair" && r.nominated && r.state === "succeeded" && r.currentRoundTripTime != null)
+              pairRtt = r.currentRoundTripTime;
+      });
+      const loss = best && best.fractionLost != null ? best.fractionLost : null;
+      const rtt = best && best.roundTripTime != null ? best.roundTripTime : pairRtt;
+      return { loss, rtt };
+  }
+
+  /** Görüntü göndericisini basamağa göre sınırlar (çözünürlük, kare hızı, bit hızı). */
+  async function applyLevel(sender, level) {
+      const track = sender.track; if (!track) return;
+      const st = track.getSettings ? track.getSettings() : {};
+      const short = Math.min(st.width || 1280, st.height || 720);
+      const L = WEB_LEVELS[level];
+      const p = sender.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      Object.assign(p.encodings[0], { maxBitrate: L.bitrate, maxFramerate: L.fps,
+                                      scaleResolutionDownBy: Math.max(1, short / L.height) });
+      await sender.setParameters(p);
+  }
+
+  /** Ses akışına ağ önceliği verir (zayıf hatta önce görüntü feda edilir). */
+  async function prioritizeAudio(pc) {
+      for (const s of pc.getSenders()) {
+          if (!s.track || s.track.kind !== "audio") continue;
+          try {
+              const p = s.getParameters();
+              if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+              Object.assign(p.encodings[0], { priority: "high", networkPriority: "high" });
+              await s.setParameters(p);
+          } catch (e) { /* eski tarayıcı: öncelik desteklenmiyor */ }
+      }
+  }
+
+  function qualityLabel(level, hasVideo) {
+      if (!level) return "";
+      if (!hasVideo) return "Bağlantı zayıf — ses öncelikli";
+      return level === MAX_LEVEL ? `Bağlantı çok zayıf — görüntü ${WEB_LEVELS[level].height}p, ses öncelikli`
+                                 : `Bağlantı zayıf — görüntü ${WEB_LEVELS[level].height}p'ye düşürüldü`;
+  }
+
+  /** Görüşme boyunca izler; durdurma fonksiyonu döner. onChange(level) */
+  function startQualityMonitor(pc, onChange, intervalMs = INTERVAL_MS) {
+      const policy = new QualityPolicy();
+      prioritizeAudio(pc);
+      const timer = setInterval(async () => {
+          if (pc.connectionState === "closed" || pc.connectionState === "failed") return clearInterval(timer);
+          let s;
+          try { s = statsSample(await pc.getStats()); } catch (e) { return; }
+          if (!policy.step(s.loss, s.rtt)) return;
+          const sender = pc.getSenders().find((x) => x.track && x.track.kind === "video");
+          if (sender) { try { await applyLevel(sender, policy.level); } catch (e) { console.warn("kalite ayarlanamadı:", e); } }
+          onChange(policy.level, !!sender);
+      }, intervalMs);
+      return () => clearInterval(timer);
+  }
+
   G.P2PCore = { PREFIX_V2, MODES, S, CHUNK_SIZE, FID_BYTES, MAX_FILE_BYTES, MAX_WEB_FILE_BYTES, MAX_TEXT_CHARS, USERNAME_RE,
     b64, unb64, hex, randHex, sha256hex, derToPem, pemToDer, fingerprint, importPublic, importPrivatePkcs8,
     generateIdentity, sign, verify, makeEnvelope, parseCode, identifyPeer, isBlocked,
     textFrame, ackFrame, parseFrame, chunkFrame, splitChunk, safeFilename, fmtSize,
-    ICE_DEFAULT, ICE_PRESETS, IceConfigError, parseCustomIce, iceServersFor };
+    ICE_DEFAULT, ICE_PRESETS, IceConfigError, parseCustomIce, iceServersFor,
+    QualityPolicy, classify, statsSample, applyLevel, qualityLabel, startQualityMonitor, WEB_LEVELS };
 })(globalThis);
 </script>
 
@@ -2821,7 +2930,8 @@ var qrcode = function() {
   const session = { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" };
   const MODE_LABELS = { chat: "Yazılı mesajlaşma", audio: "Sesli arama", video: "Görüntülü arama" };
   // Arama durumu (yalnızca audio/video): yerel akış, sayaç, ekranı açık tutma kilidi
-  const call = { stream: null, open: false, ended: false, timer: null, started: 0, facing: "user", wakeLock: null };
+  const call = { stream: null, open: false, ended: false, timer: null, started: 0, facing: "user", wakeLock: null,
+                 stopQuality: null };
   const ice = { preset: C.ICE_DEFAULT, custom: "" };   // STUN/TURN seçimi (yalnızca "hatırla" ile saklanır)
 
   function setStatus(el, text, cls) { el.textContent = text || ""; el.className = "status " + (cls || ""); }
@@ -3192,6 +3302,9 @@ var qrcode = function() {
       show("btn-flip", cams.length > 1);
     }
     playRemote();
+    // Zayıf bağlantıda görüntüyü otomatik düşür; ses öncelikli
+    call.stopQuality = C.startQualityMonitor(session.pc, (level, hasVideo) =>
+      setStatus($("call-quality"), C.qualityLabel(level, hasVideo), ""));
     call.started = Date.now();
     call.timer = setInterval(() => { $("call-timer").textContent = fmtDuration(Date.now() - call.started); }, 1000);
     try { call.wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { call.wakeLock = null; }
@@ -3206,6 +3319,7 @@ var qrcode = function() {
     call.ended = true;
     try { session.pc && session.pc.close(); } catch (e) {}
     stopLocalMedia();
+    if (call.stopQuality) { call.stopQuality(); call.stopQuality = null; }
     clearInterval(call.timer); call.timer = null;
     if (call.wakeLock) { call.wakeLock.release().catch(() => {}); call.wakeLock = null; }
     const dur = call.started ? " · süre " + fmtDuration(Date.now() - call.started) : "";
@@ -3255,9 +3369,10 @@ var qrcode = function() {
     try { session.pc && session.pc.close(); } catch (e) {}
     stopLocalMedia();
     clearInterval(call.timer);
+    if (call.stopQuality) call.stopQuality();
     if (call.wakeLock) { call.wakeLock.release().catch(() => {}); }
     Object.assign(session, { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" });
-    Object.assign(call, { open: false, ended: false, timer: null, started: 0, wakeLock: null });
+    Object.assign(call, { open: false, ended: false, timer: null, started: 0, wakeLock: null, stopQuality: null });
     micOn = camOn = true; ["btn-mic", "btn-cam"].forEach((b) => $(b).classList.remove("off"));
     for (const o of outgoing.values()) o.cancelled = true;
     outgoing.clear(); incoming.clear(); pending.clear();

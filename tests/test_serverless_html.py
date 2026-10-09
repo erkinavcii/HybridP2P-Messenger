@@ -200,3 +200,52 @@ def test_page_blocks_unverifiable_legacy_codes():
     assert node({"op": "identify", "code": legacy, "contacts": {}, "expected": "offer"})[0]["status"] == "legacy"
     html = HTML.read_text(encoding="utf-8")
     assert "C.isBlocked(id) || id.status === C.S.LEGACY" in html
+
+
+# ─────────────────────────── otomatik kalite düşürme ───────────────────────────
+
+def test_quality_policy_identical_in_page_module_and_desktop():
+    from desktop import call_quality as q
+    from test_call_quality import SEQUENCES
+    seqs = [[[loss, rtt] for loss, rtt in samples] for samples, _ in SEQUENCES]
+    want = []
+    for seq in seqs:
+        p, levels = q.QualityPolicy(), []
+        for loss, rtt in seq:
+            p.step(loss, rtt)
+            levels.append(p.level)
+        want.append(levels)
+
+    def r(**kw):
+        return {"type": "remote-inbound-rtp", **kw}
+    pair = {"type": "candidate-pair", "nominated": True, "state": "succeeded"}
+    reports = [
+        [r(kind="audio", fractionLost=0.0, roundTripTime=0.05), r(kind="video", fractionLost=0.25, roundTripTime=0.3)],
+        [r(kind="audio", fractionLost=0.01, roundTripTime=0.05)],
+        [],
+        # Bant kısıtı yok sayılır (bizim bit hızı sınırımız onu kendisi üretir); RTT çiftten
+        [{"type": "outbound-rtp", "kind": "video", "qualityLimitationReason": "bandwidth"},
+         {**pair, "availableOutgoingBitrate": 120_000, "currentRoundTripTime": 0.02}],
+    ]
+    out = node({"op": "quality", "quality_js": str(ROOT / "static" / "js" / "quality.js"),
+                "sequences": seqs, "reports": reports})[0]
+    assert out["page"] == want and out["module"] == want
+    expected_stats = [
+        {"loss": 0.25, "rtt": 0.3},
+        {"loss": 0.01, "rtt": 0.05},
+        {"loss": None, "rtt": None},
+        {"loss": None, "rtt": 0.02},
+    ]
+    assert out["page_stats"] == expected_stats and out["module_stats"] == expected_stats
+    assert [l[0] for l in out["labels"]] == [l[1] for l in out["labels"]]
+    assert out["labels"][0] == ["", "", ""] and "180p" in out["labels"][3][0]
+
+
+def test_page_embeds_quality_js_verbatim():
+    import re as _re
+    mod = (ROOT / "static" / "js" / "quality.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    body = _re.sub(r"^export ", "", mod[mod.index("export const LOSS_BAD"):], flags=_re.M)
+    page = HTML.read_text(encoding="utf-8").replace("\r\n", "\n")
+    for line in body.splitlines():
+        if line.strip():
+            assert ("  " + line) in page, line

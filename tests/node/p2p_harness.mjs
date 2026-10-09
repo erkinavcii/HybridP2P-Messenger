@@ -61,6 +61,18 @@ for (const cmd of input) {
       out.push({ fid: r.fid, data_b64: b64(r.data) });
       break;
     }
+    case "quality": {                       // örnek dizileri → basamaklar (sayfa + quality.js)
+      const qmod = await import(pathToFileURL(cmd.quality_js).href);
+      const run = (Policy) => cmd.sequences.map((seq) => {
+        const p = new Policy();
+        return seq.map(([loss, rtt]) => { p.step(loss, rtt); return p.level; });
+      });
+      const stats = (fn) => cmd.reports.map((r) => fn(new Map(r.map((x, i) => [String(i), x]))));
+      out.push({ page: run(C.QualityPolicy), module: run(qmod.QualityPolicy),
+                 page_stats: stats(C.statsSample), module_stats: stats(qmod.statsSample),
+                 labels: [0, 1, 2, 3].map((l) => [C.qualityLabel(l, true), qmod.qualityLabel(l, true), C.qualityLabel(l, false)]) });
+      break;
+    }
     case "ice":                             // { preset, custom } → sunucu listesi ya da hata
       try { out.push({ servers: C.iceServersFor(cmd.preset, cmd.custom || "") }); }
       catch (e) { out.push({ error: e instanceof C.IceConfigError ? e.message : "BEKLENMEYEN: " + e }); }

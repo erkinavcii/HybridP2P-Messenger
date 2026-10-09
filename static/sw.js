@@ -9,14 +9,14 @@
 // veriler) ve başka sitelerden gelen istekler. Şifresi çözülmüş mesaj/medya
 // zaten IndexedDB'de durur; service worker hiçbir içeriği görmez/saklamaz.
 
-const CACHE = "hybridp2p-shell-v2";
+const CACHE = "hybridp2p-shell-v3";
 const SHELL = [
     "/",
     "/serverless.html",
     "/manifest.webmanifest",
     "/css/styles.css",
     "/js/app.js", "/js/avatar.js", "/js/crypto.js", "/js/db.js", "/js/linkpreview.js",
-    "/js/prefs.js", "/js/state.js", "/js/ui.js", "/js/voice.js", "/js/voip.js", "/js/ws.js",
+    "/js/prefs.js", "/js/quality.js", "/js/state.js", "/js/ui.js", "/js/voice.js", "/js/voip.js", "/js/ws.js",
     "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png",
 ];
 const NEVER_CACHE = ["/api/", "/ws/", "/health"];

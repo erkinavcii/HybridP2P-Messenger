@@ -33,5 +33,6 @@ export const state = {
         camOff: false,
         pendingIce: [],        // ICE candidates buffered before remote desc set
         iceServers: null,      // cached ICE server config
+        stopQuality: null,     // stops the adaptive-quality monitor (quality.js)
     }
 };

@@ -6,6 +6,8 @@ tanımlanmıştı ve davranışları hiç değiştirilmeden buraya taşındı.
 """
 
 import asyncio
+from fractions import Fraction
+import threading
 import time
 
 import av
@@ -59,7 +61,7 @@ class MicrophoneTrack(MediaStreamTrack):
         if not hasattr(self, "_pts"):
             self._pts = 0
         frame.pts = self._pts
-        frame.time_base = av.Fraction(1, self.sample_rate)
+        frame.time_base = Fraction(1, self.sample_rate)
         self._pts += self.frame_size
         return frame
 
@@ -73,28 +75,40 @@ class MicrophoneTrack(MediaStreamTrack):
             self.stream = None
 
 
+def to_mono_s16(frame) -> np.ndarray:
+    """Gelen ses karesini tek kanallı int16 diziye çevirir. aiortc Opus'u her zaman
+    STEREO çözer (960 örnek → 1920 değer); mono çıkışa doğrudan yazmak boyut hatası
+    verir ve sessizlik çalınırdı."""
+    arr = frame.to_ndarray()
+    ch = len(frame.layout.channels)
+    if ch > 1:
+        arr = arr.mean(axis=0) if frame.format.is_planar else arr.reshape(-1, ch).mean(axis=1)
+    return np.asarray(arr, dtype=np.float64).reshape(-1).clip(-32768, 32767).astype(np.int16)
+
+
 class AudioPlayer:
+    MAX_BUFFER = 24000          # en fazla 0,5 sn birikir; fazlası (eski ses) atılır → gecikme büyümez
+
     def __init__(self, track):
         self.track = track
         self.loop = asyncio.get_running_loop()
-        self.queue = asyncio.Queue()
         self.sample_rate = 48000
         self.channels = 1
         self.frame_size = 960
         self.running = True
         self.play_task = None
+        # Ses kartının iş parçacığıyla paylaşılır (asyncio.Queue iş parçacığı güvenli değil)
+        self._buf = np.zeros(0, dtype=np.int16)
+        self._lock = threading.Lock()
 
         def callback(outdata, frames, time_info, status):
             if status:
                 print(f"[AudioPlayer] Status: {status}")
-            try:
-                if not self.queue.empty():
-                    data = self.queue.get_nowait()
-                    outdata[:] = data
-                else:
-                    outdata.fill(0)
-            except Exception as e:
-                outdata.fill(0)
+            with self._lock:
+                n = min(frames, len(self._buf))
+                outdata[:n, 0] = self._buf[:n]
+                self._buf = self._buf[n:]
+            outdata[n:] = 0
 
         self.stream = sd.OutputStream(
             samplerate=self.sample_rate,
@@ -112,11 +126,14 @@ class AudioPlayer:
         while self.running:
             try:
                 frame = await self.track.recv()
-                data = frame.to_ndarray().T
-                await self.queue.put(data)
+                self.feed(to_mono_s16(frame))
             except Exception as e:
                 print("[AudioPlayer] Error receiving frame:", e)
                 break
+
+    def feed(self, samples: np.ndarray):
+        with self._lock:
+            self._buf = np.concatenate([self._buf, samples])[-self.MAX_BUFFER:]
 
     def stop(self):
         self.running = False
@@ -141,7 +158,17 @@ class CameraTrack(VideoStreamTrack):
         self.running = True
         self.enabled = True
         self.last_frame_time = 0
+        # Gönderilen boyut/kare hızı: zayıf bağlantıda desktop/call_quality düşürür
+        self.out_size = (640, 480)
         self.fps_interval = 1.0 / 15.0
+        # Önizleme bu kareyi okur; track.recv()'i yalnızca gönderici çağırmalı (iki
+        # okuyucu kareleri paylaşır, gönderilen akışın kare hızı yarıya düşerdi)
+        self.last_image = None
+        self._t0 = None
+
+    def set_quality(self, width: int, height: int, fps: int):
+        self.out_size = (int(width), int(height))
+        self.fps_interval = 1.0 / max(1, int(fps))
 
     async def recv(self):
         now = time.time()
@@ -155,20 +182,21 @@ class CameraTrack(VideoStreamTrack):
         ret, frame = self.cap.read()
         self.last_frame_time = time.time()
 
-        if not self.enabled:
-            img = np.zeros((480, 640, 3), dtype=np.uint8)
+        w, h = self.out_size
+        if not self.enabled or not ret:
+            img = np.zeros((h, w, 3), dtype=np.uint8)
         else:
-            if not ret:
-                img = np.zeros((480, 640, 3), dtype=np.uint8)
-            else:
-                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if (img.shape[1], img.shape[0]) != (w, h):
+                img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+        self.last_image = img
 
         v_frame = VideoFrame.from_ndarray(img, format='rgb24')
-        if not hasattr(self, "_pts"):
-            self._pts = 0
-        v_frame.pts = self._pts
-        v_frame.time_base = av.Fraction(1, 90000)
-        self._pts += 6000
+        # Zaman damgası gerçek zamandan: kare hızı görüşme sırasında değişebilir
+        if self._t0 is None:
+            self._t0 = self.last_frame_time
+        v_frame.pts = int((self.last_frame_time - self._t0) * 90000)
+        v_frame.time_base = Fraction(1, 90000)
         return v_frame
 
     def stop(self):

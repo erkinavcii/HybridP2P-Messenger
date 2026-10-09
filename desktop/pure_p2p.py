@@ -121,6 +121,7 @@ class PureP2PMixin:
                     self.page.update()
                 self.page.run_task(_start_ui)
                 self.page.run_task(self._call_timer_loop)
+                self._start_quality_monitor(pc)
             elif pc.iceConnectionState in ("failed", "closed"):
                 self.cleanup_call()
 

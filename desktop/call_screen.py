@@ -3,7 +3,8 @@
 client.py'den taşındı (modülerleştirme): show_call_screen, start_voip_call,
 accept_call_clicked, decline_call_clicked, hangup_call_clicked, toggle_call_mic,
 toggle_call_cam, _call_timer_loop, start_local_video_rendering,
-start_remote_video_rendering, cleanup_call.
+start_remote_video_rendering, cleanup_call. Görüntülü aramalarda kalite izleme:
+_start_quality_monitor (desktop/call_quality).
 
 WsClientMixin._ws_listen bu mixin'in show_call_screen/cleanup_call metotlarını
 çağırır ve state["ws_loop"] (WsClientMixin tarafından kurulur) burada
@@ -13,6 +14,7 @@ bağımlılık, bkz. ws_client.py başlığı.
 
 import asyncio
 import base64
+import time
 import uuid as uuid_lib
 
 import cv2
@@ -25,7 +27,14 @@ from aiortc import (
     RTCIceServer,
 )
 
+from desktop import call_quality
 from desktop.voip_tracks import MicrophoneTrack, AudioPlayer, CameraTrack
+
+
+def _jpeg_data_url(img_bgr) -> str:
+    # Flet 0.85'te Image.src_base64 yok (atama sessizce boşa gider): data URL kullanılır
+    _, buffer = cv2.imencode('.jpg', img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    return "data:image/jpeg;base64," + base64.b64encode(buffer).decode("ascii")
 
 
 class CallScreenMixin:
@@ -136,6 +145,7 @@ class CallScreenMixin:
                                 self.page.update()
                             self.page.run_task(_start_call_ui)
                             self.page.run_task(self._call_timer_loop)
+                            self._start_quality_monitor(pc)
                     elif pc.iceConnectionState in ["failed", "closed"]:
                         self.cleanup_call()
 
@@ -227,6 +237,7 @@ class CallScreenMixin:
                                 self.page.update()
                             self.page.run_task(_start_call_ui)
                             self.page.run_task(self._call_timer_loop)
+                            self._start_quality_monitor(pc)
                     elif pc.iceConnectionState in ["failed", "closed"]:
                         self.cleanup_call()
 
@@ -317,19 +328,24 @@ class CallScreenMixin:
         self.page.run_task(_init_local_ui)
 
         async def _render_local():
+            # Önizleme gönderilen son kareyi okur (track.recv() yalnızca göndericinin)
             track = self.state.get("local_video_track")
+            shown = None
             while track and track.running and self.state.get("call_state") != "ended":
+                await asyncio.sleep(0.1)
+                img = track.last_image
+                if img is None or img is shown:
+                    continue
+                shown = img
                 try:
-                    frame = await track.recv()
-                    img = frame.to_ndarray(format='bgr24')
-                    _, buffer = cv2.imencode('.jpg', img)
-                    b64_str = base64.b64encode(buffer).decode('utf-8')
-                    def _update_local(b=b64_str):
-                        self.local_video_preview.src_base64 = b
-                        self.page.update()
-                    self.run_on_ui(_update_local)
-                except Exception as e:
-                    break
+                    url = _jpeg_data_url(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                except Exception:
+                    continue
+
+                def _update_local(u=url):
+                    self.local_video_preview.src = u
+                    self.page.update()
+                self.run_on_ui(_update_local)
 
         self.page.run_task(_render_local)
 
@@ -342,24 +358,48 @@ class CallScreenMixin:
         self.page.run_task(_init_remote_ui)
 
         async def _render_remote():
+            last = 0.0
             while self.state.get("call_state") != "ended":
                 try:
                     frame = await track.recv()
-                    img = frame.to_ndarray(format='bgr24')
-                    _, buffer = cv2.imencode('.jpg', img)
-                    b64_str = base64.b64encode(buffer).decode('utf-8')
-                    def _update_remote(b=b64_str):
-                        self.remote_video_view.src_base64 = b
-                        self.page.update()
-                    self.run_on_ui(_update_remote)
-                except Exception as e:
+                except Exception:
                     break
+                # Her kareyi JPEG'e çevirip arayüze göndermek pahalı: en fazla ~15 kare/sn
+                if time.time() - last < 1 / 15:
+                    continue
+                last = time.time()
+                try:
+                    url = _jpeg_data_url(frame.to_ndarray(format='bgr24'))
+                except Exception:
+                    continue
+
+                def _update_remote(u=url):
+                    self.remote_video_view.src = u
+                    self.page.update()
+                self.run_on_ui(_update_remote)
 
         self.page.run_task(_render_remote)
+
+    def _start_quality_monitor(self, pc):
+        """Görüntülü aramada bağlantı kalitesini izler (pc'nin loop'unda çağrılmalı).
+        ICE 'connected' ve 'completed' ikisi de gelebilir: görüşme başına bir kez başlar."""
+        camera = self.state.get("local_video_track")
+        if not camera or self.state.get("quality_pc") is pc:
+            return
+        self.state["quality_pc"] = pc
+
+        def on_change(level):
+            def _ui():
+                self.call_quality_text.value = call_quality.LABELS[level]
+                self.call_quality_text.visible = level > 0
+                self.page.update()
+            self.run_on_ui(_ui)
+        asyncio.ensure_future(call_quality.monitor(pc, camera, on_change))
 
     def cleanup_call(self):
         print("[VoIP] Cleaning up call...")
         self.state["call_state"] = "ended"
+        self.state["quality_pc"] = None
 
         if self.state.get("local_audio_track"):
             try:
@@ -399,13 +439,12 @@ class CallScreenMixin:
         self.state["call_type"] = None
 
         async def _cleanup_ui():
-            self.local_video_preview.src_base64 = None
             self.local_video_preview.src = self.transparent_placeholder
             self.local_video_preview.visible = False
-            self.remote_video_view.src_base64 = None
             self.remote_video_view.src = self.transparent_placeholder
             self.remote_video_view.visible = False
             self.call_timer_text.visible = False
+            self.call_quality_text.visible = False
 
             if self.state.get("serverless"):
                 self.show_serverless_screen()          # sunucusuz moddaki arama bitti

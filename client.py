@@ -653,6 +653,9 @@ class MessengerApp(
         self.call_name_text = ft.Text("Username", size=24, weight=ft.FontWeight.BOLD, color=C.text)
         self.call_status_text = ft.Text("Calling...", size=14, color=C.text_subtle)
         self.call_timer_text = ft.Text("00:00", size=14, color=C.accent, visible=False)
+        # Zayıf bağlantıda görüntü kalitesi düşürülünce (desktop/call_quality) gösterilir
+        self.call_quality_text = ft.Text("", size=12, color=C.info_text, visible=False,
+                                         text_align=ft.TextAlign.CENTER)
 
         self.transparent_placeholder = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
         self.local_video_preview = ft.Image(src=self.transparent_placeholder, width=100, height=140, fit="cover", border_radius=8, visible=False, right=10, bottom=10)
@@ -751,6 +754,7 @@ class MessengerApp(
                                     alignment=ft.MainAxisAlignment.CENTER,
                                     spacing=10
                                 ),
+                                self.call_quality_text,
                                 ft.Container(height=20),
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER,

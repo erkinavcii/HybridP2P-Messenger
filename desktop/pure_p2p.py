@@ -19,7 +19,7 @@ import base64
 import flet as ft
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 
-from desktop import p2p_core
+from desktop import p2p_core, settings_store
 from desktop.theme import C
 from desktop.voip_tracks import AudioPlayer, CameraTrack, MicrophoneTrack
 
@@ -33,12 +33,22 @@ MODE_LABELS = {
 
 
 def _ice_config():
-    # S4'te seçilebilir olacak (Google / Cloudflare / özel / yalnızca yerel ağ)
+    """Ayarlardaki STUN/TURN seçimine göre yapılandırma. Özel liste hatalıysa
+    p2p_core.IceConfigError fırlar (teklif/cevap üretilmeden kullanıcıya gösterilir)."""
+    servers = p2p_core.ice_servers_for(settings_store.get("p2p_ice"), settings_store.get("p2p_ice_custom"))
     return RTCConfiguration(iceServers=[
-        RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
-        RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
-        RTCIceServer(urls=["stun:stun.cloudflare.com:3478"]),
+        RTCIceServer(urls=[s["urls"]], username=s.get("username"), credential=s.get("credential"))
+        for s in servers
     ])
+
+
+ICE_HINTS = {
+    "google+cloudflare": "Google ve Cloudflare STUN sunucuları yalnızca IP adresinizi görür; içerik doğrudan akar.",
+    "cloudflare": "Yalnızca Cloudflare'in STUN sunucusu IP adresinizi görür.",
+    "google": "Yalnızca Google'ın STUN sunucuları IP adresinizi görür.",
+    "custom": "Satır başına bir sunucu:  stun:sunucu:3478  ya da  turn:sunucu:3478 kullanıcı şifre",
+    "lan": "Hiçbir dış sunucuya istek gitmez; yalnızca aynı ağdaki (ya da açık IP'li) cihazlarla bağlanır.",
+}
 
 
 def _qr_base64(data_str):
@@ -182,6 +192,40 @@ class PureP2PMixin:
             return ft.TextButton("Panodan yapıştır", icon=ft.Icons.CONTENT_PASTE, on_click=_paste,
                                  style=ft.ButtonStyle(color=C.accent))
 
+        # ════════════════ bağlantı yardımcısı (STUN/TURN) seçimi ════════════════
+        ice_hint = ft.Text("", size=10, color=C.text_muted)
+        ice_custom_tf = ft.TextField(
+            label="Özel sunucular", multiline=True, min_lines=2, max_lines=4, text_size=11,
+            value=settings_store.get("p2p_ice_custom"), border_color=C.surface_alt, focused_border_color=C.accent,
+            hint_text="stun:sunucu.ornek.com:3478\nturn:sunucu.ornek.com:3478 kullanici sifre")
+
+        def ice_refresh():
+            preset = ice_dd.value
+            ice_custom_tf.visible = preset == "custom"
+            ice_hint.value, ice_hint.color = ICE_HINTS.get(preset, ""), C.text_muted
+            if preset == "custom":
+                try:
+                    n = len(p2p_core.ice_servers_for("custom", ice_custom_tf.value))
+                    ice_hint.value += f"\n✓ {n} sunucu"
+                except p2p_core.IceConfigError as ex:
+                    ice_hint.value, ice_hint.color = f"Hata: {ex}", C.danger
+
+        def ice_changed(e):
+            settings_store.set("p2p_ice", ice_dd.value)
+            settings_store.set("p2p_ice_custom", ice_custom_tf.value or "")
+            ice_refresh()
+            self.page.update()
+
+        ice_dd = ft.Dropdown(
+            label="Bağlantı yardımcısı (STUN)", dense=True, border_color=C.surface_alt,
+            focused_border_color=C.accent, on_select=ice_changed,
+            value=settings_store.get("p2p_ice") if settings_store.get("p2p_ice") in p2p_core.ICE_PRESETS
+            else p2p_core.ICE_DEFAULT,
+            options=[ft.dropdown.Option(k, v) for k, v in p2p_core.ICE_PRESETS.items()],
+        )
+        ice_custom_tf.on_change = ice_changed
+        ice_refresh()
+
         # ════════════════ 1. sekme: bağlantıyı başlatan ════════════════
         mode_dd = ft.Dropdown(
             label="Bağlantı türü", value="chat", border_color=C.surface_alt, focused_border_color=C.accent,
@@ -206,6 +250,7 @@ class PureP2PMixin:
                 caller_status.value = f"Hata: {msg}"
                 caller_prog.visible = False
                 gen_offer_btn.disabled = False
+                mode_dd.disabled = False
                 self.page.update()
             self.page.run_task(_ui)
 
@@ -410,9 +455,10 @@ class PureP2PMixin:
                 ft.Column([
                     ft.Text("Arada sunucu yok: iki taraf da aynı anda açık olmalı. Kodlar imzalıdır "
                             "ve tek kullanımlıktır.", size=10, color=C.text_muted),
+                    ice_dd, ice_custom_tf, ice_hint,
                     tabs,
                 ], spacing=6, expand=True),
-                width=400, height=540, padding=0,
+                width=400, height=620, padding=0,
             ),
             bgcolor=C.surface,
         )

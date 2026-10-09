@@ -280,6 +280,80 @@ def parse_frame(raw) -> dict | None:
     return None
 
 
+# ─────────────────────────── bağlantı yardımcısı (STUN/TURN) seçimi ───────────────────────────
+# STUN sunucusu cihaza "dışarıdan şu adresle görünüyorsun" der; içeriği görmez ama
+# bağlananın IP'sini görür. Seçim iki tarafta bağımsızdır. static/serverless.html'deki
+# P2PCore.iceServersFor ile birebir aynı kurallar (tests/test_serverless_html.py).
+
+ICE_DEFAULT = "google+cloudflare"
+ICE_PRESETS = {
+    "google+cloudflare": "Google + Cloudflare (varsayılan)",
+    "cloudflare": "Yalnızca Cloudflare",
+    "google": "Yalnızca Google",
+    "custom": "Özel sunucu (kendi STUN/TURN'ünüz)",
+    "lan": "Yalnızca yerel ağ (dış sunucu yok)",
+}
+_PUBLIC_STUN = {
+    "google": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"],
+    "cloudflare": ["stun:stun.cloudflare.com:3478"],
+}
+MAX_CUSTOM_ICE = 8
+_ICE_URL_RE = re.compile(
+    r"(stun|turns?):(\[[0-9A-Fa-f:.]{2,45}\]|[A-Za-z0-9.-]{1,253})(?::([0-9]{1,5}))?(\?transport=(?:udp|tcp))?")
+_ICE_CRED_RE = re.compile(r"[\x21-\x7e]{1,128}")
+
+
+class IceConfigError(ValueError):
+    """Özel STUN/TURN listesi hatalı."""
+
+
+def parse_custom_ice(text: str) -> list[dict]:
+    """Özel sunucu listesi: satır başına bir sunucu, '#' ile başlayan satırlar yorum.
+
+        stun:sunucu.ornek.com:3478
+        turn:sunucu.ornek.com:3478?transport=udp kullanici sifre
+        turns:sunucu.ornek.com:5349 kullanici sifre
+    """
+    servers = []
+    for no, line in enumerate((text or "").splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        m = _ICE_URL_RE.fullmatch(parts[0])
+        if not m:
+            raise IceConfigError(f"{no}. satır: adres stun:sunucu:port ya da turn:sunucu:port biçiminde olmalı")
+        scheme, port, query = m.group(1), m.group(3), m.group(4)
+        if port is not None and not 1 <= int(port) <= 65535:
+            raise IceConfigError(f"{no}. satır: port 1-65535 arasında olmalı")
+        if scheme == "stun":
+            if query or len(parts) != 1:
+                raise IceConfigError(f"{no}. satır: STUN adresi kullanıcı adı/şifre ya da transport almaz")
+            servers.append({"urls": parts[0]})
+        else:
+            if len(parts) != 3 or not all(_ICE_CRED_RE.fullmatch(p) for p in parts[1:]):
+                raise IceConfigError(f"{no}. satır: TURN için adresten sonra kullanıcı adı ve şifre yazın "
+                                     "(boşlukla ayrılmış)")
+            servers.append({"urls": parts[0], "username": parts[1], "credential": parts[2]})
+        if len(servers) > MAX_CUSTOM_ICE:
+            raise IceConfigError(f"en fazla {MAX_CUSTOM_ICE} sunucu girilebilir")
+    return servers
+
+
+def ice_servers_for(preset: str, custom_text: str = "") -> list[dict]:
+    """Seçime göre ICE sunucu listesi ({"urls", ["username", "credential"]}).
+    "lan" → boş liste: hiçbir dış sunucuya istek gitmez."""
+    if preset == "lan":
+        return []
+    if preset == "custom":
+        servers = parse_custom_ice(custom_text)
+        if not servers:
+            raise IceConfigError("özel sunucu listesi boş — en az bir sunucu girin ya da başka bir seçenek seçin")
+        return servers
+    names = {"google": ["google"], "cloudflare": ["cloudflare"]}.get(preset, ["google", "cloudflare"])
+    return [{"urls": u} for n in names for u in _PUBLIC_STUN[n]]
+
+
 # ─────────────────────────── event loop ───────────────────────────
 # Sunucusuz mod, sunucu WebSocket'inin loop'una (state["ws_loop"]) bağlı olmamalı:
 # sunucu yokken de çalışır. aiortc nesneleri bu ayrı arka plan loop'unda yaşar.

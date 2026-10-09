@@ -86,6 +86,11 @@
   .composer { display: flex; gap: 6px; padding-top: 8px; }
   .composer input[type=text] { flex: 1; }
   .badge { font-size: 12px; margin: 4px 0 6px; }
+  details.ice { margin-bottom: 10px; font-size: 13px; }
+  details.ice summary { cursor: pointer; color: var(--muted); }
+  details.ice select { width: 100%; margin-top: 6px; background: var(--bg); color: var(--text);
+                       border: 1px solid var(--border); border-radius: 8px; padding: 9px; font: inherit; }
+  details.ice textarea { margin-top: 6px; min-height: 64px; }
   a.btn { display: inline-block; text-decoration: none; color: var(--accent-2); }
 </style>
 </head>
@@ -118,6 +123,13 @@
 
   <!-- ═════════════ 2. Bağlantı ═════════════ -->
   <section id="connect" class="card hidden">
+    <details id="ice-box" class="ice">
+      <summary>Bağlantı yardımcısı (STUN): <span id="ice-current"></span></summary>
+      <select id="ice-preset" aria-label="Bağlantı yardımcısı"></select>
+      <textarea id="ice-custom" class="hidden" spellcheck="false" autocapitalize="none"
+                placeholder="stun:sunucu.ornek.com:3478&#10;turn:sunucu.ornek.com:3478 kullanici sifre"></textarea>
+      <div id="ice-hint" class="sub" style="margin:6px 0 0"></div>
+    </details>
     <div class="tabs">
       <button id="tab-start" class="active">Bağlantı başlat</button>
       <button id="tab-answer">Koda cevap ver</button>
@@ -2685,10 +2697,62 @@ var qrcode = function() {
     for (const u of ["B", "KB", "MB", "GB"]) { if (n < 1024 || u === "GB") return u === "B" ? `${n} B` : `${n.toFixed(1)} ${u}`; n /= 1024; }
   }
 
+  // ── bağlantı yardımcısı (STUN/TURN) seçimi — desktop/p2p_core.py ice_servers_for ile birebir ──
+  const ICE_DEFAULT = "google+cloudflare";
+  const ICE_PRESETS = {
+    "google+cloudflare": "Google + Cloudflare (varsayılan)",
+    "cloudflare": "Yalnızca Cloudflare",
+    "google": "Yalnızca Google",
+    "custom": "Özel sunucu (kendi STUN/TURN'ünüz)",
+    "lan": "Yalnızca yerel ağ (dış sunucu yok)",
+  };
+  const PUBLIC_STUN = {
+    google: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"],
+    cloudflare: ["stun:stun.cloudflare.com:3478"],
+  };
+  const MAX_CUSTOM_ICE = 8;
+  const ICE_URL_RE = /^(stun|turns?):(\[[0-9A-Fa-f:.]{2,45}\]|[A-Za-z0-9.-]{1,253})(?::([0-9]{1,5}))?(\?transport=(?:udp|tcp))?$/;
+  const ICE_CRED_RE = /^[!-~]{1,128}$/;
+  class IceConfigError extends Error {}
+  function parseCustomIce(text) {
+    const servers = [];
+    const lines = String(text || "").split(/\r\n|\r|\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const no = i + 1, line = lines[i].trim();
+      if (!line || line.startsWith("#")) continue;
+      const parts = line.split(/\s+/);
+      const m = ICE_URL_RE.exec(parts[0]);
+      if (!m) throw new IceConfigError(`${no}. satır: adres stun:sunucu:port ya da turn:sunucu:port biçiminde olmalı`);
+      const [, scheme, , port, query] = m;
+      if (port !== undefined && !(+port >= 1 && +port <= 65535)) throw new IceConfigError(`${no}. satır: port 1-65535 arasında olmalı`);
+      if (scheme === "stun") {
+        if (query || parts.length !== 1) throw new IceConfigError(`${no}. satır: STUN adresi kullanıcı adı/şifre ya da transport almaz`);
+        servers.push({ urls: parts[0] });
+      } else {
+        if (parts.length !== 3 || !parts.slice(1).every((p) => ICE_CRED_RE.test(p)))
+          throw new IceConfigError(`${no}. satır: TURN için adresten sonra kullanıcı adı ve şifre yazın (boşlukla ayrılmış)`);
+        servers.push({ urls: parts[0], username: parts[1], credential: parts[2] });
+      }
+      if (servers.length > MAX_CUSTOM_ICE) throw new IceConfigError(`en fazla ${MAX_CUSTOM_ICE} sunucu girilebilir`);
+    }
+    return servers;
+  }
+  function iceServersFor(preset, customText = "") {
+    if (preset === "lan") return [];
+    if (preset === "custom") {
+      const servers = parseCustomIce(customText);
+      if (!servers.length) throw new IceConfigError("özel sunucu listesi boş — en az bir sunucu girin ya da başka bir seçenek seçin");
+      return servers;
+    }
+    const names = { google: ["google"], cloudflare: ["cloudflare"] }[preset] || ["google", "cloudflare"];
+    return names.flatMap((n) => PUBLIC_STUN[n].map((urls) => ({ urls })));
+  }
+
   G.P2PCore = { PREFIX_V2, MODES, S, CHUNK_SIZE, FID_BYTES, MAX_FILE_BYTES, MAX_WEB_FILE_BYTES, MAX_TEXT_CHARS, USERNAME_RE,
     b64, unb64, hex, randHex, sha256hex, derToPem, pemToDer, fingerprint, importPublic, importPrivatePkcs8,
     generateIdentity, sign, verify, makeEnvelope, parseCode, identifyPeer, isBlocked,
-    textFrame, ackFrame, parseFrame, chunkFrame, splitChunk, safeFilename, fmtSize };
+    textFrame, ackFrame, parseFrame, chunkFrame, splitChunk, safeFilename, fmtSize,
+    ICE_DEFAULT, ICE_PRESETS, IceConfigError, parseCustomIce, iceServersFor };
 })(globalThis);
 </script>
 
@@ -2700,11 +2764,10 @@ var qrcode = function() {
 (function () {
   const C = window.P2PCore;
   const $ = (id) => document.getElementById(id);
-  const ICE = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" },
-               { urls: "stun:stun.cloudflare.com:3478" }];
   const me = { username: "", priv: null, pubDer: null, fp: "", remember: false };
   const contacts = new Map();                 // kullanıcı adı → { fp, pubDer }
   const session = { pc: null, channel: null, offerSdp: "", ident: null };
+  const ice = { preset: C.ICE_DEFAULT, custom: "" };   // STUN/TURN seçimi (yalnızca "hatırla" ile saklanır)
 
   function setStatus(el, text, cls) { el.textContent = text || ""; el.className = "status " + (cls || ""); }
   function show(id, on = true) { $(id).classList.toggle("hidden", !on); }
@@ -2731,6 +2794,7 @@ var qrcode = function() {
     const pkcs8 = C.b64(await crypto.subtle.exportKey("pkcs8", me.priv));
     await kv("put", "identity", { username: me.username, pkcs8 });
     await kv("put", "contacts", [...contacts].map(([u, c]) => ({ username: u, fp: c.fp, der: C.b64(c.pubDer) })));
+    await kv("put", "ice", { preset: ice.preset, custom: ice.custom });
   }
   async function forget() {
     try { indexedDB.deleteDatabase(DB_NAME); } catch (e) {}
@@ -2866,6 +2930,37 @@ var qrcode = function() {
     finally { if (stream) stream.getTracks().forEach((t) => t.stop()); show("scan-video", false); }
   }
 
+  // ── bağlantı yardımcısı (STUN/TURN) seçimi ──
+  const ICE_HINTS = {
+    "google+cloudflare": "Google ve Cloudflare STUN sunucuları yalnızca IP adresinizi görür; içerik doğrudan akar.",
+    "cloudflare": "Yalnızca Cloudflare'in STUN sunucusu IP adresinizi görür.",
+    "google": "Yalnızca Google'ın STUN sunucuları IP adresinizi görür.",
+    "custom": "Satır başına bir sunucu:  stun:sunucu:3478  ya da  turn:sunucu:3478 kullanıcı şifre",
+    "lan": "Hiçbir dış sunucuya istek gitmez; yalnızca aynı ağdaki (ya da açık IP'li) cihazlarla bağlanır.",
+  };
+  for (const [k, v] of Object.entries(C.ICE_PRESETS)) {
+    const o = document.createElement("option"); o.value = k; o.textContent = v; $("ice-preset").append(o);
+  }
+  function renderIce() {
+    if (!(ice.preset in C.ICE_PRESETS)) ice.preset = C.ICE_DEFAULT;
+    $("ice-preset").value = ice.preset; $("ice-custom").value = ice.custom;
+    $("ice-current").textContent = C.ICE_PRESETS[ice.preset];
+    show("ice-custom", ice.preset === "custom");
+    let hint = ICE_HINTS[ice.preset], cls = "sub";
+    if (ice.preset === "custom") {
+      try { hint += `\n✓ ${C.iceServersFor("custom", ice.custom).length} sunucu`; }
+      catch (e) { hint = "Hata: " + e.message; cls = "sub bad"; }
+    }
+    $("ice-hint").textContent = hint; $("ice-hint").className = cls; $("ice-hint").style.whiteSpace = "pre-wrap";
+  }
+  function iceChanged() {
+    ice.preset = $("ice-preset").value; ice.custom = $("ice-custom").value;
+    renderIce(); persist().catch(() => {});
+  }
+  $("ice-preset").onchange = iceChanged;
+  $("ice-custom").oninput = iceChanged;
+  renderIce();
+
   // ── sekmeler ──
   $("tab-start").onclick = () => { $("tab-start").classList.add("active"); $("tab-answer").classList.remove("active"); show("pane-start"); show("pane-answer", false); };
   $("tab-answer").onclick = () => { $("tab-answer").classList.add("active"); $("tab-start").classList.remove("active"); show("pane-answer"); show("pane-start", false); };
@@ -2873,7 +2968,8 @@ var qrcode = function() {
   // ── WebRTC ──
   function newPc() {
     if (session.pc) try { session.pc.close(); } catch (e) {}
-    session.pc = new RTCPeerConnection({ iceServers: ICE });
+    // Özel liste hatalıysa IceConfigError fırlar; çağıran durum satırında gösterir
+    session.pc = new RTCPeerConnection({ iceServers: C.iceServersFor(ice.preset, ice.custom) });
     return session.pc;
   }
   function gathered(pc) {
@@ -3119,6 +3215,8 @@ var qrcode = function() {
       if (!saved) return;
       me.remember = true; $("remember").checked = true;
       for (const c of (await kv("get", "contacts")) || []) contacts.set(c.username, { fp: c.fp, pubDer: C.unb64(c.der) });
+      const savedIce = await kv("get", "ice");
+      if (savedIce) { ice.preset = String(savedIce.preset || C.ICE_DEFAULT); ice.custom = String(savedIce.custom || ""); renderIce(); }
       await startWith(await C.importPrivatePkcs8(C.unb64(saved.pkcs8)), saved.username);
     } catch (e) { console.warn("hatırlanan kimlik yüklenemedi:", e); }
   })();

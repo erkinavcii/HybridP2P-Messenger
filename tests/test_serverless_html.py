@@ -180,3 +180,23 @@ def test_page_lists_same_presets():
     html = HTML.read_text(encoding="utf-8")
     for key, label in core.ICE_PRESETS.items():
         assert f'"{key}": "{label}"' in html
+
+
+# ─────────────────────────── sesli/görüntülü arama (S3b) ───────────────────────────
+
+def test_page_offers_every_desktop_mode():
+    html = HTML.read_text(encoding="utf-8")
+    select = re.search(r'<select id="mode">(.*?)</select>', html, re.S).group(1)
+    assert re.findall(r'<option value="(\w+)"', select) == list(core.MODES)
+    # eski "yalnızca yazılı mesajlaşma" engeli kalktı; arama izinleri ve medya CSP'si yerinde
+    assert "şimdilik yalnızca yazılı mesajlaşma" not in html
+    assert "getUserMedia" in html and "media-src blob: mediastream:" in html
+
+
+def test_page_blocks_unverifiable_legacy_codes():
+    # Masaüstü eski (imzasız) kodlarla aramaya uyarıyla izin verir; sayfa hiç kabul etmez
+    legacy = "z1:" + base64.b64encode(zlib.compress(json.dumps(
+        {"type": "offer", "sdp": SDP, "call_type": "video"}).encode())).decode()
+    assert node({"op": "identify", "code": legacy, "contacts": {}, "expected": "offer"})[0]["status"] == "legacy"
+    html = HTML.read_text(encoding="utf-8")
+    assert "C.isBlocked(id) || id.status === C.S.LEGACY" in html

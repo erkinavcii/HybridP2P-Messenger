@@ -9,7 +9,7 @@
 
   Sunucu GEREKMEZ: iki kişi aynı anda açıkken tek kullanımlık, imzalı bağlantı
   kodlarını (kopyala-yapıştır, paylaş, QR) herhangi bir kanaldan değiş tokuş
-  ederek doğrudan (WebRTC) bağlanır: yazılı mesaj ve dosya.
+  ederek doğrudan (WebRTC) bağlanır: yazılı mesaj ve dosya ya da sesli/görüntülü arama.
 
   Bu dosya tek başına çalışır: e-postayla, USB'yle ya da mesaj ekiyle
   paylaşılabilir, herhangi bir statik sitede barındırılabilir. Masaüstü
@@ -88,9 +88,34 @@
   .badge { font-size: 12px; margin: 4px 0 6px; }
   details.ice { margin-bottom: 10px; font-size: 13px; }
   details.ice summary { cursor: pointer; color: var(--muted); }
-  details.ice select { width: 100%; margin-top: 6px; background: var(--bg); color: var(--text);
-                       border: 1px solid var(--border); border-radius: 8px; padding: 9px; font: inherit; }
+  select { width: 100%; background: var(--bg); color: var(--text);
+           border: 1px solid var(--border); border-radius: 8px; padding: 9px; font: inherit; }
+  details.ice select { margin-top: 6px; }
   details.ice textarea { margin-top: 6px; min-height: 64px; }
+  /* Arama ekranı: tam ekran, karşı tarafın görüntüsü arkada, kendi görüntünüz köşede */
+  #call { position: fixed; inset: 0; height: 100vh; height: 100dvh; background: #000; color: #fff; z-index: 5;
+          display: flex; flex-direction: column; }
+  #call.hidden { display: none; }
+  #remote-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  #local-video { position: absolute; right: 12px; top: calc(84px + env(safe-area-inset-top)); width: 28vw; max-width: 170px;
+                 border-radius: 10px; border: 1px solid rgba(255,255,255,.35); background: #111; z-index: 1; }
+  #local-video.mirror { transform: scaleX(-1); }
+  .call-top { position: relative; z-index: 2; padding: calc(12px + env(safe-area-inset-top)) 16px 24px;
+              background: linear-gradient(rgba(0,0,0,.75), transparent); }
+  .call-top .badge { color: #fff; opacity: .9; }
+  .call-top .badge.ok { color: #4ade80; } .call-top .badge.info { color: #93c5fd; }
+  #call-voice { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+                justify-content: center; gap: 10px; font-size: 18px; }
+  #call-voice .big { font-size: 72px; }
+  #call-quality { font-size: 12px; color: #fde68a; min-height: 16px; }
+  .call-controls { position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 2;
+                   display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
+  .call-controls button { width: 62px; height: 62px; border-radius: 50%; border: none; font-size: 24px; padding: 0;
+                          background: rgba(255,255,255,.18); color: #fff; }
+  .call-controls button.off { background: #fff; color: #111; }
+  .call-controls button.hang { background: #dc2626; }
+  #call-end { position: absolute; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 3;
+              text-align: center; }
   a.btn { display: inline-block; text-decoration: none; color: var(--accent-2); }
 </style>
 </head>
@@ -135,7 +160,13 @@
       <button id="tab-answer">Koda cevap ver</button>
     </div>
     <div id="pane-start">
-      <button id="btn-offer" class="primary">1. Teklif kodu üret</button>
+      <label for="mode">Bağlantı türü</label>
+      <select id="mode">
+        <option value="chat">Yazılı mesajlaşma ve dosya</option>
+        <option value="audio">Sesli arama</option>
+        <option value="video">Görüntülü arama</option>
+      </select>
+      <div class="row"><button id="btn-offer" class="primary">1. Teklif kodu üret</button></div>
       <div id="offer-box" class="hidden">
         <label>Teklif kodunuz — karşı tarafa gönderin</label>
         <textarea id="offer-code" readonly></textarea>
@@ -180,12 +211,33 @@
     <div id="peer-badge" class="badge"></div>
     <div id="messages"></div>
     <div id="chat-status" class="status bad"></div>
+    <div id="chat-again" class="row hidden"><button class="primary grow" data-again>Yeni bağlantı kur</button></div>
     <div class="composer">
       <button id="btn-attach" title="Dosya gönder">📎</button>
       <input id="file-input" type="file" class="hidden">
       <input id="msg-input" type="text" placeholder="Mesaj yazın…" maxlength="8000" autocomplete="off">
       <button id="btn-send" class="primary">Gönder</button>
     </div>
+  </section>
+  <!-- ═════════════ 4. Arama ═════════════ -->
+  <section id="call" class="hidden">
+    <video id="remote-video" autoplay playsinline></video>
+    <div id="call-voice" class="hidden"><div class="big">📞</div><div id="call-voice-name"></div></div>
+    <video id="local-video" class="mirror hidden" autoplay playsinline muted></video>
+    <div class="call-top">
+      <strong id="call-peer"></strong> · <span id="call-timer">00:00</span>
+      <div id="call-badge" class="badge"></div>
+      <div id="call-status" class="status" style="color:#fff;margin-top:2px"></div>
+      <div id="call-quality"></div>
+    </div>
+    <div id="call-controls" class="call-controls">
+      <button id="btn-mic" title="Mikrofonu kapat" aria-label="Mikrofon">🎤</button>
+      <button id="btn-cam" title="Kamerayı kapat" aria-label="Kamera">📷</button>
+      <button id="btn-flip" title="Ön/arka kamera" aria-label="Kamerayı çevir" class="hidden">🔄</button>
+      <button id="btn-unmute" title="Sesi aç" aria-label="Sesi aç" class="hidden">🔊</button>
+      <button id="btn-hang" class="hang" title="Kapat" aria-label="Aramayı kapat">✖</button>
+    </div>
+    <div id="call-end" class="hidden"><button class="primary" data-again style="width:100%">Yeni bağlantı kur</button></div>
   </section>
 </main>
 
@@ -2766,7 +2818,10 @@ var qrcode = function() {
   const $ = (id) => document.getElementById(id);
   const me = { username: "", priv: null, pubDer: null, fp: "", remember: false };
   const contacts = new Map();                 // kullanıcı adı → { fp, pubDer }
-  const session = { pc: null, channel: null, offerSdp: "", ident: null };
+  const session = { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" };
+  const MODE_LABELS = { chat: "Yazılı mesajlaşma", audio: "Sesli arama", video: "Görüntülü arama" };
+  // Arama durumu (yalnızca audio/video): yerel akış, sayaç, ekranı açık tutma kilidi
+  const call = { stream: null, open: false, ended: false, timer: null, started: 0, facing: "user", wakeLock: null };
   const ice = { preset: C.ICE_DEFAULT, custom: "" };   // STUN/TURN seçimi (yalnızca "hatırla" ile saklanır)
 
   function setStatus(el, text, cls) { el.textContent = text || ""; el.className = "status " + (cls || ""); }
@@ -2984,34 +3039,99 @@ var qrcode = function() {
     switch (id.status) {
       case C.S.VERIFIED: return [`✓ ${id.username} — kimlik doğrulandı (rehberdeki anahtarla eşleşiyor)`, "ok"];
       case C.S.NEW: return [`? ${id.username} — rehberinizde yok. Parmak izini karşı tarafla başka bir kanaldan karşılaştırın:\n${id.fingerprint}`, "info"];
-      case C.S.LEGACY: return ["⚠ Eski biçim kod: kimlik doğrulanamıyor; yazılı mesajlaşma desteklenmez.", "bad"];
+      case C.S.LEGACY: return ["⛔ Eski biçim kod: gönderenin kimliği doğrulanamadığı için bu sayfa kabul etmiyor. Karşı taraf uygulamasını güncellemeli.", "bad"];
       default: return [`⛔ ${id.username ? "'" + id.username + "' " : ""}bağlantı engellendi: ${id.detail}`, "bad"];
     }
   }
 
-  $("btn-offer").onclick = async () => {
-    $("btn-offer").disabled = true;
-    setStatus($("start-status"), "Ağ adresleri toplanıyor (2-6 sn)…", "info");
+  // ── yerel medya (mikrofon/kamera) ──
+  function mediaError(e, mode) {
+    const what = mode === "video" ? "Kamera ve mikrofon" : "Mikrofon";
+    switch (e && e.name) {
+      case "NotAllowedError": case "SecurityError":
+        return `${what} izni verilmedi. Adres çubuğundaki izin simgesinden izin verip tekrar deneyin.`;
+      case "NotFoundError": case "OverconstrainedError": return `Bu cihazda ${what.toLowerCase()} bulunamadı.`;
+      case "NotReadableError": return `${what} başka bir uygulama tarafından kullanılıyor.`;
+      default: return `${what} açılamadı: ${e && e.message || e}`;
+    }
+  }
+  function videoConstraints(facing) {
+    return { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+  }
+  async function startLocalMedia(mode) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+      throw new Error("Bu tarayıcı mikrofon/kameraya erişemiyor (sayfa https ya da localhost üzerinden açılmalı).");
+    stopLocalMedia();
     try {
+      call.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: mode === "video" ? videoConstraints(call.facing) : false,
+      });
+    } catch (e) { throw new Error(mediaError(e, mode)); }
+  }
+  function stopLocalMedia() {
+    if (call.stream) call.stream.getTracks().forEach((t) => t.stop());
+    call.stream = null;
+  }
+  function attachMedia(pc) {
+    for (const t of call.stream.getTracks()) pc.addTrack(t, call.stream);
+    pc.ontrack = (ev) => {
+      const v = $("remote-video");
+      if (ev.streams && ev.streams[0]) v.srcObject = ev.streams[0];
+      else { if (!v.srcObject) v.srcObject = new MediaStream(); v.srcObject.addTrack(ev.track); }
+      playRemote();
+    };
+  }
+  function playRemote() {
+    // Otomatik oynatma engellenirse (kullanıcı etkileşimi yoksa) "Sesi aç" düğmesi çıkar
+    $("remote-video").play().then(() => show("btn-unmute", false)).catch(() => show("btn-unmute"));
+  }
+  function watchCall(pc, identGetter) {
+    pc.onconnectionstatechange = () => {
+      const st = pc.connectionState;
+      if (st === "connected") { setStatus($("call-status"), "", ""); openCall(identGetter()); }
+      else if (st === "failed" || st === "closed") endCall(st === "failed" ? "bağlantı kurulamadı/koptu" : "kapandı");
+      else if (st === "disconnected") {
+        setStatus($("call-status"), "Bağlantı koptu, bekleniyor…", "");
+        setTimeout(() => { if (pc === session.pc && pc.connectionState === "disconnected") endCall("bağlantı koptu"); }, 8000);
+      }
+    };
+  }
+
+  $("btn-offer").onclick = async () => {
+    const mode = $("mode").value;
+    $("btn-offer").disabled = true; $("mode").disabled = true;
+    try {
+      if (mode !== "chat") {
+        setStatus($("start-status"), `${MODE_LABELS[mode]}: ${mode === "video" ? "kamera ve mikrofon" : "mikrofon"} izni isteniyor…`, "info");
+        await startLocalMedia(mode);                         // izin teklif üretilmeden önce istenir
+      }
+      setStatus($("start-status"), "Ağ adresleri toplanıyor (2-6 sn)…", "info");
       const pc = newPc();
-      session.channel = pc.createDataChannel("hp2p");
-      bindChannel(session.channel, () => session.ident);
+      session.mode = mode;
+      if (mode === "chat") {
+        session.channel = pc.createDataChannel("hp2p");
+        bindChannel(session.channel, () => session.ident);
+      } else { attachMedia(pc); watchCall(pc, () => session.ident); }
       await pc.setLocalDescription(await pc.createOffer());
       await gathered(pc);
       session.offerSdp = pc.localDescription.sdp;
-      const code = await C.makeEnvelope({ type: "offer", mode: "chat", sdp: session.offerSdp,
+      const code = await C.makeEnvelope({ type: "offer", mode, sdp: session.offerSdp,
                                           username: me.username, priv: me.priv, pubDer: me.pubDer });
       $("offer-code").value = code; show("offer-box"); renderQr("offer-qr", code);
-      setStatus($("start-status"), "Teklif hazır. Karşı tarafa gönderin ve cevabını yapıştırın.", "info");
-    } catch (e) { setStatus($("start-status"), "Hata: " + e.message, "bad"); $("btn-offer").disabled = false; }
+      setStatus($("start-status"), `${MODE_LABELS[mode]} teklifi hazır. Karşı tarafa gönderin ve cevabını yapıştırın.`, "info");
+    } catch (e) {
+      setStatus($("start-status"), "Hata: " + e.message, "bad");
+      $("btn-offer").disabled = false; $("mode").disabled = false; stopLocalMedia();
+    }
   };
 
   $("btn-connect").onclick = async () => {
     try {
       const env = await C.parseCode($("answer-in").value);
       let id = await C.identifyPeer(env, lookup, "answer", session.offerSdp);
-      if (id.status === C.S.LEGACY) id = { status: C.S.INVALID, detail: "eski sürüm yazılı mesajlaşmayı desteklemiyor" };
-      else if (env.mode !== "chat") id = { status: C.S.INVALID, username: id.username, detail: "cevap başka bir bağlantı türüne ait" };
+      if (id.status === C.S.LEGACY) id = { status: C.S.INVALID, detail: "eski biçim kod: kimlik doğrulanamıyor" };
+      else if (env.mode !== session.mode) id = { status: C.S.INVALID, username: id.username, detail: "cevap başka bir bağlantı türüne ait" };
       const [text, cls] = identText(id); setStatus($("start-status"), text, cls);
       if (C.isBlocked(id)) return;
       session.ident = id;
@@ -3025,22 +3145,137 @@ var qrcode = function() {
       const env = await C.parseCode($("offer-in").value);
       const id = await C.identifyPeer(env, lookup, "offer");
       const [text, cls] = identText(id); setStatus($("answer-ident"), text, cls);
-      if (C.isBlocked(id)) return;
-      if (env.mode !== "chat") { setStatus($("answer-ident"), "Bu kod sesli/görüntülü arama için; bu sayfa şimdilik yalnızca yazılı mesajlaşma ve dosya destekliyor.", "bad"); return; }
+      if (C.isBlocked(id) || id.status === C.S.LEGACY) return;
+      const mode = env.mode;
       $("btn-answer").disabled = true;
-      setStatus($("answer-status"), "Cevap hazırlanıyor (2-6 sn)…", "info");
+      if (mode !== "chat") {
+        setStatus($("answer-status"), `${MODE_LABELS[mode]}: ${mode === "video" ? "kamera ve mikrofon" : "mikrofon"} izni isteniyor…`, "info");
+        await startLocalMedia(mode);
+      }
+      setStatus($("answer-status"), `${MODE_LABELS[mode]} için cevap hazırlanıyor (2-6 sn)…`, "info");
       const pc = newPc();
-      session.ident = id;
-      pc.ondatachannel = (ev) => { if (ev.channel.label === "hp2p") { session.channel = ev.channel; bindChannel(ev.channel, () => session.ident); } };
+      session.ident = id; session.mode = mode;
+      if (mode === "chat")
+        pc.ondatachannel = (ev) => { if (ev.channel.label === "hp2p") { session.channel = ev.channel; bindChannel(ev.channel, () => session.ident); } };
+      else { attachMedia(pc); watchCall(pc, () => session.ident); }
       await pc.setRemoteDescription({ type: "offer", sdp: env.sdp });
       await pc.setLocalDescription(await pc.createAnswer());
       await gathered(pc);
-      const code = await C.makeEnvelope({ type: "answer", mode: "chat", sdp: pc.localDescription.sdp,
+      const code = await C.makeEnvelope({ type: "answer", mode, sdp: pc.localDescription.sdp,
                                           username: me.username, priv: me.priv, pubDer: me.pubDer, offerSdp: env.sdp });
       $("answer-code").value = code; show("answer-box"); renderQr("answer-qr", code);
       setStatus($("answer-status"), "", "");
-    } catch (e) { setStatus($("answer-status"), "Hata: " + e.message, "bad"); $("btn-answer").disabled = false; }
+    } catch (e) { setStatus($("answer-status"), "Hata: " + e.message, "bad"); $("btn-answer").disabled = false; stopLocalMedia(); }
   };
+
+  // ── arama ekranı ──
+  function hidePageForSession() {
+    show("connect", false); show("contacts", false); show("identity", false);
+    // Sayfa başlığını gizle: telefonda kiminle konuşulduğu ve doğrulama rozeti hep görünür kalsın
+    document.querySelector("main > h1").classList.add("hidden");
+    document.querySelector("main > p.sub").classList.add("hidden");
+  }
+  async function openCall(id) {
+    if (call.open) return;
+    call.open = true; call.ended = false;
+    hidePageForSession(); show("call"); show("call-end", false); show("call-controls");
+    const who = id.username || "karşı taraf";
+    $("call-peer").textContent = `${MODE_LABELS[session.mode]}: ${who}`;
+    renderBadge(id, $("call-badge"));
+    const isVideo = session.mode === "video";
+    show("call-voice", !isVideo); $("call-voice-name").textContent = who;
+    show("remote-video", isVideo); show("local-video", isVideo); show("btn-cam", isVideo); show("btn-flip", false);
+    if (isVideo) $("local-video").srcObject = call.stream;
+    $("local-video").classList.toggle("mirror", call.facing === "user");
+    if (isVideo && navigator.mediaDevices.enumerateDevices) {
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+      show("btn-flip", cams.length > 1);
+    }
+    playRemote();
+    call.started = Date.now();
+    call.timer = setInterval(() => { $("call-timer").textContent = fmtDuration(Date.now() - call.started); }, 1000);
+    try { call.wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { call.wakeLock = null; }
+  }
+  function fmtDuration(ms) {
+    const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = t % 60;
+    const two = (n) => String(n).padStart(2, "0");
+    return (h ? h + ":" : "") + two(m) + ":" + two(sec);
+  }
+  function endCall(reason) {
+    if (call.ended) return;
+    call.ended = true;
+    try { session.pc && session.pc.close(); } catch (e) {}
+    stopLocalMedia();
+    clearInterval(call.timer); call.timer = null;
+    if (call.wakeLock) { call.wakeLock.release().catch(() => {}); call.wakeLock = null; }
+    const dur = call.started ? " · süre " + fmtDuration(Date.now() - call.started) : "";
+    if (!call.open) {                                       // bağlanmadan bitti: kod ekranında bildir
+      const target = $("offer-box").classList.contains("hidden") ? $("answer-status") : $("start-status");
+      setStatus(target, `Arama kurulamadı (${reason}). Yeni bağlantı için aşağıdaki düğmeyi kullanın.`, "bad");
+      return;
+    }
+    $("remote-video").srcObject = null; $("local-video").srcObject = null; show("local-video", false);
+    setStatus($("call-status"), `Görüşme bitti (${reason})${dur}`, "");
+    show("call-controls", false); show("call-end");
+  }
+  let micOn = true, camOn = true;
+  $("btn-mic").onclick = () => {
+    micOn = !micOn;
+    call.stream && call.stream.getAudioTracks().forEach((t) => t.enabled = micOn);
+    $("btn-mic").classList.toggle("off", !micOn); $("btn-mic").title = micOn ? "Mikrofonu kapat" : "Mikrofonu aç";
+  };
+  $("btn-cam").onclick = () => {
+    camOn = !camOn;
+    call.stream && call.stream.getVideoTracks().forEach((t) => t.enabled = camOn);
+    $("btn-cam").classList.toggle("off", !camOn); $("btn-cam").title = camOn ? "Kamerayı kapat" : "Kamerayı aç";
+  };
+  $("btn-flip").onclick = async () => {
+    const sender = session.pc && session.pc.getSenders().find((x) => x.track && x.track.kind === "video");
+    if (!sender || !call.stream) return;
+    const prev = call.facing, next = prev === "user" ? "environment" : "user";
+    const old = call.stream.getVideoTracks()[0];
+    // Telefonlar çoğunlukla iki kamerayı aynı anda açamaz: önce eskisini kapat
+    old.stop(); call.stream.removeTrack(old);
+    let track;
+    try { track = (await navigator.mediaDevices.getUserMedia({ video: videoConstraints({ exact: next }) })).getVideoTracks()[0]; call.facing = next; }
+    catch (e) {
+      setStatus($("call-quality"), "Diğer kamera açılamadı.", "");
+      track = (await navigator.mediaDevices.getUserMedia({ video: videoConstraints(prev) })).getVideoTracks()[0];
+    }
+    track.enabled = camOn;
+    call.stream.addTrack(track); await sender.replaceTrack(track);
+    $("local-video").srcObject = call.stream;
+    $("local-video").classList.toggle("mirror", call.facing === "user");
+  };
+  $("btn-unmute").onclick = playRemote;
+  $("btn-hang").onclick = () => endCall("siz kapattınız");
+
+  // ── yeni bağlantı: sayfayı yenilemeden (geçici kimlik kaybolmasın) başa dön ──
+  function backToConnect() {
+    try { session.pc && session.pc.close(); } catch (e) {}
+    stopLocalMedia();
+    clearInterval(call.timer);
+    if (call.wakeLock) { call.wakeLock.release().catch(() => {}); }
+    Object.assign(session, { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" });
+    Object.assign(call, { open: false, ended: false, timer: null, started: 0, wakeLock: null });
+    micOn = camOn = true; ["btn-mic", "btn-cam"].forEach((b) => $(b).classList.remove("off"));
+    for (const o of outgoing.values()) o.cancelled = true;
+    outgoing.clear(); incoming.clear(); pending.clear();
+    $("messages").textContent = ""; setStatus($("chat-status"), "", "bad");
+    ["msg-input", "btn-send", "btn-attach"].forEach((i) => $(i).disabled = false);
+    ["offer-code", "answer-in", "offer-in", "answer-code"].forEach((i) => $(i).value = "");
+    ["offer-qr", "answer-qr"].forEach((i) => $(i).textContent = "");
+    ["start-status", "answer-status", "answer-ident", "call-status", "call-quality"].forEach((i) => setStatus($(i), "", ""));
+    show("offer-box", false); show("answer-box", false); show("chat-again", false);
+    $("btn-offer").disabled = false; $("btn-answer").disabled = false; $("mode").disabled = false;
+    $("remote-video").srcObject = null; $("local-video").srcObject = null;
+    show("chat", false); show("call", false);
+    show("identity"); show("connect"); show("contacts");
+    document.querySelector("main > h1").classList.remove("hidden");
+    document.querySelector("main > p.sub").classList.remove("hidden");
+    window.scrollTo(0, 0);
+  }
+  document.addEventListener("click", (ev) => { if (ev.target.closest("[data-again]")) backToConnect(); });
 
   // ── sohbet ──
   const pending = new Map();        // giden mesaj id → meta öğesi (ulaştı tiki)
@@ -3056,32 +3291,30 @@ var qrcode = function() {
     ch.onmessage = (ev) => onFrame(ev.data);
   }
   function openChat(id) {
-    show("connect", false); show("contacts", false); show("identity", false); show("chat");
-    // Sayfa başlığını gizle: telefonda kiminle konuşulduğu ve doğrulama rozeti hep görünür kalsın
-    document.querySelector("main > h1").classList.add("hidden");
-    document.querySelector("main > p.sub").classList.add("hidden");
+    hidePageForSession(); show("chat");
     $("peer-name").textContent = `Doğrudan bağlantı: ${id.username || "karşı taraf"}`;
-    renderBadge(id);
+    renderBadge(id, $("peer-badge"));
     session.pc.onconnectionstatechange = () => {
       if (["failed", "closed", "disconnected"].includes(session.pc.connectionState)) closedChat(session.pc.connectionState);
     };
     // Dokunmatik cihazda otomatik odak klavyeyi açıp ekranı kaydırır; yalnızca fare/klavye ile odakla
     if (!matchMedia("(pointer: coarse)").matches) $("msg-input").focus();
   }
-  function renderBadge(id) {
-    const b = $("peer-badge"); b.textContent = "";
+  function renderBadge(id, b) {
+    b.textContent = "";
     if (id.status === C.S.VERIFIED) { b.className = "badge ok"; b.textContent = "✓ Kimlik doğrulandı"; return; }
     b.className = "badge info";
     b.append(`? Yeni kişi — parmak izini karşılaştırın: ${id.fingerprint}`);
     if (id.status === C.S.NEW) {
       const btn = document.createElement("button"); btn.textContent = "Rehbere ekle"; btn.style.marginLeft = "8px";
-      btn.onclick = async () => { try { await addContact(id.username, id.pubDer); id.status = C.S.VERIFIED; renderBadge(id); } catch (e) { alert(e.message); } };
+      btn.onclick = async () => { try { await addContact(id.username, id.pubDer); id.status = C.S.VERIFIED; renderBadge(id, b); } catch (e) { alert(e.message); } };
       b.append(btn);
     }
   }
   function closedChat(reason) {
     if ($("msg-input").disabled) return;
-    setStatus($("chat-status"), `Bağlantı kapandı (${reason}). Yeniden bağlanmak için sayfayı yenileyip yeni kod üretin.`, "bad");
+    setStatus($("chat-status"), `Bağlantı kapandı (${reason}).`, "bad");
+    show("chat-again");
     ["msg-input", "btn-send", "btn-attach"].forEach((i) => $(i).disabled = true);
     for (const o of outgoing.values()) o.cancelled = true;
     incoming.clear();                                    // yarım dosyalar bellekten atılır

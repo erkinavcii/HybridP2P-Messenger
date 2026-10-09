@@ -2,6 +2,7 @@
 
 import { state, API_URL } from './state.js';
 import { makeAuthHeadersJS } from './crypto.js';
+import { startQualityMonitor, qualityLabel } from './quality.js';
 
 /** ICE (STUN/TURN) listesini sunucudan alır. İstek İMZALI olmalı: sunucu imzasız
  *  isteği 401 ile reddeder (eskiden imzasızdı → liste hep boş kalıyor, aramalar
@@ -331,9 +332,17 @@ export function showActiveCallScreen(partnerName, callType, connected) {
     screen.classList.add("visible");
 }
 
-/** Start the call duration timer */
+/** Start the call duration timer (called once the P2P link is up, on every call path) */
 export function startCallTimer() {
     state.voip.startTime = Date.now();
+    // Zayıf bağlantıda görüntüyü otomatik düşür (static/js/quality.js); ses öncelikli
+    const pc = state.voip.peerConnection;
+    if (pc && !state.voip.stopQuality) {
+        state.voip.stopQuality = startQualityMonitor(pc, (level, hasVideo) => {
+            const el = document.getElementById("conn-quality");
+            if (el) el.textContent = level ? "🟡 " + qualityLabel(level, hasVideo) : "🟢 P2P Connected — Encrypted";
+        });
+    }
     const timerEl = document.getElementById("call-timer");
     state.voip.timerInterval = setInterval(() => {
         const sec = Math.floor((Date.now() - state.voip.startTime) / 1000);
@@ -346,6 +355,7 @@ export function startCallTimer() {
 /** Stop all media, close PeerConnection, hide UI */
 export function cleanupCall() {
     if (state.voip.timerInterval) { clearInterval(state.voip.timerInterval); }
+    if (state.voip.stopQuality) { state.voip.stopQuality(); }
     if (state.voip.localStream) {
         state.voip.localStream.getTracks().forEach(t => t.stop());
     }
@@ -381,6 +391,7 @@ export function resetVoipState() {
     state.voip.camOff           = false;
     state.voip.pendingIce       = [];
     state.voip._pendingSdpOffer = null;
+    state.voip.stopQuality      = null;
 }
 
 // ── Simple Web Audio ringtone (no file dependency) ──

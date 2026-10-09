@@ -23,6 +23,12 @@ SEQUENCES = [
     ([(None, None)] * 3, [0, 0, 0]),                      # ölçüm yoksa iyi sayılır
     ([(0.09, None), (None, 0.41)], [0, 1]),               # eşikler: kayıp > %8, RTT > 400 ms
     ([(0.08, 0.40)] * 3, [0, 0, 0]),                      # eşiğin kendisi kötü değil
+    # Sınırdaki hat: yükseltmeden hemen sonra yine düşerse sonraki yükseltme 10 iyi örnek ister
+    ([BAD, BAD] + [GOOD] * 5 + [BAD, BAD] + [GOOD] * 9 + [GOOD],
+     [0, 1] + [1, 1, 1, 1, 0] + [0, 1] + [1] * 9 + [0]),
+    # Yükseltmeden uzun süre (>15 örnek) sonra düşerse geri çekilme olmaz: yine 5 yeter
+    ([BAD, BAD] + [GOOD] * 5 + [GOOD] * 16 + [BAD, BAD] + [GOOD] * 5,
+     [0, 1] + [1, 1, 1, 1, 0] + [0] * 16 + [0, 1] + [1, 1, 1, 1, 0]),
 ]
 
 
@@ -36,10 +42,14 @@ def test_policy_sequences(samples, levels):
     assert got == levels
 
 
-def test_bandwidth_limited_counts_as_bad():
+def test_backoff_is_capped():
     p = q.QualityPolicy()
-    assert not p.step(0.0, 0.01, limited=True)
-    assert p.step(0.0, 0.01, limited=True) and p.level == 1
+    for _ in range(10):                                   # sürekli inip çıkan hat
+        while not p.step(*BAD):
+            pass
+        while not p.step(*GOOD):
+            pass
+    assert p.need_good == q.MAX_GOOD_SAMPLES
 
 
 def test_stats_sample_prefers_video_and_scales_rtcp_loss():

@@ -142,6 +142,51 @@ async def relay_avatar_update(sender: str, message: dict) -> bool:
     return False
 
 
+GROUP_KEY_REJECTED = "rejected_not_group_member"
+
+
+async def relay_group_key_dist(sender: str, message: dict) -> str:
+    """Grup anahtarı dağıtımını iletir (WS ve REST fallback ortak yolu) — K2.
+
+    Yalnızca gönderen VE alıcı group_id'nin üyesiyse iletilir; aksi halde
+    hiçbir şey iletilmez/kuyruğa yazılmaz. Eskiden herhangi bir kayıtlı kullanıcı
+    group_id'yi bilerek bir üyenin grup anahtarını değiştirebiliyordu.
+
+    `signature` (gkd:v1:gönderen:alıcı:grup:yük üzerinde RSA-PSS) sunucuda
+    doğrulanmaz, aynen taşınır; eski istemciler göndermez → "" (alıcı karar verir).
+
+    Dönüş: "delivered_online" | "stored_offline" | GROUP_KEY_REJECTED
+    """
+    recipient = message.get("recipient", "")
+    group_id = message.get("group_id", "")
+    if not recipient or not group_id or recipient == sender:
+        return GROUP_KEY_REJECTED
+    async with db_session() as db:
+        cursor = await db.execute(
+            """SELECT COUNT(DISTINCT username) AS n FROM group_members
+               WHERE group_id = ? AND username IN (?, ?)""",
+            (group_id, sender, recipient))
+        row = await cursor.fetchone()
+    if not row or row["n"] < 2:
+        return GROUP_KEY_REJECTED
+
+    signature = message.get("signature") or ""
+    if not isinstance(signature, str):
+        signature = ""
+    frame = {
+        "type": "group_key_dist",
+        "sender": sender,
+        "group_id": group_id,
+        "encrypted_payload": message.get("encrypted_payload", ""),
+        "signature": signature,
+        "timestamp": message.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+    }
+    delivered = await relay_or_queue(sender, recipient, frame, "group_key_dist",
+                                     frame["encrypted_payload"],
+                                     {"group_id": group_id, "signature": signature})
+    return "delivered_online" if delivered else "stored_offline"
+
+
 @router.get("/api/chat_settings/{username}")
 async def get_chat_settings(
     request: Request,
@@ -452,31 +497,9 @@ async def send_ws_fallback(
                 await db.commit()
                 
     elif msg_type == "group_key_dist":
-        recipient = message.get("recipient", "")
-        encrypted_payload = message.get("encrypted_payload", "")
-        group_id = message.get("group_id", "")
-        timestamp = message.get("timestamp") or ts
-        
-        dist_payload = {
-            "type": "group_key_dist",
-            "sender": x_username,
-            "group_id": group_id,
-            "encrypted_payload": encrypted_payload,
-            "timestamp": timestamp,
-        }
-        
-        if manager.is_online(recipient):
-            await manager.send_to_user(recipient, dist_payload)
-        else:
-            async with db_session() as db:
-                await db.execute(
-                    """INSERT INTO offline_msgs
-                       (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
-                       VALUES (?, ?, ?, 'group_key_dist', ?, ?)""",
-                    (x_username, recipient, encrypted_payload, json.dumps({"group_id": group_id}), timestamp)
-                )
-                await db.commit()
-                
+        if await relay_group_key_dist(x_username, message) == GROUP_KEY_REJECTED:
+            raise HTTPException(status_code=403, detail="Gönderen ve alıcı bu grubun üyesi değil.")
+
     elif msg_type == "group_message":
         group_id = message.get("group_id", "")
         encrypted_payload = message.get("encrypted_payload", "")

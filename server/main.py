@@ -28,6 +28,7 @@ from server.routes.users import router as users_router
 from server.routes.messages import (
     router as messages_router, _make_chat_id, relay_avatar_update,
     relay_or_queue, build_message_frame, relay_message_change,
+    relay_group_key_dist, GROUP_KEY_REJECTED,
 )
 from server.routes.groups import router as groups_router
 from server.routes.voip import router as voip_router
@@ -142,6 +143,7 @@ def _pending_row_to_frame(row) -> dict | None:
             "sender": row["sender"],
             "group_id": extra.get("group_id", ""),
             "encrypted_payload": row["encrypted_payload"],
+            "signature": extra.get("signature", ""),
             "timestamp": row["timestamp"],
         }
     if row_type == "group_message":
@@ -385,31 +387,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                             await db_inner.commit()
 
             elif msg_type == "group_key_dist":
-                recipient = message.get("recipient", "")
-                sender = username
-                encrypted_payload = message.get("encrypted_payload", "")
-                group_id = message.get("group_id", "")
-                timestamp = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
-
-                dist_payload = {
-                    "type": "group_key_dist",
-                    "sender": sender,
-                    "group_id": group_id,
-                    "encrypted_payload": encrypted_payload,
-                    "timestamp": timestamp,
-                }
-
-                if manager.is_online(recipient):
-                    await manager.send_to_user(recipient, dist_payload)
-                else:
-                    async with db_session() as db:
-                        await db.execute(
-                            """INSERT INTO offline_msgs
-                               (sender, recipient, encrypted_payload, msg_type, extra_data, timestamp)
-                               VALUES (?, ?, ?, 'group_key_dist', ?, ?)""",
-                            (sender, recipient, encrypted_payload, json.dumps({"group_id": group_id}), timestamp)
-                        )
-                        await db.commit()
+                # Üyelik kontrolü + imzanın aynen taşınması relay_group_key_dist'te (K2)
+                status = await relay_group_key_dist(username, message)
+                if status == GROUP_KEY_REJECTED:
+                    await manager.send_to_user(username, {
+                        "type": "delivery_ack",
+                        "recipient": message.get("group_id", ""),
+                        "status": GROUP_KEY_REJECTED,
+                    })
 
             elif msg_type == "avatar_update":
                 await relay_avatar_update(username, message)

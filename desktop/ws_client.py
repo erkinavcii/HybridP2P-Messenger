@@ -55,6 +55,39 @@ class InvalidChallengeError(Exception):
     """Sunucu UUIDv4 olmayan bir challenge gönderdi; imzalanmadı."""
 
 
+# ── Grup anahtarı dağıtımı (group_key_dist) — K2 ─────────────────────
+# Web karşılıkları: static/js/crypto.js::groupKeySigData ve
+# static/js/ws.js::decideGroupKey — kurallar birebir aynı kalmalı (testler karşılaştırır).
+
+GROUP_KEY_ACCEPT = "accept"
+GROUP_KEY_REJECT = "reject"
+
+
+def group_key_sig_data(sender: str, recipient: str, group_id: str, encrypted_payload: str) -> bytes:
+    """group_key_dist imzasının kapsadığı veri. "gkd:v1:" alan ayırıcısı, bu imzanın
+    başka bir mesaj türünün imzası yerine kullanılmasını engeller; alıcı ve grup
+    dahil olduğu için sunucu çerçeveyi başka üyeye/gruba yönlendiremez."""
+    return f"gkd:v1:{sender}:{recipient}:{group_id}:{encrypted_payload}".encode("utf-8")
+
+
+def decide_group_key(has_existing_key: bool, has_sig: bool, sig_valid: bool) -> str:
+    """Gelen grup anahtarı kabul edilsin mi? → GROUP_KEY_ACCEPT | GROUP_KEY_REJECT
+
+      • İmza var ama geçersiz → ret (taklit girişimi), eski anahtar korunur.
+      • Bu grup için henüz anahtar yok → kabul (imzasız da olur: eski istemci).
+      • Anahtar zaten var (DEĞİŞTİRME) → yalnızca geçerli imzayla kabul.
+
+    Gönderenin kurucu olması aranmaz: bugün her üye anahtarı yenileyebiliyor
+    (masaüstü + web "Rekey" düğmesi herkese açık). Gönderenin üyeliğini sunucu
+    denetler (relay_group_key_dist).
+    """
+    if has_sig and not sig_valid:
+        return GROUP_KEY_REJECT
+    if not has_existing_key:
+        return GROUP_KEY_ACCEPT
+    return GROUP_KEY_ACCEPT if (has_sig and sig_valid) else GROUP_KEY_REJECT
+
+
 class WsClientMixin:
 
     def start_websocket_listener(self):
@@ -160,16 +193,10 @@ class WsClientMixin:
                                 )
 
                             elif t == "group_key_dist":
-                                sender = data.get("sender", "?")
-                                group_id = data.get("group_id", "")
-                                enc = data.get("encrypted_payload", "")
-                                try:
-                                    group_key_hex = decrypt_message(enc, self.state["private_key"])
-                                    self.state["store"].save_group_key(group_id, group_key_hex)
-                                    self.log_status(f"'{sender}' sizi gruba ekledi. Anahtar alindi.")
-                                    self.sync_user_groups_from_server()
-                                except Exception as ex:
-                                    print(f"Grup anahtari cozme hatasi: {ex}")
+                                self.receive_group_key(data.get("sender", "?"),
+                                                       data.get("group_id", ""),
+                                                       data.get("encrypted_payload", ""),
+                                                       data.get("signature", "") or "")
 
                             elif t == "group_message":
                                 sender = data.get("sender", "?")
@@ -259,7 +286,9 @@ class WsClientMixin:
                             elif t == "delivery_ack":
                                 s = data.get("status","")
                                 r = data.get("recipient","")
-                                if s == "delivered_online":
+                                if s == "rejected_not_group_member":
+                                    self.log_status(f"Sunucu reddetti: '{r}' grubunun üyesi değil (veya alıcı değil).")
+                                elif s == "delivered_online":
                                     self.log_status(f"'{r}' adlisina iletildi.")
                                 elif s == "stored_offline":
                                     self.log_status(f"'{r}' cevrimdisi. Mesaj saklandı.")
@@ -484,6 +513,94 @@ class WsClientMixin:
             print(f"[Signature] '{sender}' normalde imzaliyor ama bu mesaj IMZASIZ — reddedildi.")
             return False
         return True
+
+    # ── Grup anahtarı dağıtımı (K2) ────────────────────────────────────
+
+    def sign_group_key_dist(self, recipient: str, group_id: str, encrypted_payload: str) -> str:
+        """Giden group_key_dist çerçevesinin imzası (base64 RSA-PSS)."""
+        return self._sign(group_key_sig_data(self.state["username"], recipient, group_id,
+                                             encrypted_payload))
+
+    def send_group_key_to(self, recipient: str, group_id: str, key_hex: str, pub_key):
+        """Grup anahtarını bir üyeye şifreli + imzalı gönderir (ağ işlemi — arka plan thread'i)."""
+        from crypto_utils import encrypt_message
+        enc = encrypt_message(key_hex, pub_key)
+        self.send_ws_message_with_fallback({
+            "type": "group_key_dist",
+            "sender": self.state["username"],
+            "recipient": recipient,
+            "group_id": group_id,
+            "encrypted_payload": enc,
+            "signature": self.sign_group_key_dist(recipient, group_id, enc),
+        })
+
+    def _group_key_event(self, group_id: str, text: str):
+        """Grup sohbetine kalıcı sistem mesajı yazar; sohbet açıksa canlı da gösterir."""
+        store = self.state["store"]
+        if not store.get_chat_info(group_id).get("is_group"):
+            # Grup sohbeti yerelde yoksa önce doğru adla oluştur (aksi halde
+            # save_system_event grup olmayan bir sohbet açardı)
+            self.sync_user_groups_from_server()
+        store.save_system_event(group_id, text)
+        if self.state.get("recipient") == group_id:
+            def _show():
+                self.chat_list.controls.append(self.create_system_bubble(text))
+                try: self.page.update()
+                except: pass
+            self.run_on_ui(_show)
+
+    def receive_group_key(self, sender: str, group_id: str, encrypted_payload: str,
+                          signature_b64: str) -> str:
+        """Gelen grup anahtarını doğrular ve decide_group_key kuralına göre saklar.
+
+        Dönüş: "accepted" | "replaced" | "unchanged" | "rejected" | "error"
+        """
+        store = self.state["store"]
+        if not group_id or not store:
+            return "error"
+        existing = store.get_group_key(group_id)
+
+        sig_valid = False
+        if signature_b64:
+            data = group_key_sig_data(sender, self.state["username"], group_id, encrypted_payload)
+            sig_valid = self._verify_from(sender, data, signature_b64)
+            if not sig_valid:
+                print(f"[GroupKey] '{sender}' grup anahtari imzasi GECERSIZ — reddedildi ({group_id}).")
+                self.log_status(f"UYARI: '{sender}' adina gelen grup anahtarinin imzasi "
+                                f"dogrulanamadi ve reddedildi!")
+                if existing:
+                    self._group_key_event(group_id, f"⚠️ UYARI: '{sender}' adina gelen grup anahtari "
+                                                    f"imza dogrulamasindan gecemedi ve reddedildi "
+                                                    f"(taklit girisimi olabilir). Eski anahtar korundu.")
+                return "rejected"
+
+        try:
+            key_hex = decrypt_message(encrypted_payload, self.state["private_key"]).strip()
+            key_bytes = bytes.fromhex(key_hex)
+            if len(key_bytes) != 32:
+                raise ValueError(f"beklenmeyen anahtar uzunlugu: {len(key_bytes)}")
+        except Exception as ex:
+            print(f"Grup anahtari cozme hatasi: {ex}")
+            return "error"
+
+        if existing and existing == key_bytes:
+            return "unchanged"  # aynı anahtar yeniden geldi: değişen bir şey yok
+
+        if decide_group_key(bool(existing), bool(signature_b64), sig_valid) != GROUP_KEY_ACCEPT:
+            print(f"[GroupKey] '{sender}' imzasiz anahtar degisikligi reddedildi ({group_id}).")
+            self.log_status(f"UYARI: '{sender}' imzasiz bir grup anahtari degisikligi gonderdi; reddedildi!")
+            self._group_key_event(group_id, f"⚠️ UYARI: '{sender}' imzasiz bir grup anahtari "
+                                            f"degisikligi gonderdi ve reddedildi. Eski anahtar korundu.")
+            return "rejected"
+
+        store.save_group_key(group_id, key_bytes.hex())
+        if existing:
+            self._group_key_event(group_id, f"🔑 '{sender}' grup anahtarını yeniledi.")
+            self.run_on_ui(self.load_inbox_chats)
+            return "replaced"
+        self.log_status(f"'{sender}' sizi gruba ekledi. Anahtar alindi.")
+        self.sync_user_groups_from_server()
+        return "accepted"
 
     # ── E2EE profil fotoğrafı ──────────────────────────────────────────
 

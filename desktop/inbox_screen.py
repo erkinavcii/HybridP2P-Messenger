@@ -14,7 +14,7 @@ import flet as ft
 from desktop.theme import C
 from desktop import settings_store
 
-from crypto_utils import encrypt_message, public_key_to_pem_string, serialize_private_key
+from crypto_utils import public_key_to_pem_string, serialize_private_key
 
 
 class InboxScreenMixin:
@@ -381,15 +381,8 @@ class InboxScreenMixin:
                     m_pub_key = self.fetch_recipient_pub_key(m_username)
                     if not m_pub_key: continue
 
-                    enc_payload = encrypt_message(new_key.hex(), m_pub_key)
-
-                    self.send_ws_message_with_fallback({
-                        "type": "group_key_dist",
-                        "sender": self.state["username"],
-                        "recipient": m_username,
-                        "group_id": group_id,
-                        "encrypted_payload": enc_payload
-                    })
+                    # İmzalı: alıcılar imzasız anahtar değişikliğini reddeder (K2)
+                    self.send_group_key_to(m_username, group_id, new_key.hex(), m_pub_key)
                 self.log_status(f"'{name}' grubunun anahtari yenilendi ve dagitildi.")
 
             threading.Thread(target=do_rekey, daemon=True).start()
@@ -444,18 +437,13 @@ class InboxScreenMixin:
                         self.state["store"].save_group_key(group_id, group_key.hex())
                         self.state["store"].get_or_create_group_chat(group_id, name)
 
+                        # Anahtar ancak grup sunucuda oluştuktan (üyeler group_members'a
+                        # yazıldıktan) sonra gönderilir — sunucu üye olmayana iletmez (K2)
                         for m in members:
+                            if m == self.state["username"]: continue
                             m_pub = self.fetch_recipient_pub_key(m)
                             if m_pub:
-                                enc_key = encrypt_message(group_key.hex(), m_pub)
-
-                                self.send_ws_message_with_fallback({
-                                    "type": "group_key_dist",
-                                    "sender": self.state["username"],
-                                    "recipient": m,
-                                    "group_id": group_id,
-                                    "encrypted_payload": enc_key
-                                })
+                                self.send_group_key_to(m, group_id, group_key.hex(), m_pub)
 
                         def _success():
                             self.state["recipient"] = group_id

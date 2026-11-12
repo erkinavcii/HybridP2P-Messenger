@@ -1,6 +1,8 @@
 // static/js/ui.js
 
 import { state, API_URL } from './state.js';
+import { escapeHtml, imageMime, jsArg } from './safe.js';
+export { escapeHtml };
 import {
     arrayBufferToBase64,
     decryptMessageJS,
@@ -99,21 +101,16 @@ export function formatTime(isoStr) {
     }
 }
 
-export function escapeHtml(text) {
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
 // Append system/status message
 export function appendSystemMessage(partner, text) {
     if (state.recipient !== partner) return;
     const el = document.createElement("div");
     el.className = "msg-container system";
-    el.innerHTML = `<div class="msg-system-bubble">${text}</div>`;
+    // textContent: gönderen adı / hata metni içindeki HTML asla yorumlanmaz
+    const bubble = document.createElement("div");
+    bubble.className = "msg-system-bubble";
+    bubble.textContent = String(text ?? "");
+    el.appendChild(bubble);
     chatBody.appendChild(el);
     chatBody.scrollTop = chatBody.scrollHeight;
 }
@@ -211,8 +208,10 @@ export function renderInbox(query = "") {
         tile.className = `chat-tile ${activeClass}`;
         
         // Grup adı serbest metin: HTML olarak basılmadan önce kaçışlanmalı
-        const displayName = escapeHtml(c.isGroup ? (c.groupName || c.partner) : c.partner);
-        const avatarText = displayName.substring(0, 2).toUpperCase();
+        const rawName = c.isGroup ? (c.groupName || c.partner) : c.partner;
+        const displayName = escapeHtml(rawName);
+        // Önce kısalt, sonra kaçışla (varlık ifadesi ortadan kesilmesin)
+        const avatarText = escapeHtml(rawName.substring(0, 2).toUpperCase());
         const avatarHtml = c.isGroup ? avatarText : avatarInnerHtml(c.partner, avatarText);
 
         tile.innerHTML = `
@@ -223,7 +222,7 @@ export function renderInbox(query = "") {
                     <span class="chat-tile-time ${unreadCount > 0 ? 'unread' : ''}">${timeStr}</span>
                 </div>
                 <div class="chat-tile-footer">
-                    <span class="chat-tile-lastmsg">${snippet || ""}</span>
+                    <span class="chat-tile-lastmsg">${escapeHtml(snippet || "")}</span>
                     ${unreadCount > 0 ? `<span class="badge">${unreadCount}</span>` : ""}
                 </div>
             </div>
@@ -266,13 +265,13 @@ export function renderInbox(query = "") {
             const tile = document.createElement("div");
             tile.className = "chat-tile";
             tile.innerHTML = `
-                <div class="avatar" style="width:32px; height:32px; font-size:12px;">${item.partner.substring(0, 2).toUpperCase()}</div>
+                <div class="avatar" style="width:32px; height:32px; font-size:12px;">${escapeHtml(item.partner.substring(0, 2).toUpperCase())}</div>
                 <div class="chat-tile-content">
                     <div class="chat-tile-header">
-                        <span class="chat-tile-name" style="font-size:13px;">${item.partner}</span>
+                        <span class="chat-tile-name" style="font-size:13px;">${escapeHtml(item.partner)}</span>
                         <span class="chat-tile-time">${timeStr}</span>
                     </div>
-                    <span class="chat-tile-lastmsg" style="font-size:11px;">${item.msg.sender === state.username ? 'Me' : item.msg.sender}: ${snippet}</span>
+                    <span class="chat-tile-lastmsg" style="font-size:11px;">${escapeHtml(item.msg.sender === state.username ? 'Me' : item.msg.sender)}: ${escapeHtml(snippet)}</span>
                 </div>
             `;
 
@@ -520,13 +519,13 @@ export function renderMessages() {
                     actionBtnHtml = `<span style="font-size: 11px; color: var(--text-muted);">Opened</span>`;
                 } else {
                     actionBtnHtml = `
-                        <button class="action-icon-btn" onclick="downloadAndDecryptFile('${state.recipient}', ${idx})" style="color: var(--danger);" title="View Once file">
+                        <button class="action-icon-btn" onclick="downloadAndDecryptFile(${jsArg(state.recipient)}, ${idx})" style="color: var(--danger);" title="View Once file">
                             👁️
                         </button>`;
                 }
             } else {
                 actionBtnHtml = `
-                    <button class="action-icon-btn" onclick="downloadAndDecryptFile('${state.recipient}', ${idx})" style="color: var(--accent-hover);" title="Download & Decrypt">
+                    <button class="action-icon-btn" onclick="downloadAndDecryptFile(${jsArg(state.recipient)}, ${idx})" style="color: var(--accent-hover);" title="Download & Decrypt">
                         📥
                     </button>`;
             }
@@ -535,7 +534,7 @@ export function renderMessages() {
             if (m.decrypted_data_url) {
                 imgDisplayHtml = `
                     <div style="margin-top: 8px; max-width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);">
-                        <img src="${m.decrypted_data_url}" style="max-width: 100%; max-height: 200px; display: block; margin: 0 auto;" />
+                        <img src="${escapeHtml(m.decrypted_data_url)}" style="max-width: 100%; max-height: 200px; display: block; margin: 0 auto;" />
                     </div>
                 `;
             }
@@ -563,7 +562,7 @@ export function renderMessages() {
                 textNodeHtml = `<span class="view-once-placeholder" style="color:var(--text-muted); cursor:default;">👁 Opened view-once message</span>`;
             } else {
                 textNodeHtml = `
-                    <div class="view-once-placeholder" onclick="openViewOnceMessage(this, '${state.recipient}', ${idx})">
+                    <div class="view-once-placeholder" onclick="openViewOnceMessage(this, ${jsArg(state.recipient)}, ${idx})">
                         🛡️ <span>View Once Message (Tap to decrypt)</span>
                     </div>
                 `;
@@ -581,7 +580,7 @@ export function renderMessages() {
 
         container.innerHTML = `
             <div class="msg-bubble ${m.opened ? 'view-once-decrypted' : ''} ${m.deleted ? 'deleted' : ''}">
-                ${state.isGroup && !isMe ? `<span class="msg-sender">${m.sender}</span>` : ""}
+                ${state.isGroup && !isMe ? `<span class="msg-sender">${escapeHtml(m.sender)}</span>` : ""}
                 ${textNodeHtml}
                 <div class="msg-meta">
                     ${m.edited && !m.deleted ? `<span class="msg-edited">düzenlendi</span>` : ""}
@@ -613,7 +612,7 @@ async function hydrateVoiceBubbles() {
 // (şifreli gelmiş); görüntülemek için siteye istek atılmaz.
 function linkPreviewCardHtml(p) {
     if (!p || !p.url) return "";
-    const img = p.image ? `<img class="lp-img" src="data:image/jpeg;base64,${p.image}" alt="">` : "";
+    const img = p.image ? `<img class="lp-img" src="data:image/jpeg;base64,${escapeHtml(p.image)}" alt="">` : "";
     return `
         <a class="link-preview" href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer nofollow"
            title="${escapeHtml(p.url)}">
@@ -660,7 +659,7 @@ async function finishVoiceRecording() {
         renderInbox();
     } catch (err) {
         console.error("Sesli mesaj gönderilemedi:", err);
-        appendSystemMessage(target, "⚠️ Sesli mesaj gönderilemedi: " + escapeHtml(err.message));
+        appendSystemMessage(target, "⚠️ Sesli mesaj gönderilemedi: " + err.message);
     }
 }
 
@@ -755,8 +754,7 @@ export async function downloadAndDecryptFile(partner, msgIndex) {
             
             if (m.file_type === "image") {
                 const b64 = arrayBufferToBase64(decryptedBuffer);
-                const ext = m.original_name.split('.').pop() || "png";
-                const dataUrl = `data:image/${ext};base64,${b64}`;
+                const dataUrl = `data:${imageMime(m.original_name)};base64,${b64}`;
                 
                 const modal = document.getElementById("view-once-modal");
                 const contentSpan = document.getElementById("view-once-modal-content");
@@ -765,7 +763,7 @@ export async function downloadAndDecryptFile(partner, msgIndex) {
                 contentSpan.innerHTML = `
                     <div style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
                         <span style="font-weight: 500; font-size: 13px; color: var(--text-muted);">${escapeHtml(m.original_name)}</span>
-                        <img src="${dataUrl}" style="max-width: 100%; max-height: 350px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" />
+                        <img src="${escapeHtml(dataUrl)}" style="max-width: 100%; max-height: 350px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" />
                     </div>
                 `;
                 modal.classList.add("active");
@@ -818,8 +816,7 @@ export async function downloadAndDecryptFile(partner, msgIndex) {
         } else {
             if (m.file_type === "image") {
                 const b64 = arrayBufferToBase64(decryptedBuffer);
-                const ext = m.original_name.split('.').pop() || "png";
-                const dataUrl = `data:image/${ext};base64,${b64}`;
+                const dataUrl = `data:${imageMime(m.original_name)};base64,${b64}`;
                 
                 m.decrypted_data_url = dataUrl;
                 m.status_label = "Decrypted";
@@ -846,12 +843,12 @@ export async function downloadAndDecryptFile(partner, msgIndex) {
         if (fileAction) {
             if (m.view_once) {
                 fileAction.innerHTML = `
-                    <button class="action-icon-btn" onclick="downloadAndDecryptFile('${partner}', ${msgIndex})" style="color: var(--danger);" title="Retry">
+                    <button class="action-icon-btn" onclick="downloadAndDecryptFile(${jsArg(partner)}, ${msgIndex})" style="color: var(--danger);" title="Retry">
                         👁️
                     </button>`;
             } else {
                 fileAction.innerHTML = `
-                    <button class="action-icon-btn" onclick="downloadAndDecryptFile('${partner}', ${msgIndex})" style="color: var(--accent-hover);" title="Retry">
+                    <button class="action-icon-btn" onclick="downloadAndDecryptFile(${jsArg(partner)}, ${msgIndex})" style="color: var(--accent-hover);" title="Retry">
                         📥
                     </button>`;
             }

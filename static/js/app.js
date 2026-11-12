@@ -6,7 +6,8 @@ import {
     fetchOfflineMessages,
     queryUserPresence,
     sendTyping,
-    sendFrameWithFallback
+    sendFrameWithFallback,
+    sendGroupKeyTo
 } from './ws.js';
 import {
     renderInbox,
@@ -24,8 +25,7 @@ import {
     decryptPrivateKey,
     encryptPrivateKey,
     makeAuthHeadersJS,
-    generateSymmetricKeyHex,
-    encryptMessageJS
+    generateSymmetricKeyHex
 } from './crypto.js';
 import {
     dbGet,
@@ -238,26 +238,9 @@ if (newChatConfirmBtn) {
                             const mRes = await fetch(`${API_URL}${mPath}`, { headers: mHeaders });
                             if (mRes.status === 200) {
                                 const mData = await mRes.json();
-                                const encKey = await encryptMessageJS(groupKeyHex, mData.public_key);
-                                
-                                const distPayload = {
-                                    type: "group_key_dist",
-                                    sender: state.username,
-                                    recipient: m,
-                                    group_id: groupId,
-                                    encrypted_payload: encKey,
-                                    timestamp: new Date().toISOString()
-                                };
-                                
-                                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                                    state.ws.send(JSON.stringify(distPayload));
-                                } else {
-                                    const fPath = "/api/send_ws_fallback";
-                                    const fBody = JSON.stringify({ payload: JSON.stringify(distPayload) });
-                                    const fHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", fPath, fBody);
-                                    fHeaders["Content-Type"] = "application/json";
-                                    await fetch(`${API_URL}${fPath}`, { method: "POST", headers: fHeaders, body: fBody });
-                                }
+                                // İmzalı; grup sunucuda oluştuktan SONRA gönderilir
+                                // (sunucu üye olmayana iletmez — K2)
+                                await sendGroupKeyTo(m, groupId, groupKeyHex, mData.public_key);
                             }
                         } catch (distErr) {
                             console.error(`Failed to distribute key to ${m}:`, distErr);
@@ -300,25 +283,8 @@ if (groupRekeyBtn) {
                 for (let m of data.members) {
                     if (m.username === state.username) continue;
                     try {
-                        const encKey = await encryptMessageJS(groupKeyHex, m.public_key);
-                        const distPayload = {
-                            type: "group_key_dist",
-                            sender: state.username,
-                            recipient: m.username,
-                            group_id: state.recipient,
-                            encrypted_payload: encKey,
-                            timestamp: new Date().toISOString()
-                        };
-                        
-                        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                            state.ws.send(JSON.stringify(distPayload));
-                        } else {
-                            const fPath = "/api/send_ws_fallback";
-                            const fBody = JSON.stringify({ payload: JSON.stringify(distPayload) });
-                            const fHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", fPath, fBody);
-                            fHeaders["Content-Type"] = "application/json";
-                            await fetch(`${API_URL}${fPath}`, { method: "POST", headers: fHeaders, body: fBody });
-                        }
+                        // İmzalı: alıcılar imzasız anahtar değişikliğini reddeder (K2)
+                        await sendGroupKeyTo(m.username, state.recipient, groupKeyHex, m.public_key);
                     } catch (err) {
                         console.error("Rekey distribution error for member:", m.username, err);
                     }

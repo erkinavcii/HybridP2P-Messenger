@@ -339,3 +339,77 @@ def test_desktop_sender_signs_outgoing_frame(keys):
     assert f["type"] == "group_key_dist" and f["recipient"] == "bob" and f["group_id"] == GID
     bob = _bob(keys)
     assert bob.receive_group_key("alice", GID, f["encrypted_payload"], f["signature"]) == "accepted"
+
+
+# ─────────────────────────── 3. Web (crypto.js / ws.js / app.js) ───────────────────────────
+
+JS = ROOT / "static" / "js"
+
+
+def _js_fn(path, name):
+    src = (JS / path).read_text(encoding="utf-8")
+    m = re.search(r"export function " + name + r"\(.*?\n\}", src, re.S)
+    assert m, f"{name} bulunamadı ({path})"
+    return m.group(0).replace("export ", "", 1)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js yok")
+def test_web_decision_and_sig_data_match_python():
+    cases = [list(args) for args, _ in DECISION_CASES]
+    sig_cases = [["alice", "bob", "group_1", "QUJD"], ["a_1", "b", "group_x", ""]]
+    script = (_js_fn("ws.js", "decideGroupKey") + "\n" + _js_fn("crypto.js", "groupKeySigData") + "\n"
+              "const cases = " + json.dumps(cases) + ";\n"
+              "const sigCases = " + json.dumps(sig_cases) + ";\n"
+              "console.log(JSON.stringify({\n"
+              "  decisions: cases.map(c => decideGroupKey(...c)),\n"
+              "  sigs: sigCases.map(c => new TextDecoder().decode(groupKeySigData(...c)))\n"
+              "}));\n")
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True,
+                         encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    assert got["decisions"] == [decide_group_key(*c) for c in cases]
+    assert got["decisions"] == [exp for _, exp in DECISION_CASES]
+    assert got["sigs"] == [group_key_sig_data(*c).decode("utf-8") for c in sig_cases]
+
+
+def test_web_senders_sign_key_frames():
+    app = (JS / "app.js").read_text(encoding="utf-8")
+    # Ham (imzasız) group_key_dist çerçevesi kalmamalı; ikisi de imzalı yardımcıyı kullanır
+    assert '"group_key_dist"' not in app
+    assert app.count("sendGroupKeyTo(") == 2
+    # Oluşturmada anahtar, grup sunucuda oluştuktan sonra gönderilir
+    create = app[app.index('const path = "/api/groups"'):]
+    assert create.index("resp.status === 200") < create.index("sendGroupKeyTo(")
+
+    ws = (JS / "ws.js").read_text(encoding="utf-8")
+    send = ws[ws.index("export async function sendGroupKeyTo"):]
+    send = send[:send.index("\n}\n")]
+    assert "groupKeySigData(state.username, recipient, groupId, enc)" in send
+    assert "signature" in send
+
+
+def test_web_receiver_uses_decision():
+    ws = (JS / "ws.js").read_text(encoding="utf-8")
+    handler = ws[ws.index('data.type === "group_key_dist"'):]
+    handler = handler[:handler.index("else if")]
+    assert "receiveGroupKey(" in handler and "dbSet" not in handler
+    recv = ws[ws.index("async function receiveGroupKey"):]
+    recv = recv[:recv.index("\n}\n")]
+    assert "groupKeySigData(sender, state.username, groupId, encPayload)" in recv
+    # İmza kontrolü ve karar, anahtar kaydedilmeden önce
+    assert recv.index("verifyFrom(") < recv.index("decideGroupKey(") < recv.index('dbSet("group_keys"')
+    assert "grup anahtarını yeniledi." in recv
+
+
+def test_web_renders_persisted_system_messages_safely():
+    ui = (JS / "ui.js").read_text(encoding="utf-8")
+    render = ui[ui.index("export function renderMessages"):]
+    block = render[render.index("if (m.system)"):]
+    block = block[:block.index("return;")]
+    assert "textContent" in block and "innerHTML" not in block
+
+
+def test_sw_cache_bumped():
+    sw = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
+    assert "hybridp2p-shell-v4" not in sw

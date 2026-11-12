@@ -437,6 +437,12 @@ export function uidSigData(sender, recipient, msgUid, encryptedPayload) {
     return new TextEncoder().encode(`uid:${sender}:${recipient}:${msgUid}:${encryptedPayload}`);
 }
 
+// Grup anahtarı dağıtımı (group_key_dist) imzası — K2 (desktop/ws_client.py::group_key_sig_data ile aynı).
+// Alıcı ve grup dahil: sunucu çerçeveyi başka üyeye/gruba yönlendiremez.
+export function groupKeySigData(sender, recipient, groupId, encryptedPayload) {
+    return new TextEncoder().encode(`gkd:v1:${sender}:${recipient}:${groupId}:${encryptedPayload}`);
+}
+
 // Alan ayırıcılı değişiklik imzası: silme imzası düzenleme olarak (ya da tersi) kullanılamaz.
 export function changeSigData(kind, sender, recipient, msgUid, encryptedPayload = "") {
     if (kind === "message_edit") {

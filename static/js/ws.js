@@ -10,6 +10,7 @@ import {
     directMessageSigData,
     uidSigData,
     changeSigData,
+    groupKeySigData,
     signDataJS as signJS,
     encryptMessageJS
 } from './crypto.js';
@@ -211,6 +212,103 @@ async function receiveMessageChange(kind, sender, msgUid, encryptedPayload, sign
     await persistChats();
     if (state.recipient === sender) window.dispatchEvent(new CustomEvent('messages-updated'));
     return true;
+}
+
+// ── Grup anahtarı dağıtımı (group_key_dist) — K2 ──────────────────────
+// Karar kuralı desktop/ws_client.py::decide_group_key ile BİREBİR aynı (testler karşılaştırır):
+//   • İmza var ama geçersiz → ret (eski anahtar korunur).
+//   • Bu grup için henüz anahtar yok → kabul (imzasız da olur: eski istemci).
+//   • Anahtar zaten var (DEĞİŞTİRME) → yalnızca geçerli imzayla kabul.
+// Kurucu olma şartı yok: bugün her üye anahtarı yenileyebiliyor; üyeliği sunucu denetler.
+export function decideGroupKey(hasExistingKey, hasSig, sigValid) {
+    if (hasSig && !sigValid) return "reject";
+    if (!hasExistingKey) return "accept";
+    return (hasSig && sigValid) ? "accept" : "reject";
+}
+
+// Grup anahtarını bir üyeye şifreli + imzalı gönderir.
+export async function sendGroupKeyTo(recipient, groupId, groupKeyHex, recipientPubPem) {
+    const enc = await encryptMessageJS(groupKeyHex, recipientPubPem);
+    const signature = await signJS(state.privateKeyPem,
+        groupKeySigData(state.username, recipient, groupId, enc));
+    await sendFrameWithFallback({
+        type: "group_key_dist",
+        sender: state.username,
+        recipient,
+        group_id: groupId,
+        encrypted_payload: enc,
+        signature,
+        timestamp: new Date().toISOString()
+    });
+}
+
+// Grup sohbetine kalıcı sistem mesajı ekler (ui.js renderMessages `system` bayrağını tanır).
+async function addGroupSystemMessage(groupId, text) {
+    if (!state.chats[groupId]) {
+        state.chats[groupId] = {
+            partner: groupId,
+            groupName: await fetchGroupName(groupId),
+            ephemeral: false,
+            isGroup: true,
+            messages: []
+        };
+    }
+    state.chats[groupId].messages.push({
+        sender: "",
+        system: true,
+        content: text,
+        timestamp: new Date().toISOString(),
+        read: true
+    });
+    await persistChats();
+    if (state.recipient === groupId) window.dispatchEvent(new CustomEvent('messages-updated'));
+    window.dispatchEvent(new CustomEvent('chats-updated'));
+}
+
+// Gelen grup anahtarı → "accepted" | "replaced" | "unchanged" | "rejected" | "error"
+async function receiveGroupKey(sender, groupId, encPayload, signature) {
+    if (!groupId) return "error";
+    const existing = await dbGet("group_keys", groupId);
+
+    let sigValid = false;
+    if (signature) {
+        sigValid = await verifyFrom(sender, groupKeySigData(sender, state.username, groupId, encPayload), signature);
+        if (!sigValid) {
+            console.error(`[GroupKey] '${sender}' grup anahtarı imzası GEÇERSİZ — reddedildi (${groupId}).`);
+            if (existing) {
+                await addGroupSystemMessage(groupId, `⚠️ UYARI: '${sender}' adına gelen grup anahtarı imza doğrulamasından geçemedi ve reddedildi (taklit girişimi olabilir). Eski anahtar korundu.`);
+            } else {
+                alert(`Güvenlik uyarısı: '${sender}' adına gelen grup anahtarının imzası doğrulanamadı ve reddedildi.`);
+            }
+            return "rejected";
+        }
+    }
+
+    let keyHex;
+    try {
+        keyHex = String(await decryptMessageJS(encPayload, state.privateKeyPem)).trim().toLowerCase();
+        if (!/^[0-9a-f]{64}$/.test(keyHex)) throw new Error("beklenmeyen anahtar biçimi");
+    } catch (ex) {
+        console.error("Grup anahtarı çözme hatası:", ex);
+        return "error";
+    }
+
+    if (existing && String(existing).toLowerCase() === keyHex) return "unchanged";
+
+    if (decideGroupKey(!!existing, !!signature, sigValid) !== "accept") {
+        console.error(`[GroupKey] '${sender}' imzasız anahtar değişikliği reddedildi (${groupId}).`);
+        await addGroupSystemMessage(groupId, `⚠️ UYARI: '${sender}' imzasız bir grup anahtarı değişikliği gönderdi ve reddedildi. Eski anahtar korundu.`);
+        return "rejected";
+    }
+
+    await dbSet("group_keys", groupId, keyHex);
+    if (existing) {
+        await addGroupSystemMessage(groupId, `🔑 '${sender}' grup anahtarını yeniledi.`);
+        return "replaced";
+    }
+    console.log(`Grup anahtarı alındı: ${groupId} (Gönderen: ${sender})`);
+    await syncUserGroups();
+    return "accepted";
 }
 
 function warnBlockedMessage(sender) {
@@ -518,17 +616,9 @@ export function connectWebSocket() {
             
             // Group Key Distribution
             else if (data.type === "group_key_dist") {
-                const sender = data.sender;
-                const groupId = data.group_id;
-                const encPayload = data.encrypted_payload;
-                try {
-                    const groupKeyHex = await decryptMessageJS(encPayload, state.privateKeyPem);
-                    await dbSet("group_keys", groupId, groupKeyHex);
-                    console.log(`Grup anahtarı alındı: ${groupId} (Gönderen: ${sender})`);
-                    await syncUserGroups();
-                } catch (ex) {
-                    console.error("Grup anahtarı çözme hatası:", ex);
-                }
+                // İmza + değiştirme kuralı receiveGroupKey/decideGroupKey'de (K2)
+                await receiveGroupKey(data.sender, data.group_id, data.encrypted_payload || "",
+                                      data.signature || "");
             }
             
             // Group Message received

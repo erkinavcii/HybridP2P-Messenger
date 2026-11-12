@@ -495,6 +495,17 @@ export function renderMessages() {
             chatBody.appendChild(sep);
             lastDay = day;
         }
+        // Kalıcı sistem mesajı (örn. grup anahtarı yenilendi — K2): textContent, HTML yorumlanmaz
+        if (m.system) {
+            const sysEl = document.createElement("div");
+            sysEl.className = "msg-container system";
+            const sysBubble = document.createElement("div");
+            sysBubble.className = "msg-system-bubble";
+            sysBubble.textContent = String(m.content ?? "");
+            sysEl.appendChild(sysBubble);
+            chatBody.appendChild(sysEl);
+            return;
+        }
         const container = document.createElement("div");
         const isMe = m.sender === state.username;
         container.className = `msg-container ${isMe ? 'me' : 'other'}`;

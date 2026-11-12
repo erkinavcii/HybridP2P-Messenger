@@ -214,6 +214,8 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
     try:
         # Challenge-Response auth flow:
+        # DİKKAT: istemciler yalnızca küçük harfli UUIDv4 challenge imzalar (K1);
+        # bu biçim str(uuid4()) olarak kalmalı, aksi halde girişler reddedilir.
         challenge = str(uuid_lib.uuid4())
         await websocket.send_json({"type": "challenge", "challenge": challenge})
         

@@ -18,6 +18,7 @@ başlığındaki BASE_URL notu — aynı gerekçe WS_URL için de geçerli).
 import asyncio
 import base64
 import json
+import re
 import threading
 from datetime import datetime
 
@@ -31,6 +32,27 @@ from crypto_utils import (
     get_public_key_fingerprint,
 )
 from desktop import net_config
+
+
+# Giriş challenge'ı yalnızca küçük harfli UUIDv4 olabilir (sunucu str(uuid4()) üretir).
+# Kimlik anahtarı başka düz metin biçimlerini de imzaladığı için ("gönderen:alıcı:yük"
+# birebir mesajlar, "hybridp2p-p2p:v2:..." sunucusuz kodlar), kötü niyetli bir sunucu
+# bunlardan birini challenge diye yollayıp geçerli imza elde edebilirdi.
+_CHALLENGE_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+)
+
+# Geçersiz challenge sonrası yeniden deneme beklemesi (sn) — sunucuyu sıkıştırmamak için uzun.
+INVALID_CHALLENGE_RETRY_DELAY = 300
+
+
+def is_valid_challenge(value) -> bool:
+    """Sunucunun gönderdiği challenge imzalanabilir mi? (yalnızca küçük harfli UUIDv4)"""
+    return isinstance(value, str) and _CHALLENGE_RE.fullmatch(value) is not None
+
+
+class InvalidChallengeError(Exception):
+    """Sunucu UUIDv4 olmayan bir challenge gönderdi; imzalanmadı."""
 
 
 class WsClientMixin:
@@ -64,7 +86,10 @@ class WsClientMixin:
                     if challenge_msg.get("type") != "challenge":
                         raise Exception("Handshake error: No challenge received from server.")
 
-                    challenge = challenge_msg["challenge"]
+                    challenge = challenge_msg.get("challenge")
+                    if not is_valid_challenge(challenge):
+                        # İmzalamadan bağlantıyı kapat (async with çıkışında kapanır)
+                        raise InvalidChallengeError(repr(challenge)[:80])
 
                     # 2. Sign challenge using private key
                     from crypto_utils import sign_data
@@ -312,6 +337,17 @@ class WsClientMixin:
                                             print("Error adding ice candidate:", ex)
 
                         except json.JSONDecodeError: pass
+            except InvalidChallengeError as ex:
+                print(f"[WS Guvenlik] Sunucu gecersiz challenge gonderdi, imzalanmadi: {ex}")
+                self.state["ws"] = None
+                if not self.state.get("logged_in", False):
+                    break
+                self.log_status("Güvenlik uyarısı: sunucu geçersiz bir kimlik doğrulama isteği "
+                                "(challenge) gönderdi. Bağlantı güvenlik için reddedildi; "
+                                f"{INVALID_CHALLENGE_RETRY_DELAY // 60} dk sonra yeniden denenecek.")
+                self.update_connection_status(False)
+                await asyncio.sleep(INVALID_CHALLENGE_RETRY_DELAY)
+                reconnect_delay = 30
             except Exception as ex:
                 import websockets
                 if isinstance(ex, (websockets.exceptions.ConnectionClosed, ConnectionRefusedError, OSError)):

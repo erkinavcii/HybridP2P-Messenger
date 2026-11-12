@@ -266,6 +266,18 @@ export async function fetchOfflineMessages() {
     }
 }
 
+// Giriş challenge'ı yalnızca küçük harfli UUIDv4 olabilir (sunucu str(uuid4()) üretir).
+// Kimlik anahtarı başka düz metinleri de imzalar ("gönderen:alıcı:yük", "hybridp2p-p2p:v2:...");
+// kötü niyetli sunucu bunları challenge diye yollayıp geçerli imza elde edemesin.
+export function isValidChallenge(value) {
+    return typeof value === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+}
+
+// Geçersiz challenge sonrası yeniden bağlanma beklemesi (ms) — sunucuyu sıkıştırmamak için uzun
+const INVALID_CHALLENGE_RETRY_MS = 5 * 60 * 1000;
+let challengeRejected = false;
+
 // ── WebSocket Loop ──
 export function connectWebSocket() {
     const wsUrl = `${WS_URL}/ws/${state.username}`;
@@ -288,6 +300,19 @@ export function connectWebSocket() {
             // 1. Challenge Response Authentication
             if (data.type === "challenge") {
                 const challenge = data.challenge;
+                if (!isValidChallenge(challenge)) {
+                    // İmzalama yok: bağlantıyı kapat ve kullanıcıyı uyar
+                    challengeRejected = true;
+                    console.error("[WS Güvenlik] Sunucu geçersiz challenge gönderdi, imzalanmadı:", challenge);
+                    const warn = "⚠️ Güvenlik uyarısı: sunucu geçersiz bir kimlik doğrulama isteği (challenge) gönderdi. Bağlantı güvenlik için reddedildi; 5 dk sonra yeniden denenecek.";
+                    window.dispatchEvent(new CustomEvent('system-message', {
+                        detail: { partner: state.recipient, text: warn }
+                    }));
+                    const st = document.getElementById("server-status-text");
+                    if (st) st.innerText = "Rejected (invalid challenge)";
+                    ws.close();
+                    return;
+                }
                 const encoder = new TextEncoder();
                 const sigB64 = await signDataJS(state.privateKeyPem, encoder.encode(challenge));
                 ws.send(JSON.stringify({
@@ -613,9 +638,17 @@ export function connectWebSocket() {
     };
 
     ws.onclose = (event) => {
-        console.log("WebSocket bağlantısı kesildi. Reconnecting in 3s...");
         const dot = document.getElementById("server-status-dot");
         const txt = document.getElementById("server-status-text");
+        if (challengeRejected) {
+            // Geçersiz challenge: sunucuyu sıkıştırmamak için uzun bekle
+            challengeRejected = false;
+            console.warn("WebSocket güvenlik nedeniyle kapatıldı. 5 dk sonra yeniden denenecek.");
+            if (dot) dot.className = "server-status-dot offline";
+            setTimeout(connectWebSocket, INVALID_CHALLENGE_RETRY_MS);
+            return;
+        }
+        console.log("WebSocket bağlantısı kesildi. Reconnecting in 3s...");
         if (dot && txt) {
             dot.className = "server-status-dot offline";
             txt.innerText = "Disconnected";

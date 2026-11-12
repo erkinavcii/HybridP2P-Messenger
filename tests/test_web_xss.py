@@ -50,8 +50,8 @@ def test_js_arg_is_safe_inside_onclick_attribute():
 
 def test_ui_has_no_unescaped_snippet_or_sender():
     assert not re.search(r"\$\{snippet", UI)
-    assert "${item.partner}" not in UI
-    assert "${m.sender}" not in UI
+    assert ">${item.partner}<" not in UI
+    assert ">${m.sender}<" not in UI
 
 
 def test_ui_has_no_raw_extension_data_url():

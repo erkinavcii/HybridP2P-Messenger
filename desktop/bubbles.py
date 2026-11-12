@@ -16,6 +16,18 @@ from desktop.theme import C
 
 from crypto_utils import decrypt_message, decrypt_bytes
 from desktop.net_config import FILE_ICONS
+from desktop.p2p_files import default_download_dir, safe_filename, unique_path
+
+
+def save_received_file(original_name: str, raw: bytes, base_dir: Path | None = None) -> Path:
+    """Alınan dosyayı Downloads/HybridP2P altına güvenle yazar (K3).
+
+    Karşı tarafın verdiği ad temizlenir (yol bileşenleri atılır), var olan dosyanın
+    üzerine yazılmaz. Gerçek kaydedilen yolu döndürür."""
+    folder = base_dir if base_dir is not None else default_download_dir()
+    dest = unique_path(folder, safe_filename(original_name))
+    dest.write_bytes(raw)
+    return dest
 
 
 class BubblesMixin:
@@ -380,10 +392,7 @@ class BubblesMixin:
                                 )
                                 self.run_on_ui(show_view_once_dialog, img, "This file will be permanently deleted from the chat once closed.")
                             else:
-                                downloads = Path.home() / "Downloads"
-                                downloads.mkdir(exist_ok=True)
-                                dest = downloads / original_name
-                                dest.write_bytes(raw)
+                                dest = save_received_file(original_name, raw)
                                 def _show_file_vo():
                                     show_view_once_dialog(
                                         ft.Text(f"Dosya indirildi ve kaydedildi:\n{dest.name}", size=13, color=C.text, text_align=ft.TextAlign.CENTER),
@@ -409,10 +418,7 @@ class BubblesMixin:
                                     self.page.update()
                                 self.run_on_ui(_show_normal_img)
                             else:
-                                downloads = Path.home() / "Downloads"
-                                downloads.mkdir(exist_ok=True)
-                                dest = downloads / original_name
-                                dest.write_bytes(raw)
+                                dest = save_received_file(original_name, raw)
                                 def _show_normal_file():
                                     status_text.value = f"Kaydedildi: {dest.name}"
                                     self.page.update()

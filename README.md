@@ -78,6 +78,8 @@ Whenever a client connects to the WebSocket endpoint (`ws://127.0.0.1:8000/ws/{u
 3. The client sends the Base64 signature back to the server.
 4. The server fetches the registered public key of that username and verifies the signature. If valid, the connection is accepted; otherwise, it is disconnected immediately.
 
+Clients check the format before signing: both the desktop and the web client sign only a lowercase UUIDv4 challenge. Anything else makes them close the socket, warn the user and retry after 5 minutes, so a hostile server cannot get a signature over text of its choosing (for example a forged `sender:recipient:payload` message). The server's challenge format must therefore stay `uuid4`.
+
 ### 2. Request-Bound API Signatures
 All state-modifying or sensitive REST API calls require signature headers to prevent replay attacks and API abuse:
 * **X-Username**: Requester's username.
@@ -145,6 +147,7 @@ Instead of multi-encrypting every message, we decouple key distribution from mes
    * The creator registers the group on the server (`POST /api/groups`) with its member list.
    * The creator distributes this `Group Symmetric Key` to the other $N-1$ members by encrypting it individually with their RSA Public Keys and sending a special `group_key_dist` system message.
    * Every member decrypts the key and stores it in their local SQLite database (`group_keys` table).
+   * The distribution frame is signed over `gkd:v1:{sender}:{recipient}:{group_id}:{encrypted_payload}`, and the server relays it only if both sender and recipient are members of the group. Receivers always reject an invalid signature; the first key for a group is accepted even unsigned (older clients), but replacing an existing key requires a valid signature. An accepted replacement is announced with a system message in the chat; a rejected one leaves the old key in place and shows a warning.
 2. **Normal Message Flow:**
    * When a member sends a message to the group, they encrypt the text **once** with the `Group Symmetric Key` using AES-256-GCM.
    * The client sends a single ciphertext packet to the server via WebSockets.
@@ -193,7 +196,7 @@ To maintain security boundaries during membership changes, we enforce strict key
 * **Client-Side Symmetric Encryption:** Files and images are encrypted locally on the sender's device using AES-256-GCM before upload.
 * **Zero-Knowledge Server Storage:** The encrypted file blob is uploaded to the server's database (`file_store` table) and associated with a unique UUID. The server has no knowledge of the decryption keys or the original contents.
 * **Automatic Deletion on Delivery:** Once the recipient successfully downloads the file, the server immediately and permanently deletes the encrypted blob from its disk (`Zero-Knowledge` delivery).
-* **Inline Image Thumbnails:** If the file type is detected as an image, it renders as an inline thumbnail within the chat view upon decryption. Other files can be downloaded directly to the client's local `~/Downloads` directory.
+* **Inline Image Thumbnails:** If the file type is detected as an image, it renders as an inline thumbnail within the chat view upon decryption. Other files can be downloaded directly to the client's local `Downloads/HybridP2P` directory (the desktop client sanitizes the received file name and never overwrites an existing file).
 * **View-Once File Protection:** If a file/image is marked as view-once, the decrypted content is displayed inside a pop-up dialog (or saved to disk for non-images). Once closed, the dialog is dismissed and the bubble is permanently removed from the chat history.
 
 ---
@@ -282,7 +285,7 @@ HybridP2P-Messenger/
 ├── static/                # Web client (served by the relay at /)
 │   ├── serverless.html    # Single-file serverless page for phones (no server, shareable as a file)
 │   ├── index.html, css/   # Markup and styles (theme tokens, light/dark)
-│   ├── js/                # ES modules: app, ui, ws, crypto, db, avatar, voice, linkpreview, prefs, voip, state
+│   ├── js/                # ES modules: app, ui, ws, crypto, db, avatar, voice, linkpreview, prefs, voip, state, safe (escaping helpers, image MIME allowlist)
 │   ├── manifest.webmanifest, icons/  # PWA (installable app)
 │   └── sw.js              # Network-first service worker (offline app shell)
 ├── crypto_utils.py        # RSA/AES key pair generation, E2EE encryption/decryption

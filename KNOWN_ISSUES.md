@@ -191,7 +191,7 @@ Doğrulama hâlâ geçiş kuralıyla çalışıyor:
 
 ### Kalan açık nokta
 - **Zorunlu doğrulama:** iki istemci de imzaladığına göre "imza yoksa ve kişi hiç imzalamamışsa kabul et" kuralı kaldırılabilir. Bu, güncellenmemiş istemcilerden gelen mesajları reddetmek demek; bilinçli bir karar olarak ayrıca verilmeli.
-- **Web uyarısı kalıcı değil:** masaüstü engellenen mesaj uyarısını sohbet geçmişine yazıyor; web yalnızca o an açık sohbette gösteriyor.
+- **Web uyarısı kalıcı değil:** masaüstü engellenen mesaj uyarısını sohbet geçmişine yazıyor; web yalnızca o an açık sohbette gösteriyor. (Grup anahtarı uyarıları bunun dışında: web artık sistem mesajlarını kalıcı yazıyor, bkz. §12.2.)
 
 **Not:** Grup mesajlarında imza zaten **zorunlu** (imzasız/geçersiz grup mesajı her zaman reddediliyor).
 
@@ -274,3 +274,55 @@ Her 2 sn'de kayıp ve RTT okunur (`desktop/call_quality.py`, `static/js/quality.
 - **ZXing (`zxing-android-embedded` 4.3.0) 2021'den beri güncellenmiyor** ve çalışırken `androidx.core`'u kullandığı hâlde POM'unda bildirmiyor; bildirilmeyince tarayıcı ilk açılışta çöküyordu. Bu yüzden `androidx.core:core:1.17.0` açıkça eklendi; APK bu bağımlılıkların yüzünden ~7 MB (yalnızca köprüyle ~0,7 MB idi). Yayın derlemesinde küçültme (R8) açılarak boyut düşürülebilir.
 - **Geri tuşu** bağlantıyı kapatmasın diye uygulamayı arka plana alır; Android arka plandaki uygulamayı bir süre sonra durdurabilir (uzun görüşmeler için ön plan hizmeti yok).
 - Gerçek telefonda (özellikle Google'sız Android'de) denenmedi.
+
+---
+
+## 12. Güvenlik Düzeltmeleri — K1–K4 (2026-11-13)
+
+`fable.md` incelemesindeki dört kritik bulgu düzeltildi (commit'ler: `b11b4fd`, `d4aa8fb`, `da9a079`, `a420c3d`, `c052d21`, `c05cc8f`). Tam test paketi 321 test ile geçiyor. **Düzeltmelerin hiçbiri masaüstü arayüzünde ya da gerçek bir tarayıcıda elle denenmedi;** doğrulama otomatik testlerle yapıldı (web için Node testleri ve statik kontroller).
+
+### 12.1 — K1: Challenge'ı körlemesine imzalama (`d4aa8fb`)
+**Sorun:** İstemci, sunucunun gönderdiği giriş challenge'ını biçimine bakmadan imzalıyordu. Kötü niyetli bir sunucu challenge yerine `alice:bob:<paket>` gibi bir metin gönderip Alice adına geçerli imza alabilirdi.
+
+**Değişen:** Masaüstü (`desktop/ws_client.py`, `is_valid_challenge`) ve web (`static/js/ws.js`, `isValidChallenge`) yalnızca küçük harfli UUIDv4 biçimindeki challenge'ı imzalıyor. Başka bir şey gelirse soket kapatılıyor, uyarı gösteriliyor ve 5 dakika sonra yeniden deneniyor. **Sunucunun challenge biçimi uuid4 olarak kalmak zorunda;** değişirse istemciler bağlanamaz.
+
+**Hâlâ açık:**
+- İmza biçimlerinde bağlam öneki yok: birebir mesaj `gönderen:alıcı:paket`, grup mesajı `gönderen:grup_id:paket`. Önek eklemek için eski istemcilerle bir geçiş dönemi gerekir. UUID kuralı bugün çakışmayı engelliyor ama kalıcı çözüm önek.
+- Web'de sohbet içi uyarı yalnızca bir sohbet açıkken görünüyor; durum metni her zaman görünüyor.
+
+### 12.2 — K2: Grup anahtarı dağıtımı (`c052d21`, `c05cc8f`)
+**Sorun:** `group_key_dist` paketi imzasızdı; istemci gönderenin kim olduğuna bakmadan anahtarı kaydediyordu, sunucu da üyelik kontrolü yapmadan iletiyordu. Sunucu ya da grup kimliğini bilen herhangi bir kullanıcı grubun anahtarını değiştirebilirdi.
+
+**Değişen:**
+- Paket `gkd:v1:{gönderen}:{alıcı}:{grup_id}:{şifreli_paket}` üzerinden imzalanıyor.
+- Sunucu yalnızca gönderen ve alıcı ikisi de grubun üyesiyse iletiyor. WebSocket ve REST yedek yolu aynı `relay_group_key_dist` işlevini kullanıyor.
+- Alıcı tarafında (masaüstü ve web): geçersiz imza her zaman reddedilir; bir grup için gelen ilk anahtar imzasız olsa da kabul edilir (eski istemciler için); mevcut anahtarın değiştirilmesi geçerli imza ister.
+- Kabul edilen değişim sohbete "🔑 … grup anahtarını yeniledi" sistem mesajı yazar; reddedilen değişim uyarı yazar ve eski anahtar korunur.
+- Web artık sistem mesajlarını kalıcı yazıyor (`system: true`).
+
+**Geriye dönük uyumluluk:**
+- Eski bir istemcinin gönderdiği imzasız anahtar yenilemesi (ör. üye çıkarılınca) artık yeni istemcilerde görünür bir uyarıyla reddediliyor; gönderen güncelleyene kadar bu böyle kalır. İlk anahtar (grup kurulumu) imzasız da kabul edildiği için yeni gruplar etkilenmez.
+- Yeni bir istemci **eski bir sunucuya** bağlıysa, eski sunucu imza alanını düşürdüğü için yenilemeler orada da reddedilir. Sunucu da güncellenmeli.
+
+**Hâlâ açık / karar bekleyen:**
+- Her üye anahtarı yenileyebiliyor; "yalnızca kurucu" kuralı yok. Açık karar.
+- İmzalı metinde zaman damgası ya da nonce yok: kötü niyetli bir sunucu aynı göndericinin eski ama geçerli imzalı bir anahtar paketini yeniden oynatıp bir üyeyi eski anahtara döndürebilir.
+- Alıcılar kendi üye listesini tutmuyor; gruptan çıkarılmış birinin geçerli imzalı paketini dürüst olmayan bir sunucu geçirebilir.
+
+### 12.3 — K3: Gelen dosya adı ile klasör dışına yazma (`b11b4fd`)
+**Sorun:** Masaüstü, gelen dosyayı `Downloads/<original_name>` olarak, adı temizlemeden yazıyordu. Üst klasöre çıkan bir ad dosyayı klasörün dışına yazdırabilir, aynı adlı dosyanın üzerine de sessizce yazılırdı.
+
+**Değişen:** `desktop/bubbles.py` içindeki `save_received_file`, `p2p_files.safe_filename` ve `unique_path` kullanıyor; dosyalar `Downloads/HybridP2P` altına yazılıyor, çakışmada yeni ad veriliyor.
+
+**Hâlâ açık:**
+- Tek görünümlük dosya penceresinin metni hâlâ "Downloads folder" diyor; gerçek klasör `Downloads/HybridP2P`.
+- Dosya mesajları imzasız: sunucu, alıcının açık anahtarıyla şifreleyip bir kişi adına dosya gönderebilir. İmza (dosya kimliği + ad + şifreli verinin özeti) eklenmeli.
+
+### 12.4 — K4: Web istemcisinde XSS (`da9a079`, `a420c3d`)
+**Sorun:** Gelen kutusu önizlemesi, arama sonuçları ve resim dosyası uzantısı kaçışlanmadan HTML'e basılıyordu; ayrıca kullanıcı adları satır içi `onclick` metinlerine yazılıyordu.
+
+**Değişen:** `static/js/ui.js`'te önizleme, partner ve gönderen adı kaçışlanıyor; resim türü sabit listeden seçiliyor (`static/js/safe.js` içindeki `imageMime`); `appendSystemMessage` `textContent` kullanıyor; kullanıcı adı alan beş satır içi `onclick` `jsArg()` ile sarıldı; CSP'de `connect-src` `'self' ws: wss:` ile sınırlandı.
+
+**Hâlâ açık:**
+- `script-src` içinde `'unsafe-inline'` duruyor, çünkü satır içi `onclick` işleyicileri hâlâ var. Onları `addEventListener`'a taşıyıp `'unsafe-inline'`'ı kaldırmak gerekiyor.
+- Gerçek tarayıcıda denenmedi; yalnızca Node testleri ve statik kontroller var.

@@ -106,6 +106,7 @@
 - [ ] **Anahtar Doğrulama (Key Verification)**: QR kod veya güvenlik numarası ile karşı tarafın anahtarını yüz yüze doğrulama (MITM koruması) *(kısmen: parmak izi rehberde (masaüstü + web) ve kişi kartlarında görünür; QR / güvenlik numarası akışı yok)*
 - [x] **Private Key Şifreleme**: Yerel private key'i kullanıcı parolası ile AES şifreleme (cihaz çalınsa bile anahtar güvende) (IndexedDB + Parola korumalı E2EE yedek) ✅
 - [x] **Mesaj İmzalama (Digital Signature)**: Birebir mesajlara RSA-PSS imza + alıcı bağlama + ilk-imzada-güven (downgrade koruması); hem WebSocket hem çevrimdışı yolda doğrulanıyor (masaüstü + web) ✅ *(zorunlu doğrulama ayrı karar — bkz. KNOWN_ISSUES.md §5)*
+- [x] **Güvenlik İncelemesi K1–K4 (2026-11-13)**: giriş challenge'ı biçim kontrolü, imzalı + üyelik kontrollü grup anahtarı dağıtımı, gelen dosya adı temizleme, web XSS düzeltmeleri ✅ *(kalan işler: KNOWN_ISSUES.md §12)*
 - [ ] **Anahtar Yenileme (Key Rotation)**: Belirli aralıklarla otomatik yeni anahtar çifti üretme ve dağıtma
 - [x] **Sunucu Tarafı Rate Limiting**: Brute-force ve spam saldırılarına karşı istek sınırlama ✅
 

@@ -7,18 +7,22 @@
 
 ---
 
+> **Durum güncellemesi (2026-11-13):** K1–K4 düzeltildi: K3 `b11b4fd`, K4 `da9a079` + `a420c3d`, K1 `d4aa8fb`, K2 `c052d21` + `c05cc8f`. Tam test paketi 321 test ile geçiyor. Aşağıdaki §2 düzeltmelerden **önceki** durumu anlatır; tarihsel kayıt olarak olduğu gibi bırakıldı. Düzeltmelerin ayrıntısı ve kalan işler: KNOWN_ISSUES.md §12. Düzeltmeler elle (masaüstü arayüzü, gerçek tarayıcı) denenmedi; doğrulama otomatik testlerle.
+
+---
+
 ## 1. Özet
 
 Temmuz'dan bu yana proje çok ilerledi: birebir mesaj imzası, modüler masaüstü, testler (2 dosyadan 250 teste), dağıtım dosyaları, sunucusuz mod, telefon sayfası ve APK eklendi. Sunucusuz taraf (`p2p_core`, `p2p_files`, `serverless.html`) projenin en dikkatli yazılmış kısmı: imzalar bağlam etiketli, girdiler sınırlı, dosya adları temizleniyor, Python ve JS karşılıklı test ediliyor.
 
 Asıl sorun şu: **o özen, daha eski olan sunuculu yola henüz taşınmamış.** Aşağıdaki dört kritik bulgunun dördü de sunuculu moddadır ve üçü, projenin temel iddiasını ("sunucu ele geçirilse bile içerik ve kimlik güvende") doğrudan zayıflatır. Hepsinin düzeltmesi küçüktür.
 
-| # | Bulgu | Etki | Düzeltme büyüklüğü |
-|---|---|---|---|
-| K1 | İstemci, sunucunun gönderdiği metni körlemesine imzalıyor | Sunucu sizin adınıza mesaj ve sunucusuz bağlantı kodu ürettirebilir | Çok küçük |
-| K2 | Grup anahtarı dağıtımı imzasız, gönderen doğrulanmıyor | Sunucu (ya da grup kimliğini bilen herhangi bir kullanıcı) grubun anahtarını değiştirip sonraki mesajları okuyabilir | Küçük |
-| K3 | Masaüstü, gelen dosyayı gönderenin verdiği adla diske yazıyor | Dosya İndirilenler dışına, örn. Başlangıç klasörüne yazdırılabilir | Çok küçük |
-| K4 | Web istemcisinde iki XSS yolu | Bir kişi (ya da sunucu) tarayıcıdaki özel anahtarı çalabilir | Küçük |
+| # | Bulgu | Etki | Düzeltme büyüklüğü | Durum |
+|---|---|---|---|---|
+| K1 | İstemci, sunucunun gönderdiği metni körlemesine imzalıyor | Sunucu sizin adınıza mesaj ve sunucusuz bağlantı kodu ürettirebilir | Çok küçük | ✅ Düzeltildi (`d4aa8fb`) |
+| K2 | Grup anahtarı dağıtımı imzasız, gönderen doğrulanmıyor | Sunucu (ya da grup kimliğini bilen herhangi bir kullanıcı) grubun anahtarını değiştirip sonraki mesajları okuyabilir | Küçük | ✅ Düzeltildi (`c052d21`, `c05cc8f`) |
+| K3 | Masaüstü, gelen dosyayı gönderenin verdiği adla diske yazıyor | Dosya İndirilenler dışına, örn. Başlangıç klasörüne yazdırılabilir | Çok küçük | ✅ Düzeltildi (`b11b4fd`) |
+| K4 | Web istemcisinde iki XSS yolu | Bir kişi (ya da sunucu) tarayıcıdaki özel anahtarı çalabilir | Küçük | ✅ Düzeltildi (`da9a079`, `a420c3d`) |
 
 ---
 
@@ -98,7 +102,7 @@ Aynı dosyada `item.partner` ve grup mesajındaki `m.sender` de kaçışlanmıyo
 
 | Madde | Durum |
 |---|---|
-| Birebir mesajlar imzasız | ✅ Yapıldı — ama K1 yüzünden bugün sunucuya karşı korumuyor |
+| Birebir mesajlar imzasız | ✅ Yapıldı — K1 kapatıldı (2026-11-13), imza artık sunucuya karşı da koruyor; imza biçimlerine önek eklenmesi açık (aşağıdaki "Kalan işler") |
 | `client.py` tek dev dosya | ✅ `desktop/` paketine bölündü |
 | Test kapsamı zayıf | ✅ 250 test; ancak K1–K4 gibi "kötü niyetli sunucu / kötü niyetli kişi" senaryoları test edilmiyor |
 | TLS zorunlu varsayım | ✅ Dağıtım dosyaları ve parmak izi sabitleme var; Docker'da hiç çalıştırılmadı (KNOWN_ISSUES §8) |
@@ -157,13 +161,26 @@ Aynı dosyada `item.partner` ve grup mesajındaki `m.sender` de kaçışlanmıyo
 
 ## 7. Önerilen sıra
 
-1. **K1 → K3 → K4 → K2.** Dördü de küçük; ilk üçü birkaç satır. Her biri için "saldırı reddediliyor" testi yazılmalı.
+1. ✅ **K1 → K3 → K4 → K2.** Yapıldı (2026-11-13); her biri için "saldırı reddediliyor" testi yazıldı. Kalan işler aşağıda.
 2. **M1** (yeni mesajların görünmemesi) ve **S2** (aranamama) — kullanıcının doğrudan karşılaşacağı hatalar.
 3. **S1, S3, S4, M3, M4** — veri sızıntısı, kayıp ve kötüye kullanım.
 4. **CI** — bundan sonraki her düzeltmeyi korur.
 5. **Tek imzalı zarf + işleyici tablosu** — K1/K2 türü hataların yeniden doğmasını önleyen yapısal iş.
 6. Yeni özellikler: önce QR resmi (1), davetle kayıt (2), güvenlik numarası (3).
 7. Yayından önce: özel anahtar şifreleme, yayın imzalı APK, Docker ve gerçek cihaz testleri.
+
+---
+
+## Kalan işler (K1–K4 sonrası, 2026-11-13)
+
+Düzeltmeler sırasında ortaya çıkan ya da bilerek açık bırakılan işler. Ayrıntı: KNOWN_ISSUES.md §12.
+
+- **K2 tekrar oynatma:** Grup anahtarı paketinin imzalı metninde zaman damgası ya da nonce yok; kötü niyetli bir sunucu aynı göndericinin eski ama geçerli imzalı bir paketini yeniden oynatıp bir üyeyi eski anahtara döndürebilir.
+- **K2 üyelik ve yetki:** Alıcılar kendi üye listesini tutmuyor (çıkarılmış üyenin geçerli imzalı paketi dürüst olmayan bir sunucudan geçebilir); her üye anahtarı yenileyebiliyor, "yalnızca kurucu" kuralı açık bir karar.
+- **Dosya mesajları imzasız:** K3 yalnızca dosya adını düzeltti; sunucu hâlâ bir kişi adına dosya uydurabilir. Tek görünümlük dosya penceresi de hâlâ "Downloads folder" diyor (gerçek klasör `Downloads/HybridP2P`).
+- **İmza öneki:** Birebir (`gönderen:alıcı:paket`) ve grup (`gönderen:grup_id:paket`) imzalarında bağlam öneki yok; K1 yalnızca UUID kuralıyla kapatıldı. Önek için eski istemcilerle geçiş dönemi gerekir.
+- **`'unsafe-inline'`:** Web CSP'sinde `script-src` içinde duruyor, çünkü satır içi `onclick` işleyicileri duruyor. Ayrıca K4 gerçek tarayıcıda denenmedi.
+- **Eski istemci uyumu (K2):** Eski istemcilerin imzasız anahtar yenilemeleri artık reddediliyor; yeni istemci eski sunucuya bağlıyken de imza alanı kaybolduğu için yenilemeler reddedilir.
 
 ---
 

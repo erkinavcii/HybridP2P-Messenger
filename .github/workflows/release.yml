@@ -1,0 +1,72 @@
+name: Release Windows Binary
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install runtime and build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build Windows executable with PyInstaller
+        run: python -m PyInstaller --noconfirm --clean HybridP2P-Messenger.spec
+
+      - name: Verify binary and generate SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          $exe = "dist/HybridP2P-Messenger.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Expected executable not found at $exe"
+          }
+          $size = (Get-Item $exe).Length
+          Write-Host "Built $exe ($size bytes)"
+          if ($size -lt 10MB) {
+            throw "Executable size unexpectedly small: $size bytes"
+          }
+          $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  HybridP2P-Messenger.exe" | Out-File -FilePath "dist/SHA256SUMS.txt" -Encoding ascii
+          Get-Content "dist/SHA256SUMS.txt"
+
+      - name: Create or update GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = "Continue"
+          gh release view $env:TAG > $null 2>&1
+          $exists = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = "Stop"
+
+          if ($exists) {
+            gh release upload $env:TAG dist/HybridP2P-Messenger.exe dist/SHA256SUMS.txt --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload failed with exit code $LASTEXITCODE" }
+          } else {
+            gh release create $env:TAG dist/HybridP2P-Messenger.exe dist/SHA256SUMS.txt `
+              --verify-tag `
+              --title "HybridP2P Messenger $env:TAG" `
+              --notes-from-tag
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
+          }

@@ -1,16 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
+# Bundle Flet 0.85 icon JSON resources (material/cupertino icons) and desktop/local submodules
+datas = collect_data_files('flet')
+binaries = []
+hiddenimports = collect_submodules('desktop')
+
+fd_datas, fd_binaries, fd_hidden = collect_all('flet_desktop')
+datas += fd_datas
+binaries += fd_binaries
+hiddenimports += fd_hidden
 
 a = Analysis(
     ['client.py'],
     pathex=[],
-    binaries=[],
-    datas=[],
-    hiddenimports=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['pytest', '_pytest', 'flet.testing', 'flet.cli', 'flet.fastapi'],
     noarchive=False,
     optimize=0,
 )

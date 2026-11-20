@@ -1,6 +1,17 @@
 # 🔐 HybridP2P Messenger: Zero-Knowledge E2EE Messenger
 
+[![tests](https://github.com/erkinavcii/HybridP2P-Messenger/actions/workflows/tests.yml/badge.svg)](https://github.com/erkinavcii/HybridP2P-Messenger/actions/workflows/tests.yml)
+[![Windows Release](https://img.shields.io/github/v/release/erkinavcii/HybridP2P-Messenger?label=Windows%20Release)](https://github.com/erkinavcii/HybridP2P-Messenger/releases/latest)
+
 A secure, private, and lightweight hybrid peer-to-peer messaging application designed to withstand network-level surveillance and server compromises. Built with **FastAPI** (Server) and **Flet** (Client, Python-based Flutter), it employs state-of-the-art cryptography (RSA-4096 and AES-256-GCM) to implement true **End-to-End Encryption (E2EE)** for text messages, E2EE read receipts (double green ticks), ephemeral/view-once chats, files, multi-user groups, and voice/video calling.
+
+---
+
+## 🖼️ Screenshots
+
+| E2EE Web Messenger | Serverless "Walkie-Talkie" P2P Mode |
+|---|---|
+| ![HybridP2P E2EE Web Chat](docs/images/web-chat.png)<br>*Browser-side RSA-4096 + AES-256-GCM encrypted messaging, signed 1:1 chats, inbox sidebar, online presence, and E2EE read receipts (double green ticks).* | ![HybridP2P Serverless P2P Mode](docs/images/serverless-p2p.png)<br>*Zero-server direct WebRTC connection setup with ephemeral identity fingerprint, STUN/LAN selector, signed one-time offer code, and QR exchange.* |
 
 ---
 
@@ -307,7 +318,10 @@ HybridP2P-Messenger/
 
 ## 🚀 Getting Started
 
-### 1. Installation
+### Prebuilt Windows Desktop Binary
+Prebuilt Windows `.exe` binaries (`HybridP2P-Messenger.exe` with `SHA256SUMS.txt`) are available under [GitHub Releases](https://github.com/erkinavcii/HybridP2P-Messenger/releases/latest) — download and run directly without installing Python.
+
+### 1. Installation (From Source)
 Install the required packages:
 ```bash
 pip install -r requirements.txt

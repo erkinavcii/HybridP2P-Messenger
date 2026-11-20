@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -32,7 +36,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libportaudio2 libgl1 libglib2.0-0
+          sudo apt-get install -y -q libportaudio2 libgl1 libglib2.0-0 pulseaudio
+          mkdir -p /tmp/xdg-runtime
+          chmod 700 /tmp/xdg-runtime
+          echo "XDG_RUNTIME_DIR=/tmp/xdg-runtime" >> "$GITHUB_ENV"
+          XDG_RUNTIME_DIR=/tmp/xdg-runtime pulseaudio -n --daemonize=yes --exit-idle-time=-1 --load=module-null-sink --load=module-native-protocol-unix \
+            || XDG_RUNTIME_DIR=/tmp/xdg-runtime pulseaudio --start --exit-idle-time=-1 || true
 
       - name: Install dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt

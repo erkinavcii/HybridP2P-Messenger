@@ -87,7 +87,11 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(circle at center, var(--login-glow) 0%, var(--surface-deep) 100%);
+    /* Splash is dark art: the login screen stays dark in both themes (overlay tokens below). */
+    background:
+        linear-gradient(180deg, rgba(9, 9, 11, 0.35) 0%, rgba(9, 9, 11, 0.75) 60%, rgba(9, 9, 11, 0.9) 100%),
+        url("../brand/splash.webp") center top / cover no-repeat,
+        var(--surface-deep);
 }
 
 .login-card {
@@ -110,8 +114,9 @@ body {
 }
 
 .logo-icon {
-    font-size: 48px;
-    color: var(--accent-color);
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
     margin-bottom: 8px;
 }
 

@@ -12,7 +12,7 @@ Kimlik anahtarı ve rehber normal istemciyle ortaktır (~/.hybridp2p_messenger/)
 
 import flet as ft
 
-from client import MessengerApp
+from client import ASSETS_DIR, MessengerApp
 
 
 def main(page: ft.Page):
@@ -20,4 +20,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, assets_dir=ASSETS_DIR)

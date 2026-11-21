@@ -18,6 +18,9 @@ belgeler (örn. desktop/ws_client.py, desktop/call_screen.py).
 import asyncio
 import threading
 
+import os
+import sys
+
 import flet as ft
 from desktop.theme import C
 from desktop import settings_store
@@ -34,6 +37,15 @@ from desktop.pure_p2p import PureP2PMixin
 from desktop.p2p_chat import P2PChatMixin
 from desktop.serverless_screen import ServerlessScreenMixin
 from desktop.call_screen import CallScreenMixin
+
+# Marka dosyaları: kaynaktan çalışırken <repo>/assets, PyInstaller paketinde
+# <_MEIPASS>/assets (spec dosyasındaki datas). Flet'e assets_dir olarak verilir;
+# aşağıdaki yollar bu klasöre göredir (CWD'den bağımsız).
+_BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+ASSETS_DIR = os.path.join(_BASE_DIR, "assets")
+WINDOW_ICON = "brand/app.ico"
+LOGIN_ICON = "brand/icon.png"
+LOGIN_SPLASH = "brand/splash.png"
 
 
 class MessengerApp(
@@ -58,6 +70,7 @@ class MessengerApp(
         page.title       = "HybridP2P Messenger — Serverless" if serverless_only else "HybridP2P Messenger"
         page.window.width  = 480
         page.window.height = 820
+        page.window.icon = WINDOW_ICON   # yalnızca Windows'ta etkili (.ico, assets_dir'e göreli)
         page.padding     = 0
         # Kayıtlı tema tercihi (giriş ekranı dahil her yerde geçerli)
         C.apply(settings_store.get("theme"))
@@ -284,64 +297,86 @@ class MessengerApp(
                                      shape=ft.RoundedRectangleBorder(radius=8)),
             )
 
+        # Giriş ekranı: splash arka plan (her zaman koyu) + alta doğru tema zeminine
+        # eriyen degrade. Başlık/ikon splash'in koyu bölgesinde durduğu için sabit
+        # açık renkli; form ise degradenin vardığı C.bg üzerinde (açık temada da okunur).
+        _hero_text = "#f4f4f5"
+        _hero_sub = "#c4b5fd"
+        _hero_muted = "#a1a1aa"
+        login_form = ft.Column(
+            controls=[
+                ft.Container(height=36),
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Image(src=LOGIN_ICON, width=88, height=88, fit=ft.BoxFit.CONTAIN),
+                            ft.Container(height=6),
+                            ft.Text("HybridP2P", size=32, weight=ft.FontWeight.BOLD, color=_hero_text),
+                            ft.Text("Messenger", size=18, weight=ft.FontWeight.W_300, color=_hero_sub),
+                            ft.Container(height=4),
+                            ft.Text("End-to-End Encrypted Messaging", size=13,
+                                    color=_hero_muted, text_align=ft.TextAlign.CENTER),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2,
+                    ),
+                    alignment=ft.Alignment(0, 0),
+                ),
+                ft.Container(height=150),
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            self.server_address_field,
+                            ft.Container(height=8),
+                            self.tls_pin_field,
+                            ft.Container(height=12),
+                            self.username_field,
+                            ft.Container(height=12),
+                            self.import_key_checkbox,
+                            self.import_key_field,
+                            ft.Container(height=16),
+                            self.login_btn,
+                            ft.Container(height=6),
+                            self.serverless_btn,
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0,
+                    ),
+                    padding=ft.Padding(40, 0, 40, 0),
+                ),
+                ft.Container(expand=True),
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.SHIELD, size=14, color=C.success),
+                            ft.Text("RSA-4096 + AES-256-GCM + E2EE Files", size=11, color=C.success),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER, spacing=6,
+                    ),
+                    padding=ft.Padding(0, 0, 0, 24),
+                ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True,
+        )
         self.login_view = ft.Container(
-            content=ft.Column(
+            content=ft.Stack(
                 controls=[
-                    ft.Container(height=60),
+                    # Splash biraz aşağı kaydırılır: parlayan halkalar başlık ile form
+                    # arasındaki boşluğa oturur (üstte kalan şerit splash'in zemin rengi)
+                    ft.Container(content=ft.Image(src=LOGIN_SPLASH, fit=ft.BoxFit.COVER),
+                                 top=120, left=0, right=0, bottom=0),
                     ft.Container(
-                        content=ft.Column(
-                            controls=[
-                                ft.Icon(ft.Icons.LOCK_OUTLINE, size=64, color=C.accent),
-                                ft.Text("HybridP2P", size=32, weight=ft.FontWeight.BOLD, color=C.text),
-                                ft.Text("Messenger", size=18, weight=ft.FontWeight.W_300, color=C.accent),
-                                ft.Container(height=4),
-                                ft.Text("End-to-End Encrypted Messaging", size=13,
-                                        color=C.text_secondary, text_align=ft.TextAlign.CENTER),
-                            ],
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2,
+                        expand=True,
+                        gradient=ft.LinearGradient(
+                            begin=ft.Alignment(0, -1), end=ft.Alignment(0, 1),
+                            colors=["#00000000", "#00000000", C.bg, C.bg],
+                            stops=[0.0, 0.4, 0.62, 1.0] if C.is_dark else [0.0, 0.36, 0.5, 1.0],
                         ),
-                        alignment=ft.Alignment(0, 0),
                     ),
-                    ft.Container(height=40),
-                    ft.Container(
-                        content=ft.Column(
-                            controls=[
-                                self.server_address_field,
-                                ft.Container(height=8),
-                                self.tls_pin_field,
-                                ft.Container(height=12),
-                                self.username_field,
-                                ft.Container(height=12),
-                                self.import_key_checkbox,
-                                self.import_key_field,
-                                ft.Container(height=16),
-                                self.login_btn,
-                                ft.Container(height=6),
-                                self.serverless_btn,
-                            ],
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0,
-                        ),
-                        padding=ft.Padding(40, 0, 40, 0),
-                    ),
-                    ft.Container(expand=True),
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.SHIELD, size=14, color=C.success),
-                                ft.Text("RSA-4096 + AES-256-GCM + E2EE Files", size=11, color=C.success),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER, spacing=6,
-                        ),
-                        padding=ft.Padding(0, 0, 0, 24),
-                    ),
+                    login_form,
                 ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True,
+                expand=True,
             ),
             expand=True,
-            gradient=ft.LinearGradient(
-                begin=ft.Alignment(0, -1), end=ft.Alignment(0, 1),
-                colors=[C.bg, C.surface, C.bg],
-            ),
+            bgcolor="#06040b",   # splash'in zemin rengi (tema ne olursa olsun)
         )
 
         # ╔═══════════════════════════════════════════════════════════╗
@@ -435,7 +470,7 @@ class MessengerApp(
                     ft.Container(
                         content=ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.LOCK, size=20, color=C.accent),
+                                ft.Image(src=LOGIN_ICON, width=24, height=24, fit=ft.BoxFit.CONTAIN),
                                 ft.Column(
                                     controls=[
                                         ft.Text("Chats", size=18,
@@ -790,4 +825,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, assets_dir=ASSETS_DIR)

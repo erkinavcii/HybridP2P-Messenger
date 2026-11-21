@@ -4,6 +4,10 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_sub
 # Bundle Flet 0.85 icon JSON resources (material/cupertino icons) and desktop/local submodules
 datas = collect_data_files('flet')
 binaries = []
+# Marka dosyaları (pencere ikonu, giriş ekranı görselleri) — client.ASSETS_DIR bunları arar
+datas += [('assets/brand/app.ico', 'assets/brand'),
+          ('assets/brand/icon.png', 'assets/brand'),
+          ('assets/brand/splash.png', 'assets/brand')]
 hiddenimports = collect_submodules('desktop')
 
 fd_datas, fd_binaries, fd_hidden = collect_all('flet_desktop')
@@ -45,4 +49,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/brand/app.ico',
 )

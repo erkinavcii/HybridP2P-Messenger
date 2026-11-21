@@ -95,9 +95,9 @@ export async function prioritizeAudio(pc) {
 
 export function qualityLabel(level, hasVideo) {
     if (!level) return "";
-    if (!hasVideo) return "Bağlantı zayıf — ses öncelikli";
-    return level === MAX_LEVEL ? `Bağlantı çok zayıf — görüntü ${WEB_LEVELS[level].height}p, ses öncelikli`
-                               : `Bağlantı zayıf — görüntü ${WEB_LEVELS[level].height}p'ye düşürüldü`;
+    if (!hasVideo) return "Weak connection — audio prioritized";
+    return level === MAX_LEVEL ? `Very weak connection — video ${WEB_LEVELS[level].height}p, audio prioritized`
+                               : `Weak connection — video lowered to ${WEB_LEVELS[level].height}p`;
 }
 
 /** Görüşme boyunca izler; durdurma fonksiyonu döner. onChange(level) */

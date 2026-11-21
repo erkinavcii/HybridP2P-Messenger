@@ -34,11 +34,11 @@ function toDataUrl(b64) {
 
 // Herhangi bir resmi ortadan kare kırpıp 128px JPEG'e yeniden kodlar → base64.
 export async function normalizeAvatar(bytes, maxBytes = MAX_INPUT_BYTES) {
-    if (!bytes || bytes.byteLength === 0) throw new Error("boş dosya");
-    if (bytes.byteLength > maxBytes) throw new Error("dosya çok büyük");
+    if (!bytes || bytes.byteLength === 0) throw new Error("empty file");
+    if (bytes.byteLength > maxBytes) throw new Error("file too large");
     const bitmap = await createImageBitmap(new Blob([bytes]));
     try {
-        if (bitmap.width * bitmap.height > MAX_PIXELS) throw new Error("resim çözünürlüğü çok yüksek");
+        if (bitmap.width * bitmap.height > MAX_PIXELS) throw new Error("image resolution too high");
         const side = Math.min(bitmap.width, bitmap.height);
         const canvas = document.createElement("canvas");
         canvas.width = canvas.height = AVATAR_SIZE;

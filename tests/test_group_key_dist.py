@@ -399,7 +399,7 @@ def test_web_receiver_uses_decision():
     assert "groupKeySigData(sender, state.username, groupId, encPayload)" in recv
     # İmza kontrolü ve karar, anahtar kaydedilmeden önce
     assert recv.index("verifyFrom(") < recv.index("decideGroupKey(") < recv.index('dbSet("group_keys"')
-    assert "grup anahtarını yeniledi." in recv
+    assert "rotated the group key." in recv
 
 
 def test_web_renders_persisted_system_messages_safely():

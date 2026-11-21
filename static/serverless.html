@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <!-- resizes-content: klavye açılınca sayfa küçülür (sohbet başlığı ve kimlik rozeti kaybolmaz) -->
@@ -24,7 +24,7 @@
                img-src data: blob:; media-src blob: mediastream:; connect-src 'none';
                base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>HybridP2P — Sunucusuz</title>
+<title>HybridP2P — Serverless</title>
 <style>
   :root {
     --bg: #09090b; --surface: #18181b; --surface-alt: #27272a; --border: #3f3f46;
@@ -121,74 +121,74 @@
 </head>
 <body>
 <main>
-  <h1>📻 HybridP2P — Sunucusuz</h1>
-  <p class="sub">Arada sunucu yok: iki taraf da aynı anda açık olmalı. Kodlar imzalıdır ve tek kullanımlıktır.</p>
+  <h1>📻 HybridP2P — Serverless</h1>
+  <p class="sub">No server in between: both peers must be online at the same time. Codes are signed and single-use.</p>
 
   <!-- ═════════════ 1. Kimlik ═════════════ -->
   <section id="setup" class="card">
-    <label for="username">Kullanıcı adınız (2-32 karakter: a-z, 0-9, _)</label>
-    <input id="username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ör. alice">
-    <label><input id="remember" type="checkbox"> Bu cihazda hatırla (kimlik ve rehber tarayıcıda saklanır)</label>
+    <label for="username">Your username (2-32 chars: a-z, 0-9, _)</label>
+    <input id="username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. alice">
+    <label><input id="remember" type="checkbox"> Remember on this device (saves identity and contacts in browser)</label>
     <div class="row">
-      <button id="btn-new-id" class="primary">Yeni kimlikle başla</button>
-      <button id="btn-load-key">Anahtar dosyası yükle (.pem)</button>
+      <button id="btn-new-id" class="primary">Start with new identity</button>
+      <button id="btn-load-key">Load key file (.pem)</button>
       <input id="key-file" type="file" accept=".pem,.txt" class="hidden">
     </div>
-    <p class="sub" style="margin-top:8px">Hatırlanmazsa sayfa kapanınca hiçbir iz kalmaz; karşı taraf sizi her seferinde "yeni kişi" görür.
-      Masaüstü/web hesabınızın özel anahtarını yüklerseniz aynı kimlikle görünürsünüz.</p>
+    <p class="sub" style="margin-top:8px">If not remembered, closing the page leaves no trace; your peer will see you as a "new contact" each time.
+      Load the private key from your desktop/web account to use the same identity.</p>
     <div id="setup-status" class="status"></div>
   </section>
 
   <section id="identity" class="card hidden">
     <div class="row"><strong id="me-name" class="grow"></strong>
-      <button id="btn-copy-card">Kişi kartımı kopyala</button>
-      <button id="btn-forget" class="danger hidden">Unut</button></div>
+      <button id="btn-copy-card">Copy my contact card</button>
+      <button id="btn-forget" class="danger hidden">Forget</button></div>
     <div id="me-fp" class="fp"></div>
   </section>
 
   <!-- ═════════════ 2. Bağlantı ═════════════ -->
   <section id="connect" class="card hidden">
     <details id="ice-box" class="ice">
-      <summary>Bağlantı yardımcısı (STUN): <span id="ice-current"></span></summary>
-      <select id="ice-preset" aria-label="Bağlantı yardımcısı"></select>
+      <summary>Connection helper (STUN): <span id="ice-current"></span></summary>
+      <select id="ice-preset" aria-label="Connection helper"></select>
       <textarea id="ice-custom" class="hidden" spellcheck="false" autocapitalize="none"
-                placeholder="stun:sunucu.ornek.com:3478&#10;turn:sunucu.ornek.com:3478 kullanici sifre"></textarea>
+                placeholder="stun:server.example.com:3478&#10;turn:server.example.com:3478 username password"></textarea>
       <div id="ice-hint" class="sub" style="margin:6px 0 0"></div>
     </details>
     <div class="tabs">
-      <button id="tab-start" class="active">Bağlantı başlat</button>
-      <button id="tab-answer">Koda cevap ver</button>
+      <button id="tab-start" class="active">Start Connection</button>
+      <button id="tab-answer">Answer Code</button>
     </div>
     <div id="pane-start">
-      <label for="mode">Bağlantı türü</label>
+      <label for="mode">Connection type</label>
       <select id="mode">
-        <option value="chat">Yazılı mesajlaşma ve dosya</option>
-        <option value="audio">Sesli arama</option>
-        <option value="video">Görüntülü arama</option>
+        <option value="chat">Text chat &amp; files</option>
+        <option value="audio">Audio call</option>
+        <option value="video">Video call</option>
       </select>
-      <div class="row"><button id="btn-offer" class="primary">1. Teklif kodu üret</button></div>
+      <div class="row"><button id="btn-offer" class="primary">1. Generate Offer Code</button></div>
       <div id="offer-box" class="hidden">
-        <label>Teklif kodunuz — karşı tarafa gönderin</label>
+        <label>Your offer code — send to your peer</label>
         <textarea id="offer-code" readonly></textarea>
-        <div class="row"><button data-copy="offer-code">Kopyala</button><button data-share="offer-code">Paylaş</button></div>
+        <div class="row"><button data-copy="offer-code">Copy</button><button data-share="offer-code">Share</button></div>
         <div id="offer-qr" class="qr"></div>
-        <label>2. Karşı tarafın cevap kodu</label>
+        <label>2. Peer's answer code</label>
         <textarea id="answer-in"></textarea>
-        <div class="row"><button data-paste="answer-in">Panodan yapıştır</button><button data-scan="answer-in" class="scan-btn hidden">QR okut</button>
-          <button id="btn-connect" class="primary grow">3. Doğrula ve bağlan</button></div>
+        <div class="row"><button data-paste="answer-in">Paste from clipboard</button><button data-scan="answer-in" class="scan-btn hidden">Scan QR</button>
+          <button id="btn-connect" class="primary grow">3. Verify &amp; Connect</button></div>
       </div>
       <div id="start-status" class="status"></div>
     </div>
     <div id="pane-answer" class="hidden">
-      <label>1. Karşı tarafın teklif kodu</label>
+      <label>1. Peer's offer code</label>
       <textarea id="offer-in"></textarea>
-      <div class="row"><button data-paste="offer-in">Panodan yapıştır</button><button data-scan="offer-in" class="scan-btn hidden">QR okut</button>
-        <button id="btn-answer" class="primary grow">2. Doğrula ve cevap üret</button></div>
+      <div class="row"><button data-paste="offer-in">Paste from clipboard</button><button data-scan="offer-in" class="scan-btn hidden">Scan QR</button>
+        <button id="btn-answer" class="primary grow">2. Verify &amp; Generate Answer</button></div>
       <div id="answer-ident" class="status"></div>
       <div id="answer-box" class="hidden">
-        <label>Cevap kodunuz — karşı tarafa gönderin; bağlantı bekleniyor…</label>
+        <label>Your answer code — send to your peer; waiting for connection…</label>
         <textarea id="answer-code" readonly></textarea>
-        <div class="row"><button data-copy="answer-code">Kopyala</button><button data-share="answer-code">Paylaş</button></div>
+        <div class="row"><button data-copy="answer-code">Copy</button><button data-share="answer-code">Share</button></div>
         <div id="answer-qr" class="qr"></div>
       </div>
       <div id="answer-status" class="status"></div>
@@ -197,26 +197,26 @@
   </section>
 
   <section id="contacts" class="card hidden">
-    <div class="row"><strong class="grow">Rehber</strong><button id="btn-import-card">Kişi kartı ekle</button></div>
+    <div class="row"><strong class="grow">Contacts</strong><button id="btn-import-card">Add contact card</button></div>
     <div id="contact-list" class="sub" style="margin-top:8px"></div>
     <div id="import-box" class="hidden">
       <textarea id="import-text" placeholder='{"username": "...", "public_key": "-----BEGIN PUBLIC KEY-----...", "fingerprint": "..."}'></textarea>
-      <div class="row"><button id="btn-import-save" class="primary">Ekle</button><span id="import-status" class="status"></span></div>
+      <div class="row"><button id="btn-import-save" class="primary">Add</button><span id="import-status" class="status"></span></div>
     </div>
   </section>
 
   <!-- ═════════════ 3. Sohbet ═════════════ -->
   <section id="chat" class="hidden">
-    <div class="row" style="margin-top:0"><strong id="peer-name" class="grow"></strong><button id="btn-close" class="danger">Bağlantıyı kapat</button></div>
+    <div class="row" style="margin-top:0"><strong id="peer-name" class="grow"></strong><button id="btn-close" class="danger">Close connection</button></div>
     <div id="peer-badge" class="badge"></div>
     <div id="messages"></div>
     <div id="chat-status" class="status bad"></div>
-    <div id="chat-again" class="row hidden"><button class="primary grow" data-again>Yeni bağlantı kur</button></div>
+    <div id="chat-again" class="row hidden"><button class="primary grow" data-again>Start new connection</button></div>
     <div class="composer">
-      <button id="btn-attach" title="Dosya gönder">📎</button>
+      <button id="btn-attach" title="Send file">📎</button>
       <input id="file-input" type="file" class="hidden">
-      <input id="msg-input" type="text" placeholder="Mesaj yazın…" maxlength="8000" autocomplete="off">
-      <button id="btn-send" class="primary">Gönder</button>
+      <input id="msg-input" type="text" placeholder="Type a message…" maxlength="8000" autocomplete="off">
+      <button id="btn-send" class="primary">Send</button>
     </div>
   </section>
   <!-- ═════════════ 4. Arama ═════════════ -->
@@ -231,13 +231,13 @@
       <div id="call-quality"></div>
     </div>
     <div id="call-controls" class="call-controls">
-      <button id="btn-mic" title="Mikrofonu kapat" aria-label="Mikrofon">🎤</button>
-      <button id="btn-cam" title="Kamerayı kapat" aria-label="Kamera">📷</button>
-      <button id="btn-flip" title="Ön/arka kamera" aria-label="Kamerayı çevir" class="hidden">🔄</button>
-      <button id="btn-unmute" title="Sesi aç" aria-label="Sesi aç" class="hidden">🔊</button>
-      <button id="btn-hang" class="hang" title="Kapat" aria-label="Aramayı kapat">✖</button>
+      <button id="btn-mic" title="Mute microphone" aria-label="Microphone">🎤</button>
+      <button id="btn-cam" title="Turn camera off" aria-label="Camera">📷</button>
+      <button id="btn-flip" title="Switch front/back camera" aria-label="Switch camera" class="hidden">🔄</button>
+      <button id="btn-unmute" title="Unmute audio" aria-label="Unmute audio" class="hidden">🔊</button>
+      <button id="btn-hang" class="hang" title="End call" aria-label="End call">✖</button>
     </div>
-    <div id="call-end" class="hidden"><button class="primary" data-again style="width:100%">Yeni bağlantı kur</button></div>
+    <div id="call-end" class="hidden"><button class="primary" data-again style="width:100%">Start new connection</button></div>
   </section>
 </main>
 
@@ -2752,11 +2752,11 @@ var qrcode = function() {
   // ── bağlantı yardımcısı (STUN/TURN) seçimi — desktop/p2p_core.py ice_servers_for ile birebir ──
   const ICE_DEFAULT = "google+cloudflare";
   const ICE_PRESETS = {
-    "google+cloudflare": "Google + Cloudflare (varsayılan)",
-    "cloudflare": "Yalnızca Cloudflare",
-    "google": "Yalnızca Google",
-    "custom": "Özel sunucu (kendi STUN/TURN'ünüz)",
-    "lan": "Yalnızca yerel ağ (dış sunucu yok)",
+    "google+cloudflare": "Google + Cloudflare (default)",
+    "cloudflare": "Cloudflare only",
+    "google": "Google only",
+    "custom": "Custom server (your own STUN/TURN)",
+    "lan": "Local network only (no external server)",
   };
   const PUBLIC_STUN = {
     google: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"],
@@ -2887,9 +2887,9 @@ var qrcode = function() {
 
   function qualityLabel(level, hasVideo) {
       if (!level) return "";
-      if (!hasVideo) return "Bağlantı zayıf — ses öncelikli";
-      return level === MAX_LEVEL ? `Bağlantı çok zayıf — görüntü ${WEB_LEVELS[level].height}p, ses öncelikli`
-                                 : `Bağlantı zayıf — görüntü ${WEB_LEVELS[level].height}p'ye düşürüldü`;
+      if (!hasVideo) return "Weak connection — audio prioritized";
+      return level === MAX_LEVEL ? `Very weak connection — video ${WEB_LEVELS[level].height}p, audio prioritized`
+                                 : `Weak connection — video lowered to ${WEB_LEVELS[level].height}p`;
   }
 
   /** Görüşme boyunca izler; durdurma fonksiyonu döner. onChange(level) */
@@ -2930,7 +2930,7 @@ var qrcode = function() {
   const me = { username: "", priv: null, pubDer: null, fp: "", remember: false };
   const contacts = new Map();                 // kullanıcı adı → { fp, pubDer }
   const session = { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" };
-  const MODE_LABELS = { chat: "Yazılı mesajlaşma", audio: "Sesli arama", video: "Görüntülü arama" };
+  const MODE_LABELS = { chat: "Text chat", audio: "Audio call", video: "Video call" };
   // Arama durumu (yalnızca audio/video): yerel akış, sayaç, ekranı açık tutma kilidi
   const call = { stream: null, open: false, ended: false, timer: null, started: 0, facing: "user", wakeLock: null,
                  stopQuality: null };
@@ -2975,38 +2975,38 @@ var qrcode = function() {
     me.remember = $("remember").checked || me.remember;
     await persist();
     show("setup", false); show("identity"); show("connect"); show("contacts");
-    $("me-name").textContent = `Kimliğiniz: ${username}` + (me.remember ? " (bu cihazda hatırlanıyor)" : " (geçici)");
+    $("me-name").textContent = `Your Identity: ${username}` + (me.remember ? " (remembered on this device)" : " (ephemeral)");
     $("me-fp").textContent = me.fp;
     show("btn-forget", me.remember);
     renderContacts();
   }
   function readUsername() {
     const u = $("username").value.trim().toLowerCase();
-    if (!C.USERNAME_RE.test(u)) { setStatus($("setup-status"), "Kullanıcı adı 2-32 karakter olmalı: a-z, 0-9, _", "bad"); return null; }
+    if (!C.USERNAME_RE.test(u)) { setStatus($("setup-status"), "Username must be 2-32 chars: a-z, 0-9, _", "bad"); return null; }
     return u;
   }
   $("btn-new-id").onclick = async () => {
     const u = readUsername(); if (!u) return;
     $("btn-new-id").disabled = true;
-    setStatus($("setup-status"), "RSA-4096 anahtar üretiliyor (telefonda birkaç saniye sürebilir)…", "info");
+    setStatus($("setup-status"), "Generating RSA-4096 keys (may take a few seconds on mobile)…", "info");
     try { await startWith(await C.generateIdentity(), u); }
-    catch (e) { setStatus($("setup-status"), "Anahtar üretilemedi: " + e.message, "bad"); $("btn-new-id").disabled = false; }
+    catch (e) { setStatus($("setup-status"), "Key generation failed: " + e.message, "bad"); $("btn-new-id").disabled = false; }
   };
   $("btn-load-key").onclick = () => $("key-file").click();
   $("key-file").onchange = async () => {
     const f = $("key-file").files[0]; $("key-file").value = "";
     const u = readUsername(); if (!f || !u) return;
     try { await startWith(await C.importPrivatePkcs8(C.pemToDer(await f.text(), "PRIVATE KEY")), u); }
-    catch (e) { setStatus($("setup-status"), "Anahtar okunamadı (PKCS8 PEM bekleniyor; şifreli yedekler desteklenmez): " + e.message, "bad"); }
+    catch (e) { setStatus($("setup-status"), "Could not read key (PKCS8 PEM expected; encrypted backups not supported): " + e.message, "bad"); }
   };
-  $("btn-forget").onclick = () => { if (confirm("Bu cihazdaki kimlik ve rehber silinsin mi?")) forget(); };
+  $("btn-forget").onclick = () => { if (confirm("Erase saved identity and contacts from this device?")) forget(); };
   $("btn-copy-card").onclick = () => copyText(JSON.stringify(
-    { username: me.username, public_key: C.derToPem(me.pubDer), fingerprint: me.fp }, null, 2), "Kişi kartınız kopyalandı.");
+    { username: me.username, public_key: C.derToPem(me.pubDer), fingerprint: me.fp }, null, 2), "Contact card copied.");
 
-  // ── rehber ──
+  // ── contacts ──
   function renderContacts() {
     const box = $("contact-list"); box.textContent = "";
-    if (!contacts.size) { box.textContent = "Rehber boş. İlk bağlantıda parmak izini karşılaştırıp ekleyebilir ya da kişi kartı içe aktarabilirsiniz."; return; }
+    if (!contacts.size) { box.textContent = "Contacts list is empty. Compare fingerprints on first connection or import a contact card."; return; }
     for (const [u, c] of contacts) {
       const d = document.createElement("div"); d.style.marginBottom = "6px";
       const b = document.createElement("strong"); b.textContent = u;
@@ -3017,7 +3017,7 @@ var qrcode = function() {
   async function addContact(username, pubDer) {
     const fp = await C.fingerprint(pubDer);
     const old = contacts.get(username);
-    if (old && old.fp !== fp) throw new Error(`'${username}' rehberde FARKLI bir anahtarla kayıtlı — kart sahte olabilir.`);
+    if (old && old.fp !== fp) throw new Error(`'${username}' is saved with a DIFFERENT key — card may be forged.`);
     contacts.set(username, { fp, pubDer }); await persist(); renderContacts();
   }
   $("btn-import-card").onclick = () => show("import-box", $("import-box").classList.contains("hidden"));
@@ -3025,24 +3025,24 @@ var qrcode = function() {
     try {
       const card = JSON.parse($("import-text").value);
       const u = String(card.username || "").toLowerCase();
-      if (!C.USERNAME_RE.test(u)) throw new Error("Karttaki kullanıcı adı geçersiz.");
-      if (u === me.username) throw new Error("Kendi kartınızı ekleyemezsiniz.");
+      if (!C.USERNAME_RE.test(u)) throw new Error("Invalid username in card.");
+      if (u === me.username) throw new Error("You cannot add your own card.");
       const der = C.pemToDer(String(card.public_key || ""), "PUBLIC KEY");
       await C.importPublic(der);
       const fp = await C.fingerprint(der);
       if (card.fingerprint && String(card.fingerprint).trim().toUpperCase() !== fp)
-        throw new Error("Karttaki parmak izi anahtarla uyuşmuyor — kart değiştirilmiş olabilir.");
+        throw new Error("Fingerprint in card does not match key — card may be tampered.");
       await addContact(u, der);
-      setStatus($("import-status"), `'${u}' eklendi.`, "ok"); $("import-text").value = "";
+      setStatus($("import-status"), `Added '${u}'.`, "ok"); $("import-text").value = "";
     } catch (e) { setStatus($("import-status"), e.message, "bad"); }
   };
   const lookup = (u) => (contacts.get(u) || {}).fp || null;
 
-  // ── pano, paylaşım, QR ──
+  // ── clipboard, share, QR ──
   async function copyText(text, note) {
-    if (NATIVE) { NATIVE.copy(text); return toast(note || "Kopyalandı."); }
-    try { await navigator.clipboard.writeText(text); toast(note || "Kopyalandı."); }
-    catch (e) { toast("Panoya yazılamadı; metni seçip elle kopyalayın."); }
+    if (NATIVE) { NATIVE.copy(text); return toast(note || "Copied."); }
+    try { await navigator.clipboard.writeText(text); toast(note || "Copied."); }
+    catch (e) { toast("Could not write to clipboard; select text and copy manually."); }
   }
   function toast(text) { setStatus($("start-status"), text, "info"); setStatus($("answer-status"), text, "info"); }
   document.addEventListener("click", async (ev) => {
@@ -3052,11 +3052,11 @@ var qrcode = function() {
       const text = $(t.dataset.share).value;
       if (NATIVE) NATIVE.share(text);
       else if (navigator.share) { try { await navigator.share({ text }); } catch (e) {} }
-      else copyText(text, "Paylaşım desteklenmiyor; kod panoya kopyalandı.");
+      else copyText(text, "Sharing not supported; code copied to clipboard.");
     }
     if (t.dataset.paste) {
       try { $(t.dataset.paste).value = (NATIVE ? NATIVE.paste() : await navigator.clipboard.readText()).trim(); }
-      catch (e) { toast("Panoya erişilemedi; kodu alana uzun basıp yapıştırın."); }
+      catch (e) { toast("Could not read clipboard; long-press the field and paste manually."); }
     }
     if (t.dataset.scan) scanInto($(t.dataset.scan));
   });
@@ -3065,19 +3065,19 @@ var qrcode = function() {
     try {
       const qr = qrcode(0, "L"); qr.addData(code, "Byte"); qr.make();
       const img = document.createElement("img");
-      img.src = qr.createDataURL(4, 4); img.alt = "Bağlantı kodu QR";
-      img.title = "Büyütmek için dokunun";
+      img.src = qr.createDataURL(4, 4); img.alt = "Connection code QR";
+      img.title = "Tap to enlarge";
       img.onclick = () => {
         const full = document.createElement("div"); full.className = "qr-full";
         const big = img.cloneNode(); full.append(big); full.onclick = () => full.remove();
         document.body.append(full);
       };
       const note = document.createElement("div"); note.className = "sub";
-      note.textContent = "QR (okumazsa kodu kopyalayıp gönderin). Büyütmek için dokunun.";
+      note.textContent = "QR (if scan fails, copy & send code). Tap to enlarge.";
       box.append(note, img);
     } catch (e) {
       const note = document.createElement("div"); note.className = "sub";
-      note.textContent = "Kod QR'a sığmayacak kadar uzun — kopyala/paylaş kullanın.";
+      note.textContent = "Code is too long for QR — use Copy/Share instead.";
       box.append(note);
     }
   }
@@ -3089,7 +3089,7 @@ var qrcode = function() {
     if (NATIVE) {
       const text = await new Promise((res) => { window.__hp2pScanResult = res; NATIVE.scanQr(); });
       window.__hp2pScanResult = null;
-      if (text) target.value = text.trim(); else toast("QR okunmadı.");
+      if (text) target.value = text.trim(); else toast("QR not scanned.");
       return;
     }
     const video = $("scan-video"); let stream;
@@ -3102,17 +3102,17 @@ var qrcode = function() {
         if (codes.length) { target.value = codes[0].rawValue.trim(); break; }
         await new Promise((r) => setTimeout(r, 200));
       }
-    } catch (e) { toast("QR okunamadı: " + e.message); }
+    } catch (e) { toast("QR scan failed: " + e.message); }
     finally { if (stream) stream.getTracks().forEach((t) => t.stop()); show("scan-video", false); }
   }
 
-  // ── bağlantı yardımcısı (STUN/TURN) seçimi ──
+  // ── connection helper (STUN/TURN) ──
   const ICE_HINTS = {
-    "google+cloudflare": "Google ve Cloudflare STUN sunucuları yalnızca IP adresinizi görür; içerik doğrudan akar.",
-    "cloudflare": "Yalnızca Cloudflare'in STUN sunucusu IP adresinizi görür.",
-    "google": "Yalnızca Google'ın STUN sunucuları IP adresinizi görür.",
-    "custom": "Satır başına bir sunucu:  stun:sunucu:3478  ya da  turn:sunucu:3478 kullanıcı şifre",
-    "lan": "Hiçbir dış sunucuya istek gitmez; yalnızca aynı ağdaki (ya da açık IP'li) cihazlarla bağlanır.",
+    "google+cloudflare": "Google & Cloudflare STUN servers only see your IP address; media flows directly peer-to-peer.",
+    "cloudflare": "Only Cloudflare's STUN server sees your IP address.",
+    "google": "Only Google's STUN servers see your IP address.",
+    "custom": "One server per line:  stun:server:3478  or  turn:server:3478 username password",
+    "lan": "No requests to external servers; connects only to devices on the same network (or reachable IP).",
   };
   for (const [k, v] of Object.entries(C.ICE_PRESETS)) {
     const o = document.createElement("option"); o.value = k; o.textContent = v; $("ice-preset").append(o);
@@ -3124,8 +3124,8 @@ var qrcode = function() {
     show("ice-custom", ice.preset === "custom");
     let hint = ICE_HINTS[ice.preset], cls = "sub";
     if (ice.preset === "custom") {
-      try { hint += `\n✓ ${C.iceServersFor("custom", ice.custom).length} sunucu`; }
-      catch (e) { hint = "Hata: " + e.message; cls = "sub bad"; }
+      try { hint += `\n✓ ${C.iceServersFor("custom", ice.custom).length} server(s)`; }
+      catch (e) { hint = "Error: " + e.message; cls = "sub bad"; }
     }
     $("ice-hint").textContent = hint; $("ice-hint").className = cls; $("ice-hint").style.whiteSpace = "pre-wrap";
   }
@@ -3158,22 +3158,22 @@ var qrcode = function() {
   }
   function identText(id) {
     switch (id.status) {
-      case C.S.VERIFIED: return [`✓ ${id.username} — kimlik doğrulandı (rehberdeki anahtarla eşleşiyor)`, "ok"];
-      case C.S.NEW: return [`? ${id.username} — rehberinizde yok. Parmak izini karşı tarafla başka bir kanaldan karşılaştırın:\n${id.fingerprint}`, "info"];
-      case C.S.LEGACY: return ["⛔ Eski biçim kod: gönderenin kimliği doğrulanamadığı için bu sayfa kabul etmiyor. Karşı taraf uygulamasını güncellemeli.", "bad"];
-      default: return [`⛔ ${id.username ? "'" + id.username + "' " : ""}bağlantı engellendi: ${id.detail}`, "bad"];
+      case C.S.VERIFIED: return [`✓ ${id.username} — identity verified (matches saved key)`, "ok"];
+      case C.S.NEW: return [`? ${id.username} — not in your contacts. Verify fingerprint out-of-band:\n${id.fingerprint}`, "info"];
+      case C.S.LEGACY: return ["⛔ Legacy code format: sender identity cannot be verified; rejected by this page.", "bad"];
+      default: return [`⛔ ${id.username ? "'" + id.username + "' " : ""}connection blocked: ${id.detail}`, "bad"];
     }
   }
 
-  // ── yerel medya (mikrofon/kamera) ──
+  // ── local media (mic/camera) ──
   function mediaError(e, mode) {
-    const what = mode === "video" ? "Kamera ve mikrofon" : "Mikrofon";
+    const what = mode === "video" ? "Camera & microphone" : "Microphone";
     switch (e && e.name) {
       case "NotAllowedError": case "SecurityError":
-        return `${what} izni verilmedi. Adres çubuğundaki izin simgesinden izin verip tekrar deneyin.`;
-      case "NotFoundError": case "OverconstrainedError": return `Bu cihazda ${what.toLowerCase()} bulunamadı.`;
-      case "NotReadableError": return `${what} başka bir uygulama tarafından kullanılıyor.`;
-      default: return `${what} açılamadı: ${e && e.message || e}`;
+        return `${what} permission denied. Allow access via the address bar icon and retry.`;
+      case "NotFoundError": case "OverconstrainedError": return `${what} not found on this device.`;
+      case "NotReadableError": return `${what} is in use by another application.`;
+      default: return `Could not open ${what.toLowerCase()}: ${e && e.message || e}`;
     }
   }
   function videoConstraints(facing) {
@@ -3181,7 +3181,7 @@ var qrcode = function() {
   }
   async function startLocalMedia(mode) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
-      throw new Error("Bu tarayıcı mikrofon/kameraya erişemiyor (sayfa https ya da localhost üzerinden açılmalı).");
+      throw new Error("This browser cannot access mic/camera (open over HTTPS or localhost).");
     stopLocalMedia();
     try {
       call.stream = await navigator.mediaDevices.getUserMedia({
@@ -3211,10 +3211,10 @@ var qrcode = function() {
     pc.onconnectionstatechange = () => {
       const st = pc.connectionState;
       if (st === "connected") { setStatus($("call-status"), "", ""); openCall(identGetter()); }
-      else if (st === "failed" || st === "closed") endCall(st === "failed" ? "bağlantı kurulamadı/koptu" : "kapandı");
+      else if (st === "failed" || st === "closed") endCall(st === "failed" ? "connection failed/dropped" : "closed");
       else if (st === "disconnected") {
-        setStatus($("call-status"), "Bağlantı koptu, bekleniyor…", "");
-        setTimeout(() => { if (pc === session.pc && pc.connectionState === "disconnected") endCall("bağlantı koptu"); }, 8000);
+        setStatus($("call-status"), "Connection interrupted, waiting…", "");
+        setTimeout(() => { if (pc === session.pc && pc.connectionState === "disconnected") endCall("disconnected"); }, 8000);
       }
     };
   }
@@ -3224,10 +3224,10 @@ var qrcode = function() {
     $("btn-offer").disabled = true; $("mode").disabled = true;
     try {
       if (mode !== "chat") {
-        setStatus($("start-status"), `${MODE_LABELS[mode]}: ${mode === "video" ? "kamera ve mikrofon" : "mikrofon"} izni isteniyor…`, "info");
+        setStatus($("start-status"), `${MODE_LABELS[mode]}: requesting ${mode === "video" ? "camera and microphone" : "microphone"} access…`, "info");
         await startLocalMedia(mode);                         // izin teklif üretilmeden önce istenir
       }
-      setStatus($("start-status"), "Ağ adresleri toplanıyor (2-6 sn)…", "info");
+      setStatus($("start-status"), "Gathering network addresses (2-6s)…", "info");
       const pc = newPc();
       session.mode = mode;
       if (mode === "chat") {
@@ -3240,9 +3240,9 @@ var qrcode = function() {
       const code = await C.makeEnvelope({ type: "offer", mode, sdp: session.offerSdp,
                                           username: me.username, priv: me.priv, pubDer: me.pubDer });
       $("offer-code").value = code; show("offer-box"); renderQr("offer-qr", code);
-      setStatus($("start-status"), `${MODE_LABELS[mode]} teklifi hazır. Karşı tarafa gönderin ve cevabını yapıştırın.`, "info");
+      setStatus($("start-status"), `${MODE_LABELS[mode]} offer ready. Send to your peer and paste their answer.`, "info");
     } catch (e) {
-      setStatus($("start-status"), "Hata: " + e.message, "bad");
+      setStatus($("start-status"), "Error: " + e.message, "bad");
       $("btn-offer").disabled = false; $("mode").disabled = false; stopLocalMedia();
     }
   };
@@ -3251,14 +3251,14 @@ var qrcode = function() {
     try {
       const env = await C.parseCode($("answer-in").value);
       let id = await C.identifyPeer(env, lookup, "answer", session.offerSdp);
-      if (id.status === C.S.LEGACY) id = { status: C.S.INVALID, detail: "eski biçim kod: kimlik doğrulanamıyor" };
-      else if (env.mode !== session.mode) id = { status: C.S.INVALID, username: id.username, detail: "cevap başka bir bağlantı türüne ait" };
+      if (id.status === C.S.LEGACY) id = { status: C.S.INVALID, detail: "legacy code: cannot verify identity" };
+      else if (env.mode !== session.mode) id = { status: C.S.INVALID, username: id.username, detail: "answer belongs to a different connection mode" };
       const [text, cls] = identText(id); setStatus($("start-status"), text, cls);
       if (C.isBlocked(id)) return;
       session.ident = id;
       await session.pc.setRemoteDescription({ type: "answer", sdp: env.sdp });
-      setStatus($("start-status"), text + "\nBağlanıyor…", cls);
-    } catch (e) { setStatus($("start-status"), "Cevap kodu okunamadı: " + e.message, "bad"); }
+      setStatus($("start-status"), text + "\nConnecting…", cls);
+    } catch (e) { setStatus($("start-status"), "Could not read answer code: " + e.message, "bad"); }
   };
 
   $("btn-answer").onclick = async () => {
@@ -3270,10 +3270,10 @@ var qrcode = function() {
       const mode = env.mode;
       $("btn-answer").disabled = true;
       if (mode !== "chat") {
-        setStatus($("answer-status"), `${MODE_LABELS[mode]}: ${mode === "video" ? "kamera ve mikrofon" : "mikrofon"} izni isteniyor…`, "info");
+        setStatus($("answer-status"), `${MODE_LABELS[mode]}: requesting ${mode === "video" ? "camera and microphone" : "microphone"} access…`, "info");
         await startLocalMedia(mode);
       }
-      setStatus($("answer-status"), `${MODE_LABELS[mode]} için cevap hazırlanıyor (2-6 sn)…`, "info");
+      setStatus($("answer-status"), `Preparing answer for ${MODE_LABELS[mode]} (2-6s)…`, "info");
       const pc = newPc();
       session.ident = id; session.mode = mode;
       if (mode === "chat")
@@ -3286,10 +3286,10 @@ var qrcode = function() {
                                           username: me.username, priv: me.priv, pubDer: me.pubDer, offerSdp: env.sdp });
       $("answer-code").value = code; show("answer-box"); renderQr("answer-qr", code);
       setStatus($("answer-status"), "", "");
-    } catch (e) { setStatus($("answer-status"), "Hata: " + e.message, "bad"); $("btn-answer").disabled = false; stopLocalMedia(); }
+    } catch (e) { setStatus($("answer-status"), "Error: " + e.message, "bad"); $("btn-answer").disabled = false; stopLocalMedia(); }
   };
 
-  // ── arama ekranı ──
+  // ── call screen ──
   function hidePageForSession() {
     show("connect", false); show("contacts", false); show("identity", false);
     // Sayfa başlığını gizle: telefonda kiminle konuşulduğu ve doğrulama rozeti hep görünür kalsın
@@ -3300,7 +3300,7 @@ var qrcode = function() {
     if (call.open) return;
     call.open = true; call.ended = false;
     hidePageForSession(); show("call"); show("call-end", false); show("call-controls");
-    const who = id.username || "karşı taraf";
+    const who = id.username || "peer";
     $("call-peer").textContent = `${MODE_LABELS[session.mode]}: ${who}`;
     renderBadge(id, $("call-badge"));
     const isVideo = session.mode === "video";
@@ -3335,26 +3335,26 @@ var qrcode = function() {
     clearInterval(call.timer); call.timer = null;
     if (call.wakeLock) { call.wakeLock.release().catch(() => {}); call.wakeLock = null; }
     if (NATIVE) NATIVE.keepScreenOn(false);
-    const dur = call.started ? " · süre " + fmtDuration(Date.now() - call.started) : "";
+    const dur = call.started ? " · duration " + fmtDuration(Date.now() - call.started) : "";
     if (!call.open) {                                       // bağlanmadan bitti: kod ekranında bildir
       const target = $("offer-box").classList.contains("hidden") ? $("answer-status") : $("start-status");
-      setStatus(target, `Arama kurulamadı (${reason}). Yeni bağlantı için aşağıdaki düğmeyi kullanın.`, "bad");
+      setStatus(target, `Call could not be established (${reason}). Use the button below for a new connection.`, "bad");
       return;
     }
     $("remote-video").srcObject = null; $("local-video").srcObject = null; show("local-video", false);
-    setStatus($("call-status"), `Görüşme bitti (${reason})${dur}`, "");
+    setStatus($("call-status"), `Call ended (${reason})${dur}`, "");
     show("call-controls", false); show("call-end");
   }
   let micOn = true, camOn = true;
   $("btn-mic").onclick = () => {
     micOn = !micOn;
     call.stream && call.stream.getAudioTracks().forEach((t) => t.enabled = micOn);
-    $("btn-mic").classList.toggle("off", !micOn); $("btn-mic").title = micOn ? "Mikrofonu kapat" : "Mikrofonu aç";
+    $("btn-mic").classList.toggle("off", !micOn); $("btn-mic").title = micOn ? "Mute microphone" : "Unmute microphone";
   };
   $("btn-cam").onclick = () => {
     camOn = !camOn;
     call.stream && call.stream.getVideoTracks().forEach((t) => t.enabled = camOn);
-    $("btn-cam").classList.toggle("off", !camOn); $("btn-cam").title = camOn ? "Kamerayı kapat" : "Kamerayı aç";
+    $("btn-cam").classList.toggle("off", !camOn); $("btn-cam").title = camOn ? "Turn camera off" : "Turn camera on";
   };
   $("btn-flip").onclick = async () => {
     const sender = session.pc && session.pc.getSenders().find((x) => x.track && x.track.kind === "video");
@@ -3366,7 +3366,7 @@ var qrcode = function() {
     let track;
     try { track = (await navigator.mediaDevices.getUserMedia({ video: videoConstraints({ exact: next }) })).getVideoTracks()[0]; call.facing = next; }
     catch (e) {
-      setStatus($("call-quality"), "Diğer kamera açılamadı.", "");
+      setStatus($("call-quality"), "Could not switch camera.", "");
       track = (await navigator.mediaDevices.getUserMedia({ video: videoConstraints(prev) })).getVideoTracks()[0];
     }
     track.enabled = camOn;
@@ -3375,7 +3375,7 @@ var qrcode = function() {
     $("local-video").classList.toggle("mirror", call.facing === "user");
   };
   $("btn-unmute").onclick = playRemote;
-  $("btn-hang").onclick = () => endCall("siz kapattınız");
+  $("btn-hang").onclick = () => endCall("you hung up");
 
   // ── yeni bağlantı: sayfayı yenilemeden (geçici kimlik kaybolmasın) başa dön ──
   function backToConnect() {
@@ -3416,12 +3416,12 @@ var qrcode = function() {
     ch.binaryType = "arraybuffer";
     ch.bufferedAmountLowThreshold = 256 * 1024;
     ch.onopen = () => openChat(identGetter());
-    ch.onclose = () => closedChat("kanal kapandı");
+    ch.onclose = () => closedChat("channel closed");
     ch.onmessage = (ev) => onFrame(ev.data);
   }
   function openChat(id) {
     hidePageForSession(); show("chat");
-    $("peer-name").textContent = `Doğrudan bağlantı: ${id.username || "karşı taraf"}`;
+    $("peer-name").textContent = `Direct connection: ${id.username || "peer"}`;
     renderBadge(id, $("peer-badge"));
     session.pc.onconnectionstatechange = () => {
       if (["failed", "closed", "disconnected"].includes(session.pc.connectionState)) closedChat(session.pc.connectionState);
@@ -3431,24 +3431,24 @@ var qrcode = function() {
   }
   function renderBadge(id, b) {
     b.textContent = "";
-    if (id.status === C.S.VERIFIED) { b.className = "badge ok"; b.textContent = "✓ Kimlik doğrulandı"; return; }
+    if (id.status === C.S.VERIFIED) { b.className = "badge ok"; b.textContent = "✓ Identity verified"; return; }
     b.className = "badge info";
-    b.append(`? Yeni kişi — parmak izini karşılaştırın: ${id.fingerprint}`);
+    b.append(`? New contact — compare fingerprint: ${id.fingerprint}`);
     if (id.status === C.S.NEW) {
-      const btn = document.createElement("button"); btn.textContent = "Rehbere ekle"; btn.style.marginLeft = "8px";
+      const btn = document.createElement("button"); btn.textContent = "Add to contacts"; btn.style.marginLeft = "8px";
       btn.onclick = async () => { try { await addContact(id.username, id.pubDer); id.status = C.S.VERIFIED; renderBadge(id, b); } catch (e) { alert(e.message); } };
       b.append(btn);
     }
   }
   function closedChat(reason) {
     if ($("msg-input").disabled) return;
-    setStatus($("chat-status"), `Bağlantı kapandı (${reason}).`, "bad");
+    setStatus($("chat-status"), `Connection closed (${reason}).`, "bad");
     show("chat-again");
     ["msg-input", "btn-send", "btn-attach"].forEach((i) => $(i).disabled = true);
     for (const o of outgoing.values()) o.cancelled = true;
     incoming.clear();                                    // yarım dosyalar bellekten atılır
   }
-  $("btn-close").onclick = () => { try { session.pc.close(); } catch (e) {} closedChat("siz kapattınız"); };
+  $("btn-close").onclick = () => { try { session.pc.close(); } catch (e) {} closedChat("closed by you"); };
 
   function addMsg(text, mine, ts, id) {
     const d = document.createElement("div"); d.className = "msg" + (mine ? " me" : "");
@@ -3467,7 +3467,7 @@ var qrcode = function() {
   $("btn-send").onclick = send;
   $("msg-input").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } };
 
-  // ── dosya kartı ──
+  // ── file card ──
   function fileCard(fid, name, size, mine) {
     const d = document.createElement("div"); d.className = "msg file" + (mine ? " me" : "");
     const title = document.createElement("div"); title.textContent = `📄 ${name}`; title.style.fontWeight = "600";
@@ -3476,59 +3476,59 @@ var qrcode = function() {
     const state = document.createElement("div"); state.style.fontSize = "12px";
     const actions = document.createElement("div"); actions.className = "row";
     d.append(title, sub, bar, state, actions); $("messages").append(d); $("messages").scrollTop = 1e9;
-    return { bar, state, actions, progress(v) { bar.classList.remove("hidden"); bar.value = v; state.textContent = `%${Math.floor(v * 100)}`; },
+    return { bar, state, actions, progress(v) { bar.classList.remove("hidden"); bar.value = v; state.textContent = `${Math.floor(v * 100)}%`; },
              done(text, cls, btns = []) { bar.classList.add("hidden"); state.textContent = text; state.className = cls || ""; actions.replaceChildren(...btns); } };
   }
   function button(label, onclick, cls) { const b = document.createElement("button"); b.textContent = label; b.onclick = onclick; if (cls) b.className = cls; return b; }
   function cancelBtn(fid) {
-    return button("İptal", () => {
+    return button("Cancel", () => {
       if (outgoing.has(fid)) outgoing.get(fid).cancelled = true;
       const inc = incoming.get(fid); incoming.delete(fid);
       session.channel.send(JSON.stringify({ t: "file_cancel", fid }));
-      (outgoing.get(fid) || inc || {}).card?.done("İptal edildi.", "bad");
+      (outgoing.get(fid) || inc || {}).card?.done("Cancelled.", "bad");
     }, "danger");
   }
 
-  // gönderme
+  // send
   $("btn-attach").onclick = () => $("file-input").click();
   $("file-input").onchange = async () => {
     const file = $("file-input").files[0]; $("file-input").value = "";
     if (!file) return;
-    if (!file.size) return alert("Boş dosya gönderilemez.");
-    if (file.size > C.MAX_WEB_FILE_BYTES) return alert(`Tarayıcıdan en fazla ${C.fmtSize(C.MAX_WEB_FILE_BYTES)} gönderilebilir.`);
+    if (!file.size) return alert("Cannot send an empty file.");
+    if (file.size > C.MAX_WEB_FILE_BYTES) return alert(`Browser limit is ${C.fmtSize(C.MAX_WEB_FILE_BYTES)} max.`);
     const sha256 = await C.sha256hex(await file.arrayBuffer());
     const offer = { t: "file_offer", fid: C.randHex(16), name: C.safeFilename(file.name), size: file.size, sha256 };
     const card = fileCard(offer.fid, offer.name, offer.size, true);
-    card.done("Karşı tarafın onayı bekleniyor…", "", [cancelBtn(offer.fid)]);
+    card.done("Waiting for peer's approval…", "", [cancelBtn(offer.fid)]);
     outgoing.set(offer.fid, { file, offer, cancelled: false, card });
     session.channel.send(JSON.stringify(offer));
   };
   async function upload(fid) {
     const o = outgoing.get(fid); const ch = session.channel;
-    o.card.done("Gönderiliyor…", "", [cancelBtn(fid)]);
+    o.card.done("Sending…", "", [cancelBtn(fid)]);
     const buf = new Uint8Array(await o.file.arrayBuffer());
     for (let off = 0; off < buf.length; off += C.CHUNK_SIZE) {
-      if (o.cancelled || ch.readyState !== "open") return o.card.done("Gönderim durdu.", "bad");
+      if (o.cancelled || ch.readyState !== "open") return o.card.done("Transfer stopped.", "bad");
       if (ch.bufferedAmount > 1024 * 1024)                     // tampon doluysa bekle
         await new Promise((r) => { ch.onbufferedamountlow = () => { ch.onbufferedamountlow = null; r(); }; });
       ch.send(C.chunkFrame(fid, buf.subarray(off, off + C.CHUNK_SIZE)));
       o.card.progress(Math.min(1, (off + C.CHUNK_SIZE) / buf.length));
     }
     ch.send(JSON.stringify({ t: "file_end", fid }));
-    o.card.done("✓ Gönderildi (karşı taraf doğruluyor)", "");
+    o.card.done("✓ Sent (peer is verifying)", "");
   }
 
-  // alma
+  // receive
   function onFrame(raw) {
     if (raw instanceof ArrayBuffer) {
       try {
         const { fid, data } = C.splitChunk(raw);
         const inc = incoming.get(fid);
         if (!inc || !inc.accepted) return;                   // onaysız parça yok sayılır
-        if (inc.received + data.length > inc.offer.size) { incoming.delete(fid); return inc.card.done("⛔ Bildirilen boyut aşıldı — atıldı.", "bad"); }
+        if (inc.received + data.length > inc.offer.size) { incoming.delete(fid); return inc.card.done("⛔ Declared size exceeded — discarded.", "bad"); }
         inc.parts.push(data.slice()); inc.received += data.length;
         inc.card.progress(inc.received / inc.offer.size);
-      } catch (e) { console.warn("parça reddedildi:", e.message); }
+      } catch (e) { console.warn("chunk rejected:", e.message); }
       return;
     }
     const f = C.parseFrame(raw); if (!f) return;
@@ -3536,10 +3536,10 @@ var qrcode = function() {
     else if (f.t === "ack" && pending.has(f.id)) { const m = pending.get(f.id); pending.delete(f.id); m.textContent = m.textContent.replace(/✓$/, "✓✓"); }
     else if (f.t === "file_offer") onFileOffer(f);
     else if (f.t === "file_accept" && outgoing.has(f.fid)) upload(f.fid);
-    else if (f.t === "file_reject" && outgoing.has(f.fid)) { outgoing.get(f.fid).card.done("Karşı taraf reddetti.", "bad"); outgoing.delete(f.fid); }
+    else if (f.t === "file_reject" && outgoing.has(f.fid)) { outgoing.get(f.fid).card.done("Peer rejected.", "bad"); outgoing.delete(f.fid); }
     else if (f.t === "file_cancel") {
-      if (outgoing.has(f.fid)) { outgoing.get(f.fid).cancelled = true; outgoing.get(f.fid).card.done("Karşı taraf iptal etti.", "bad"); }
-      if (incoming.has(f.fid)) { incoming.get(f.fid).card.done("Karşı taraf iptal etti.", "bad"); incoming.delete(f.fid); }
+      if (outgoing.has(f.fid)) { outgoing.get(f.fid).cancelled = true; outgoing.get(f.fid).card.done("Peer cancelled.", "bad"); }
+      if (incoming.has(f.fid)) { incoming.get(f.fid).card.done("Peer cancelled.", "bad"); incoming.delete(f.fid); }
     } else if (f.t === "file_end" && incoming.has(f.fid)) finishIncoming(f.fid);
   }
   function onFileOffer(f) {
@@ -3547,37 +3547,37 @@ var qrcode = function() {
     const card = fileCard(f.fid, name, f.size, false);
     if (incoming.size >= 3 || !(f.size > 0 && f.size <= C.MAX_WEB_FILE_BYTES)) {
       session.channel.send(JSON.stringify({ t: "file_reject", fid: f.fid }));
-      return card.done(f.size > C.MAX_WEB_FILE_BYTES ? `Tarayıcı için çok büyük (sınır ${C.fmtSize(C.MAX_WEB_FILE_BYTES)}) — reddedildi.` : "Reddedildi.", "bad");
+      return card.done(f.size > C.MAX_WEB_FILE_BYTES ? `Too large for browser (limit ${C.fmtSize(C.MAX_WEB_FILE_BYTES)}) — rejected.` : "Rejected.", "bad");
     }
     incoming.set(f.fid, { offer: f, parts: [], received: 0, accepted: false, card });
-    card.done("Karşı taraf bu dosyayı göndermek istiyor.", "", [
-      button("Kabul et", () => {
+    card.done("Peer wants to send this file.", "", [
+      button("Accept", () => {
         const inc = incoming.get(f.fid); if (!inc) return;
         inc.accepted = true; session.channel.send(JSON.stringify({ t: "file_accept", fid: f.fid }));
-        card.done("Alınıyor…", "", [cancelBtn(f.fid)]);
+        card.done("Receiving…", "", [cancelBtn(f.fid)]);
       }, "primary"),
-      button("Reddet", () => { incoming.delete(f.fid); session.channel.send(JSON.stringify({ t: "file_reject", fid: f.fid })); card.done("Reddettiniz.", ""); }, "danger"),
+      button("Reject", () => { incoming.delete(f.fid); session.channel.send(JSON.stringify({ t: "file_reject", fid: f.fid })); card.done("Rejected.", ""); }, "danger"),
     ]);
   }
   async function finishIncoming(fid) {
     const inc = incoming.get(fid); incoming.delete(fid);
-    if (!inc.accepted || inc.received !== inc.offer.size) return inc.card.done(`⛔ Eksik dosya (${inc.received}/${inc.offer.size} bayt) — atıldı.`, "bad");
+    if (!inc.accepted || inc.received !== inc.offer.size) return inc.card.done(`⛔ Incomplete file (${inc.received}/${inc.offer.size} bytes) — discarded.`, "bad");
     const blob = new Blob(inc.parts); inc.parts = [];
     if (await C.sha256hex(await blob.arrayBuffer()) !== inc.offer.sha256)
-      return inc.card.done("⛔ SHA-256 tutmuyor — dosya bozuk ya da değiştirilmiş; atıldı.", "bad");
+      return inc.card.done("⛔ SHA-256 mismatch — file corrupted or tampered; discarded.", "bad");
     const name = C.safeFilename(inc.offer.name);
     if (NATIVE) {                    // WebView "blob:" indiremez: uygulama İndirilenler'e yazar
-      const btn = button("💾 Kaydet", async () => {
+      const btn = button("💾 Save", async () => {
         btn.disabled = true;
         const where = await nativeSave(blob, name);
-        if (where) inc.card.done(`✓ Kaydedildi: ${where}/${name}`, "ok");
-        else { inc.card.done("Kaydedilemedi.", "bad", [btn]); btn.disabled = false; }
+        if (where) inc.card.done(`✓ Saved: ${where}/${name}`, "ok");
+        else { inc.card.done("Failed to save.", "bad", [btn]); btn.disabled = false; }
       }, "primary");
-      return inc.card.done("✓ Alındı ve doğrulandı.", "ok", [btn]);
+      return inc.card.done("✓ Received and verified.", "ok", [btn]);
     }
     const a = document.createElement("a"); a.className = "btn"; a.href = URL.createObjectURL(blob);
-    a.download = name; a.textContent = "💾 Kaydet";
-    inc.card.done("✓ Alındı ve doğrulandı.", "ok", [a]);
+    a.download = name; a.textContent = "💾 Save";
+    inc.card.done("✓ Received and verified.", "ok", [a]);
   }
   async function nativeSave(blob, name) {
     const id = NATIVE.saveBegin(name);

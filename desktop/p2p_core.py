@@ -287,11 +287,11 @@ def parse_frame(raw) -> dict | None:
 
 ICE_DEFAULT = "google+cloudflare"
 ICE_PRESETS = {
-    "google+cloudflare": "Google + Cloudflare (varsayılan)",
-    "cloudflare": "Yalnızca Cloudflare",
-    "google": "Yalnızca Google",
-    "custom": "Özel sunucu (kendi STUN/TURN'ünüz)",
-    "lan": "Yalnızca yerel ağ (dış sunucu yok)",
+    "google+cloudflare": "Google + Cloudflare (default)",
+    "cloudflare": "Cloudflare only",
+    "google": "Google only",
+    "custom": "Custom server (your own STUN/TURN)",
+    "lan": "Local network only (no external server)",
 }
 _PUBLIC_STUN = {
     "google": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"],

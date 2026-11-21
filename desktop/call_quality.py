@@ -32,9 +32,9 @@ DESKTOP_LEVELS = [(640, 480, 15), (480, 360, 12), (320, 240, 10), (160, 120, 8)]
 
 LABELS = [
     "",
-    "Bağlantı zayıf — görüntü kalitesi düşürüldü",
-    "Bağlantı zayıf — görüntü düşük kalitede",
-    "Bağlantı çok zayıf — görüntü en düşük kalitede, ses öncelikli",
+    "Weak connection — video quality lowered",
+    "Weak connection — video at low quality",
+    "Very weak connection — video at lowest quality, audio prioritized",
 ]
 
 

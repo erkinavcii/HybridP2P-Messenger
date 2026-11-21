@@ -8,6 +8,7 @@ Hedefler:
              ve icon-maskable-512.png (tam kapli, koseler yok)
     ico      assets/brand/app.ico (16,24,32,48,64,128,256)
     android  android/app/src/main/res/mipmap-*/ic_launcher.png (48..192 px)
+             + ic_launcher_foreground.png (108dp tuval, 108..432 px)
     all      hepsi
 Argumansiz = web (assets/brand/icon.png her calismada yazilir).
 
@@ -118,9 +119,28 @@ def target_ico(rounded, maskable):
     print("yazildi: assets/brand/app.ico", sizes)
 
 
+def build_foreground(maskable, ratio=0.56):
+    """Adaptive foreground: seffaf zemin, beyaz glif; glif genisligi tuvalin %56'si (<%66 guvenli bolge)."""
+    rgb = maskable.convert("RGB")
+    bg = rgb.getpixel((5, 5))
+    alpha = _glyph_alpha(rgb, bg)
+    glyph = alpha.crop(alpha.point(lambda v: 255 if v > 128 else 0).getbbox())
+    scale = ratio * SIZE / glyph.width
+    gw, gh = round(glyph.width * scale), round(glyph.height * scale)
+    glyph = glyph.resize((gw, gh), Image.LANCZOS)
+    out = Image.new("RGBA", (SIZE, SIZE), (255, 255, 255, 0))
+    out.paste(Image.new("RGBA", (gw, gh), (255, 255, 255, 255)),
+              ((SIZE - gw) // 2, (SIZE - gh) // 2), glyph)
+    return out
+
+
 def target_android(rounded, maskable):
-    for d, px in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)):
+    fg = build_foreground(maskable)
+    dens = (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192))
+    for d, px in dens:
         _save(rounded, f"android/app/src/main/res/mipmap-{d}/ic_launcher.png", px)
+    for d, px in dens:   # 108dp tuval = 48dp ikonun 2.25 kati
+        _save(fg, f"android/app/src/main/res/mipmap-{d}/ic_launcher_foreground.png", px * 9 // 4)
 
 
 TARGETS = {"web": target_web, "ico": target_ico, "android": target_android}

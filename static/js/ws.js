@@ -11,6 +11,7 @@ import {
     uidSigData,
     changeSigData,
     groupKeySigData,
+    fileSigData,
     signDataJS as signJS,
     encryptMessageJS
 } from './crypto.js';
@@ -133,6 +134,25 @@ export async function verifyFrom(sender, dataBytes, signatureB64) {
     } catch {
         return false;
     }
+}
+
+export async function verifyFileMessage(sender, fileUuid, originalName, fileType, viewOnce, signatureB64) {
+    if (signatureB64) {
+        const ok = await verifyFrom(sender,
+            fileSigData(sender, state.username, fileUuid, originalName, fileType, viewOnce),
+            signatureB64);
+        if (ok) {
+            if (!(await contactSignsMessages(sender))) await markContactSignsMessages(sender);
+            return true;
+        }
+        console.error(`[Signature] '${sender}' file_message signature INVALID — rejected.`);
+        return false;
+    }
+    if (await contactSignsMessages(sender)) {
+        console.error(`[Signature] '${sender}' sent unsigned file_message — rejected.`);
+        return false;
+    }
+    return true;
 }
 
 // Gelen mesajın msg_uid'sini yalnızca gönderenin imzasıyla bağlıysa kabul eder.
@@ -503,46 +523,53 @@ export function connectWebSocket() {
             }
 
             // E2E Chat File Message received
-            else if (data.type === "file_message" && !data.view_once
-                     && isVoiceFile(data.original_name, data.file_type)) {
-                const sender = data.sender;
-                if (!state.chats[sender]) {
-                    state.chats[sender] = { partner: sender, ephemeral: false, messages: [] };
-                }
-                if (state.chats[sender].messages.some(m => m.file_uuid === data.file_uuid)) return;
-                try {
-                    const msgObj = await receiveVoice(sender, data.file_uuid, data.original_name,
-                                                      data.timestamp || new Date().toISOString());
-                    state.chats[sender].messages.push(msgObj);
-                    notifyIncoming();
-                    await persistChats();
-                    window.dispatchEvent(new CustomEvent('typing-updated', { detail: { partner: sender, isTyping: false } }));
-                    if (state.recipient === sender) {
-                        window.dispatchEvent(new CustomEvent('messages-updated'));
-                        sendReadReceipt(sender, msgObj.timestamp);
-                    }
-                    window.dispatchEvent(new CustomEvent('chats-updated'));
-                } catch (err) {
-                    console.error(`[Voice] Failed to receive voice message from '${sender}':`, err);
-                    window.dispatchEvent(new CustomEvent('system-message', {
-                        detail: { partner: sender, text: `⚠️ Failed to receive voice message from '${sender}'.` }
-                    }));
-                }
-            }
-
             else if (data.type === "file_message") {
                 const sender = data.sender;
+                const fileUuid = data.file_uuid || "";
+                const origName = data.original_name || "file";
+                const fType = data.file_type || "document";
+                const vo = !!data.view_once;
+                if (!(await verifyFileMessage(sender, fileUuid, origName, fType, vo, data.signature || ""))) {
+                    warnBlockedMessage(sender);
+                    return;
+                }
+                if (!vo && isVoiceFile(origName, fType)) {
+                    if (!state.chats[sender]) {
+                        state.chats[sender] = { partner: sender, ephemeral: false, messages: [] };
+                    }
+                    if (state.chats[sender].messages.some(m => m.file_uuid === fileUuid)) return;
+                    try {
+                        const msgObj = await receiveVoice(sender, fileUuid, origName,
+                                                          data.timestamp || new Date().toISOString());
+                        state.chats[sender].messages.push(msgObj);
+                        notifyIncoming();
+                        await persistChats();
+                        window.dispatchEvent(new CustomEvent('typing-updated', { detail: { partner: sender, isTyping: false } }));
+                        if (state.recipient === sender) {
+                            window.dispatchEvent(new CustomEvent('messages-updated'));
+                            sendReadReceipt(sender, msgObj.timestamp);
+                        }
+                        window.dispatchEvent(new CustomEvent('chats-updated'));
+                    } catch (err) {
+                        console.error(`[Voice] Failed to receive voice message from '${sender}':`, err);
+                        window.dispatchEvent(new CustomEvent('system-message', {
+                            detail: { partner: sender, text: `⚠️ Failed to receive voice message from '${sender}'.` }
+                        }));
+                    }
+                    return;
+                }
+
                 const isActive = (state.recipient === sender);
 
                 const msgObj = {
                     sender: sender,
                     is_file: true,
-                    file_uuid: data.file_uuid,
-                    original_name: data.original_name,
-                    file_type: data.file_type,
-                    view_once: !!data.view_once,
+                    file_uuid: fileUuid,
+                    original_name: origName,
+                    file_type: fType,
+                    view_once: vo,
                     timestamp: data.timestamp || new Date().toISOString(),
-                    content: "[File: " + data.original_name + "]",
+                    content: "[File: " + origName + "]",
                     read: isActive
                 };
                 
@@ -551,7 +578,7 @@ export function connectWebSocket() {
                 }
                 
                 const exists = state.chats[sender].messages.some(
-                    m => m.is_file && m.file_uuid === data.file_uuid
+                    m => m.is_file && m.file_uuid === fileUuid
                 );
                 if (!exists) {
                     state.chats[sender].messages.push(msgObj);
@@ -602,9 +629,13 @@ export function connectWebSocket() {
                 console.log(`Received read receipt from ${sender} for timestamp ${timestamp}`);
                 
                 if (state.chats[sender]) {
+                    const maxMs = Date.parse(timestamp);
                     state.chats[sender].messages.forEach(m => {
-                        if (m.sender === state.username && m.timestamp === timestamp) {
-                            m.read = true;
+                        if (m.sender === state.username && !m.read) {
+                            const mMs = Date.parse(m.timestamp);
+                            if (m.timestamp === timestamp || (!Number.isNaN(maxMs) && !Number.isNaN(mMs) && mMs <= maxMs)) {
+                                m.read = true;
+                            }
                         }
                     });
                     await persistChats();

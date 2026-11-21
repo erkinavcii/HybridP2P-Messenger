@@ -443,6 +443,16 @@ export function groupKeySigData(sender, recipient, groupId, encryptedPayload) {
     return new TextEncoder().encode(`gkd:v1:${sender}:${recipient}:${groupId}:${encryptedPayload}`);
 }
 
+export function fileSigData(sender, recipient, fileUuid, originalName, fileType, viewOnce) {
+    return new TextEncoder().encode(
+        `file:v1:${sender}:${recipient}:${fileUuid}:${originalName}:${fileType}:${viewOnce ? 1 : 0}`
+    );
+}
+
+export async function signFileMessageJS(privateKeyPem, sender, recipient, fileUuid, originalName, fileType, viewOnce) {
+    return await signDataJS(privateKeyPem, fileSigData(sender, recipient, fileUuid, originalName, fileType, viewOnce));
+}
+
 // Alan ayırıcılı değişiklik imzası: silme imzası düzenleme olarak (ya da tersi) kullanılamaz.
 export function changeSigData(kind, sender, recipient, msgUid, encryptedPayload = "") {
     if (kind === "message_edit") {

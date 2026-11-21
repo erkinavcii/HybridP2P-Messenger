@@ -11,6 +11,7 @@ import {
     encryptSymmetricJS,
     signDataJS,
     signDirectMessageJS,
+    signFileMessageJS,
     encryptMessageJS,
     makeAuthHeadersJS,
     uidSigData
@@ -964,6 +965,10 @@ export async function sendMessage() {
                 renderMessages();
                 renderInbox();
                 
+                const signature = await signFileMessageJS(
+                    state.privateKeyPem, state.username, state.recipient,
+                    fileUuid, staged.name, fileType, isViewOnce
+                );
                 const fileMsgPayload = {
                     type: "file_message",
                     sender: state.username,
@@ -972,6 +977,7 @@ export async function sendMessage() {
                     original_name: staged.name,
                     file_type: fileType,
                     view_once: isViewOnce,
+                    signature: signature,
                     timestamp: timestamp
                 };
                 

@@ -8,7 +8,7 @@
 // saklar; ephemeral sohbette hiçbir şey diske yazılmaz (yalnızca bellekte).
 
 import { state, API_URL } from './state.js';
-import { encryptBytesJS, decryptBytesJS, makeAuthHeadersJS } from './crypto.js';
+import { encryptBytesJS, decryptBytesJS, makeAuthHeadersJS, signFileMessageJS } from './crypto.js';
 import { dbGet, dbSet } from './db.js';
 
 export const MAX_SECONDS = 120;
@@ -135,9 +135,14 @@ export async function sendVoice(recipient, recipientPubKey, recording, sendFrame
     if (resp.status !== 200) throw new Error(`upload failed (${resp.status})`);
     const fileUuid = (await resp.json()).uuid;
     const timestamp = new Date().toISOString();
+    const signature = await signFileMessageJS(
+        state.privateKeyPem, state.username, recipient,
+        fileUuid, originalName, "audio", false
+    );
     await sendFrame({
         type: "file_message", sender: state.username, recipient, file_uuid: fileUuid,
-        original_name: originalName, file_type: "audio", view_once: false, timestamp
+        original_name: originalName, file_type: "audio", view_once: false,
+        signature, timestamp
     });
     await storeAudio(recipient, fileUuid, recording.bytes);
     return {

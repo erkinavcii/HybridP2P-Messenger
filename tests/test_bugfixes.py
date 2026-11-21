@@ -129,3 +129,47 @@ def test_file_message_signature_relayed_live_offline_and_fallback(make_user):
     seen = run(collect())
     assert seen[uid_off]["signature"] == "sig-off" and seen[uid_off]["view_once"] is True
     assert seen[uid_fb]["signature"] == "sig-fb"
+
+
+def test_client_file_message_signing_and_downgrade_protection(isolated_keys_dir, keypair_pool):
+    from desktop.ws_client import WsClientMixin, file_sig_data
+    from crypto_utils import sign_data
+
+    (a_priv, a_pub), (b_priv, b_pub), (m_priv, _m_pub) = keypair_pool[:3]
+    directory = {"alice": a_pub, "bob": b_pub}
+
+    class _Impl(WsClientMixin):
+        pass
+
+    alice = _Impl()
+    alice.state = {"username": "alice", "private_key": a_priv, "store": MessageStore("alice")}
+    alice.fetch_recipient_pub_key = lambda name: directory.get(name)
+
+    sig = base64.b64encode(
+        sign_data(b_priv, file_sig_data("bob", "alice", "uuid1", "photo.png", "image", False))
+    ).decode("ascii")
+    assert alice.verify_file_message("bob", "uuid1", "photo.png", "image", False, sig) is True
+    # Tampered filename or view_once or attacker key must be rejected
+    assert alice.verify_file_message("bob", "uuid1", "evil.exe", "image", False, sig) is False
+    assert alice.verify_file_message("bob", "uuid1", "photo.png", "image", True, sig) is False
+    bad_sig = base64.b64encode(
+        sign_data(m_priv, file_sig_data("bob", "alice", "uuid1", "photo.png", "image", False))
+    ).decode("ascii")
+    assert alice.verify_file_message("bob", "uuid1", "photo.png", "image", False, bad_sig) is False
+    # Once bob signed, unsigned file_message must be rejected (downgrade protection)
+    assert alice.verify_file_message("bob", "uuid2", "photo2.png", "image", False, "") is False
+
+
+def test_web_crypto_exports_file_sig_data():
+    import shutil, subprocess
+    if shutil.which("node") is None:
+        pytest.skip("Node.js yok")
+    from desktop.ws_client import file_sig_data
+    script = (
+        "import { fileSigData } from './static/js/crypto.js';"
+        "console.log(Buffer.from(fileSigData('bob','alice','u1','a.png','image',true)).toString('utf8'));"
+    )
+    r = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, timeout=15)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip().encode("utf-8") == file_sig_data("bob", "alice", "u1", "a.png", "image", True)
+

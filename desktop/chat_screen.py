@@ -243,6 +243,7 @@ class ChatScreenMixin:
                 "original_name": original_name,
                 "file_type":     "audio",
                 "view_once":     False,
+                "signature":     self.sign_file_message(recipient, file_uuid, original_name, "audio", False),
                 "timestamp":     ts,
             })
         except Exception as ex:
@@ -615,6 +616,7 @@ class ChatScreenMixin:
                         "original_name": staged["name"],
                         "file_type":     file_type,
                         "view_once":     view_once,
+                        "signature":     self.sign_file_message(recipient, file_uuid, staged["name"], file_type, view_once),
                     })
 
                     def _upload_success():

@@ -70,6 +70,13 @@ def group_key_sig_data(sender: str, recipient: str, group_id: str, encrypted_pay
     return f"gkd:v1:{sender}:{recipient}:{group_id}:{encrypted_payload}".encode("utf-8")
 
 
+def file_sig_data(sender: str, recipient: str, file_uuid: str, original_name: str,
+                  file_type: str, view_once: bool) -> bytes:
+    """file_message imzasının kapsadığı veri ("file:v1:" önekli)."""
+    vo = 1 if view_once else 0
+    return f"file:v1:{sender}:{recipient}:{file_uuid}:{original_name}:{file_type}:{vo}".encode("utf-8")
+
+
 def decide_group_key(has_existing_key: bool, has_sig: bool, sig_valid: bool) -> str:
     """Gelen grup anahtarı kabul edilsin mi? → GROUP_KEY_ACCEPT | GROUP_KEY_REJECT
 
@@ -175,13 +182,22 @@ class WsClientMixin:
                                     self._on_incoming_message(sender, f"[Hata:{ex}]", ts)
 
                             elif t == "file_message":
+                                sender = data.get("sender", "?")
+                                file_uuid = data.get("file_uuid", "")
+                                original_name = data.get("original_name", "dosya")
+                                file_type = data.get("file_type", "document")
+                                vo = bool(data.get("view_once", False))
+                                sig = data.get("signature", "") or ""
+                                if not self.verify_file_message(sender, file_uuid, original_name, file_type, vo, sig):
+                                    self.warn_blocked_message(sender)
+                                    continue
                                 self._on_incoming_file(
-                                    sender=data.get("sender","?"),
-                                    file_uuid=data.get("file_uuid",""),
-                                    original_name=data.get("original_name","dosya"),
-                                    file_type=data.get("file_type","document"),
-                                    timestamp=data.get("timestamp",""),
-                                    view_once=bool(data.get("view_once", False)),
+                                    sender=sender,
+                                    file_uuid=file_uuid,
+                                    original_name=original_name,
+                                    file_type=file_type,
+                                    timestamp=data.get("timestamp", ""),
+                                    view_once=vo,
                                 )
 
                             elif t == "ephemeral_toggle":
@@ -511,6 +527,31 @@ class WsClientMixin:
         # İmza yok — kişi daha önce imza attıysa bu bir downgrade denemesidir
         if store.contact_signs_messages(sender):
             print(f"[Signature] '{sender}' normalde imzaliyor ama bu mesaj IMZASIZ — reddedildi.")
+            return False
+        return True
+
+    def sign_file_message(self, recipient: str, file_uuid: str, original_name: str,
+                          file_type: str, view_once: bool) -> str:
+        """Giden file_message çerçevesini RSA-PSS ile imzalar."""
+        return self._sign(file_sig_data(
+            self.state["username"], recipient, file_uuid, original_name, file_type, view_once
+        ))
+
+    def verify_file_message(self, sender: str, file_uuid: str, original_name: str,
+                            file_type: str, view_once: bool, signature_b64: str) -> bool:
+        """Gelen file_message imzasını doğrular (1:1 mesaj ile aynı geçiş kuralı)."""
+        store = self.state["store"]
+        if signature_b64:
+            data = file_sig_data(sender, self.state["username"], file_uuid,
+                                 original_name, file_type, view_once)
+            if self._verify_from(sender, data, signature_b64):
+                if not store.contact_signs_messages(sender):
+                    store.mark_contact_signs_messages(sender)
+                return True
+            print(f"[Signature] '{sender}' file_message imzasi GECERSIZ — reddedildi.")
+            return False
+        if store.contact_signs_messages(sender):
+            print(f"[Signature] '{sender}' imzasiz file_message gonderdi — reddedildi.")
             return False
         return True
 

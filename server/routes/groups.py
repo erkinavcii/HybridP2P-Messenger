@@ -82,6 +82,11 @@ async def add_group_member(
             if not member:
                 raise HTTPException(status_code=403, detail="Grup üyesi değilsiniz.")
         
+        # Hedef kullanıcının kayıtlı olduğunu doğrula
+        u_cursor = await db.execute("SELECT username FROM users WHERE username = ?", (req.username,))
+        if not await u_cursor.fetchone():
+            raise HTTPException(status_code=404, detail=f"Kullanıcı '{req.username}' bulunamadı.")
+
         # Üyeyi gruba ekle
         await db.execute(
             "INSERT OR IGNORE INTO group_members (group_id, username) VALUES (?, ?)",
@@ -165,7 +170,7 @@ async def list_group_members(
     """Bir grubun tüm üyelerini ve public key'lerini döndürür (anahtar dağıtımı için)."""
     await verify_request_signature(request, x_username, x_timestamp, x_signature)
     async with db_session() as db:
-        cursor = await db.execute("SELECT creator FROM groups WHERE group_id = ?", (group_id,))
+        cursor = await db.execute("SELECT group_name, creator FROM groups WHERE group_id = ?", (group_id,))
         group = await cursor.fetchone()
         if not group:
             raise HTTPException(status_code=404, detail="Grup bulunamadı.")
@@ -189,6 +194,9 @@ async def list_group_members(
         )
         rows = await cursor.fetchall()
         return {
+            "group_id": group_id,
+            "group_name": group["group_name"],
+            "creator": group["creator"],
             "members": [
                 {
                     "username": r["username"],

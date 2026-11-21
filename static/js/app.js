@@ -15,7 +15,8 @@ import {
     sendMessage,
     formatBytes,
     appendSystemMessage,
-    openContactsDialog
+    openContactsDialog,
+    escapeHtml
 } from './ui.js';
 import {
     generateKeyPair,
@@ -82,8 +83,18 @@ const newChatCancelBtn = document.getElementById("new-chat-cancel-btn");
 const newChatConfirmBtn = document.getElementById("new-chat-confirm-btn");
 const newUsernameInput = document.getElementById("new-username-input");
 
+const groupInfoBtn = document.getElementById("group-info-btn");
 const groupRekeyBtn = document.getElementById("group-rekey-btn");
 const leaveGroupBtn = document.getElementById("leave-group-btn");
+const groupInfoModal = document.getElementById("group-info-modal");
+const giCloseBtn = document.getElementById("gi-close-btn");
+const giCopyIdBtn = document.getElementById("gi-copy-id-btn");
+const giAddMemberInput = document.getElementById("gi-add-member-input");
+const giAddMemberBtn = document.getElementById("gi-add-member-btn");
+const giMembersList = document.getElementById("gi-members-list");
+const giRekeyBtn = document.getElementById("gi-rekey-btn");
+const giLeaveBtn = document.getElementById("gi-leave-btn");
+const myGroupsList = document.getElementById("my-groups-list");
 const ephemeralBtn = document.getElementById("ephemeral-btn");
 const viewOnceBtn = document.getElementById("view-once-btn");
 
@@ -146,6 +157,7 @@ if (tabGroup) {
         sectionGroup.style.display = "flex";
         newChatConfirmBtn.innerText = "Create Group";
         document.getElementById("group-name-input").focus();
+        loadMyGroupsModalList();
     });
 }
 
@@ -223,6 +235,7 @@ if (newChatConfirmBtn) {
                     state.chats[groupId] = {
                         partner: groupId,
                         groupName: groupName,
+                        groupCreator: state.username,
                         ephemeral: false,
                         isGroup: true,
                         messages: []
@@ -233,15 +246,7 @@ if (newChatConfirmBtn) {
                     for (let m of members) {
                         if (m === state.username) continue;
                         try {
-                            const mPath = `/api/public_key/${m}`;
-                            const mHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", mPath);
-                            const mRes = await fetch(`${API_URL}${mPath}`, { headers: mHeaders });
-                            if (mRes.status === 200) {
-                                const mData = await mRes.json();
-                                // İmzalı; grup sunucuda oluştuktan SONRA gönderilir
-                                // (sunucu üye olmayana iletmez — K2)
-                                await sendGroupKeyTo(m, groupId, groupKeyHex, mData.public_key);
-                            }
+                            await shareGroupKeyWithMember(m, groupId, groupKeyHex);
                         } catch (distErr) {
                             console.error(`Failed to distribute key to ${m}:`, distErr);
                         }
@@ -263,76 +268,333 @@ if (newChatConfirmBtn) {
     });
 }
 
-// Group actions
+async function shareGroupKeyWithMember(memberUsername, groupId, groupKeyHex) {
+    const mPath = `/api/public_key/${memberUsername}`;
+    const mHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", mPath);
+    const mRes = await fetch(`${API_URL}${mPath}`, { headers: mHeaders });
+    if (mRes.status === 200) {
+        const mData = await mRes.json();
+        // Signed: distributed after server records membership (K2)
+        await sendGroupKeyTo(memberUsername, groupId, groupKeyHex, mData.public_key);
+        return true;
+    }
+    return false;
+}
+
+// Group actions (shared helpers for header buttons, modal & member removal)
+async function pushGroupSystemEvent(groupId, text) {
+    if (!state.chats[groupId]) return;
+    state.chats[groupId].messages.push({
+        sender: "",
+        system: true,
+        content: text,
+        timestamp: new Date().toISOString(),
+        read: true
+    });
+    await persistChats();
+    if (state.recipient === groupId) window.dispatchEvent(new CustomEvent('messages-updated'));
+}
+
+async function rotateGroupKey(groupId, { silent = false } = {}) {
+    if (!groupId) return false;
+    try {
+        const groupKeyHex = await generateSymmetricKeyHex();
+        await dbSet("group_keys", groupId, groupKeyHex);
+
+        const path = `/api/groups/${groupId}/members`;
+        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+        const res = await fetch(`${API_URL}${path}`, { headers });
+
+        if (res.status !== 200) {
+            if (!silent) alert("Could not retrieve group members list.");
+            return false;
+        }
+        const data = await res.json();
+        for (let m of data.members) {
+            if (m.username === state.username) continue;
+            try {
+                // Signed: recipients reject unsigned key rotations (K2)
+                await sendGroupKeyTo(m.username, groupId, groupKeyHex, m.public_key);
+            } catch (err) {
+                console.error("Rekey distribution error for member:", m.username, err);
+            }
+        }
+        await pushGroupSystemEvent(groupId, "🔑 You rotated and distributed the new group key.");
+        if (!silent) alert("Group key rotated and distributed successfully.");
+        return true;
+    } catch (err) {
+        if (!silent) alert("Key rotation error: " + err.message);
+        return false;
+    }
+}
+
+async function leaveGroup(groupId) {
+    if (!groupId) return false;
+    if (!confirm("Are you sure you want to leave this group and delete all local group message history?")) return false;
+    try {
+        const path = `/api/groups/${groupId}/members/${state.username}`;
+        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "DELETE", path);
+        const res = await fetch(`${API_URL}${path}`, { method: "DELETE", headers });
+
+        if (res.status === 200) {
+            delete state.chats[groupId];
+            await dbDel("group_keys", groupId);
+            await persistChats();
+
+            if (state.recipient === groupId) {
+                state.recipient = null;
+                state.isGroup = false;
+                emptyChatState.classList.remove("hidden");
+                activeChat.classList.add("hidden");
+            }
+            renderInbox();
+            alert("Left the group successfully.");
+            return true;
+        }
+        const txt = await res.text();
+        alert("Failed to leave group: " + txt);
+        return false;
+    } catch (err) {
+        alert("Error leaving group: " + err.message);
+        return false;
+    }
+}
+
+async function loadGroupMembersModal(groupId) {
+    if (!groupId || !giMembersList) return;
+    const chatObj = state.chats[groupId];
+    document.getElementById("gi-group-name").innerText = (chatObj && chatObj.groupName) || groupId;
+    document.getElementById("gi-group-id").innerText = groupId;
+    document.getElementById("gi-creator-label").innerText = "Loading members...";
+    giMembersList.innerHTML = `<div class="contacts-empty">Loading...</div>`;
+
+    try {
+        const path = `/api/groups/${groupId}/members`;
+        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+        const res = await fetch(`${API_URL}${path}`, { headers });
+        if (res.status !== 200) {
+            giMembersList.innerHTML = `<div class="contacts-empty">Could not load group members.</div>`;
+            return;
+        }
+        const data = await res.json();
+        const creator = data.creator || (chatObj && chatObj.groupCreator) || "";
+        const isCreator = creator === state.username;
+        if (data.group_name && chatObj) chatObj.groupName = data.group_name;
+        if (creator && chatObj) chatObj.groupCreator = creator;
+
+        document.getElementById("gi-group-name").innerText = data.group_name || document.getElementById("gi-group-name").innerText;
+        document.getElementById("gi-creator-label").innerText =
+            `Creator: ${creator || "Unknown"} · ${data.members.length} member${data.members.length === 1 ? "" : "s"}`;
+
+        giMembersList.innerHTML = "";
+        for (const m of data.members) {
+            const row = document.createElement("div");
+            row.className = "contact-row";
+            const badges = [];
+            if (m.username === creator) badges.push(`<span class="group-role-badge">Creator</span>`);
+            if (m.username === state.username) badges.push(`<span class="group-role-badge">You</span>`);
+
+            row.innerHTML = `
+                <div class="avatar group" style="width: 32px; height: 32px; font-size: 12px;">${escapeHtml(m.username.substring(0, 2).toUpperCase())}</div>
+                <div class="contact-info">
+                    <span class="contact-name">${escapeHtml(m.username)}${badges.join("")}</span>
+                </div>
+                <div class="contact-actions"></div>
+            `;
+            if (isCreator && m.username !== state.username) {
+                const removeBtn = document.createElement("button");
+                removeBtn.className = "gi-remove-btn";
+                removeBtn.textContent = "Remove";
+                removeBtn.title = `Remove ${m.username} and rotate key`;
+                removeBtn.addEventListener("click", async () => {
+                    if (!confirm(`Remove '${m.username}' from this group and rotate the encryption key?`)) return;
+                    removeBtn.disabled = true;
+                    try {
+                        const delPath = `/api/groups/${groupId}/members/${encodeURIComponent(m.username)}`;
+                        const delHeaders = await makeAuthHeadersJS(state.username, state.privateKeyPem, "DELETE", delPath);
+                        const delRes = await fetch(`${API_URL}${delPath}`, { method: "DELETE", headers: delHeaders });
+                        if (delRes.status !== 200) {
+                            alert("Failed to remove member: " + (await delRes.text()));
+                            return;
+                        }
+                        await rotateGroupKey(groupId, { silent: true });
+                        await pushGroupSystemEvent(groupId, `🔒 '${m.username}' was removed and the group key was rotated.`);
+                        await loadGroupMembersModal(groupId);
+                    } catch (err) {
+                        alert("Error removing member: " + err.message);
+                    } finally {
+                        removeBtn.disabled = false;
+                    }
+                });
+                row.querySelector(".contact-actions").appendChild(removeBtn);
+            }
+            giMembersList.appendChild(row);
+        }
+    } catch (err) {
+        giMembersList.innerHTML = `<div class="contacts-empty">Error: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function loadMyGroupsModalList() {
+    if (!myGroupsList || !state.username) return;
+    myGroupsList.innerHTML = `<div class="contacts-empty">Loading groups...</div>`;
+    try {
+        const path = `/api/groups/${state.username}`;
+        const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
+        const res = await fetch(`${API_URL}${path}`, { headers });
+        if (res.status !== 200) {
+            myGroupsList.innerHTML = `<div class="contacts-empty">Could not load groups.</div>`;
+            return;
+        }
+        const groups = (await res.json()).groups || [];
+        if (groups.length === 0) {
+            myGroupsList.innerHTML = `<div class="contacts-empty">No groups yet.</div>`;
+            return;
+        }
+        myGroupsList.innerHTML = "";
+        for (const g of groups) {
+            const row = document.createElement("div");
+            row.className = "contact-row";
+            row.innerHTML = `
+                <div class="contact-info">
+                    <span class="contact-name">${escapeHtml(g.group_name)}</span>
+                    <span class="contact-fp">${escapeHtml(g.group_id)} · creator: ${escapeHtml(g.creator)}</span>
+                </div>
+                <div class="contact-actions"></div>
+            `;
+            const actions = row.querySelector(".contact-actions");
+
+            const openBtn = document.createElement("button");
+            openBtn.className = "action-icon-btn";
+            openBtn.title = "Open Group Chat";
+            openBtn.textContent = "💬";
+            openBtn.addEventListener("click", async () => {
+                const key = await dbGet("group_keys", g.group_id);
+                if (!key) {
+                    alert("You do not have the encryption key for this group yet. Ask a member to rotate the key.");
+                    return;
+                }
+                closeModal();
+                await selectChat(g.group_id, null, true);
+            });
+
+            const rekeyBtn = document.createElement("button");
+            rekeyBtn.className = "action-icon-btn";
+            rekeyBtn.title = "Rotate Key (Rekey)";
+            rekeyBtn.textContent = "🔑";
+            rekeyBtn.addEventListener("click", async () => {
+                if (confirm(`Rotate encryption key for '${g.group_name}'?`)) {
+                    await rotateGroupKey(g.group_id);
+                }
+            });
+
+            const leaveBtn = document.createElement("button");
+            leaveBtn.className = "action-icon-btn";
+            leaveBtn.title = "Leave Group";
+            leaveBtn.style.color = "var(--danger)";
+            leaveBtn.textContent = "✕";
+            leaveBtn.addEventListener("click", async () => {
+                if (await leaveGroup(g.group_id)) loadMyGroupsModalList();
+            });
+
+            actions.appendChild(openBtn);
+            actions.appendChild(rekeyBtn);
+            actions.appendChild(leaveBtn);
+            myGroupsList.appendChild(row);
+        }
+    } catch (err) {
+        myGroupsList.innerHTML = `<div class="contacts-empty">Error: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+if (groupInfoBtn && groupInfoModal) {
+    groupInfoBtn.addEventListener("click", () => {
+        if (!state.recipient || !state.isGroup) return;
+        groupInfoModal.classList.add("active");
+        loadGroupMembersModal(state.recipient);
+    });
+}
+if (giCloseBtn && groupInfoModal) {
+    giCloseBtn.addEventListener("click", () => {
+        groupInfoModal.classList.remove("active");
+        if (giAddMemberInput) giAddMemberInput.value = "";
+    });
+}
+if (giCopyIdBtn) {
+    giCopyIdBtn.addEventListener("click", () => {
+        if (!state.recipient) return;
+        navigator.clipboard?.writeText(state.recipient).then(() => {
+            giCopyIdBtn.textContent = "✓";
+            setTimeout(() => { giCopyIdBtn.textContent = "📋"; }, 1500);
+        });
+    });
+}
+if (giAddMemberBtn && giAddMemberInput) {
+    giAddMemberBtn.addEventListener("click", async () => {
+        const groupId = state.recipient;
+        const target = giAddMemberInput.value.trim().toLowerCase();
+        if (!groupId || !state.isGroup || !target) return;
+        if (!/^[a-z0-9_]{2,32}$/.test(target)) {
+            alert("Invalid username format.");
+            return;
+        }
+        giAddMemberBtn.disabled = true;
+        try {
+            const path = `/api/groups/${groupId}/members`;
+            const bodyText = JSON.stringify({ username: target });
+            const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
+            headers["Content-Type"] = "application/json";
+            const res = await fetch(`${API_URL}${path}`, { method: "POST", headers, body: bodyText });
+            if (res.status !== 200) {
+                alert("Could not add member: " + (await res.text()));
+                return;
+            }
+            const groupKeyHex = await dbGet("group_keys", groupId);
+            if (groupKeyHex) {
+                await shareGroupKeyWithMember(target, groupId, groupKeyHex);
+            }
+            giAddMemberInput.value = "";
+            await pushGroupSystemEvent(groupId, `➕ '${target}' was added to the group.`);
+            await loadGroupMembersModal(groupId);
+        } catch (err) {
+            alert("Failed to add member: " + err.message);
+        } finally {
+            giAddMemberBtn.disabled = false;
+        }
+    });
+}
+if (giRekeyBtn) {
+    giRekeyBtn.addEventListener("click", async () => {
+        if (!state.recipient || !state.isGroup) return;
+        if (!confirm("Rotate the encryption key for this group? All active members will receive the new key.")) return;
+        giRekeyBtn.disabled = true;
+        await rotateGroupKey(state.recipient);
+        giRekeyBtn.disabled = false;
+    });
+}
+if (giLeaveBtn) {
+    giLeaveBtn.addEventListener("click", async () => {
+        if (!state.recipient || !state.isGroup) return;
+        if (await leaveGroup(state.recipient)) groupInfoModal.classList.remove("active");
+    });
+}
+
 if (groupRekeyBtn) {
     groupRekeyBtn.addEventListener("click", async () => {
         if (!state.recipient || !state.isGroup) return;
         if (!confirm("Rotate the encryption key for this group? All active members will receive the new key.")) return;
-        
         groupRekeyBtn.disabled = true;
-        try {
-            const groupKeyHex = await generateSymmetricKeyHex();
-            await dbSet("group_keys", state.recipient, groupKeyHex);
-            
-            const path = `/api/groups/${state.recipient}/members`;
-            const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
-            const res = await fetch(`${API_URL}${path}`, { headers });
-            
-            if (res.status === 200) {
-                const data = await res.json();
-                for (let m of data.members) {
-                    if (m.username === state.username) continue;
-                    try {
-                        // İmzalı: alıcılar imzasız anahtar değişikliğini reddeder (K2)
-                        await sendGroupKeyTo(m.username, state.recipient, groupKeyHex, m.public_key);
-                    } catch (err) {
-                        console.error("Rekey distribution error for member:", m.username, err);
-                    }
-                }
-                alert("Group key rotated and distributed successfully.");
-            } else {
-                alert("Could not retrieve group members list.");
-            }
-        } catch (err) {
-            alert("Key rotation error: " + err.message);
-        } finally {
-            groupRekeyBtn.disabled = false;
-        }
+        await rotateGroupKey(state.recipient);
+        groupRekeyBtn.disabled = false;
     });
 }
 
 if (leaveGroupBtn) {
     leaveGroupBtn.addEventListener("click", async () => {
         if (!state.recipient || !state.isGroup) return;
-        if (!confirm("Are you sure you want to leave this group and delete all local group message history?")) return;
-        
         leaveGroupBtn.disabled = true;
-        try {
-            const path = `/api/groups/${state.recipient}/members/${state.username}`;
-            const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "DELETE", path);
-            const res = await fetch(`${API_URL}${path}`, { method: "DELETE", headers });
-            
-            if (res.status === 200) {
-                const groupId = state.recipient;
-                delete state.chats[groupId];
-                await dbDel("group_keys", groupId);
-                await persistChats();
-                
-                state.recipient = null;
-                state.isGroup = false;
-                emptyChatState.classList.remove("hidden");
-                activeChat.classList.add("hidden");
-                renderInbox();
-                alert("Left the group successfully.");
-            } else {
-                const txt = await res.text();
-                alert("Failed to leave group: " + txt);
-            }
-        } catch (err) {
-            alert("Error leaving group: " + err.message);
-        } finally {
-            leaveGroupBtn.disabled = false;
-        }
+        await leaveGroup(state.recipient);
+        leaveGroupBtn.disabled = false;
     });
 }
 

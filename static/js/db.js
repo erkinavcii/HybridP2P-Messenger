@@ -104,6 +104,7 @@ export async function persistChats() {
         chatsClone[k] = {
             partner: v.partner,
             groupName: v.groupName || null,
+            groupCreator: v.groupCreator || null,
             isGroup: !!v.isGroup,
             ephemeral: v.ephemeral,
             messages: v.ephemeral ? [] : (v.messages || []).filter(m => !m.view_once)
@@ -235,6 +236,7 @@ export async function syncUserGroups() {
                     state.chats[g.group_id] = {
                         partner: g.group_id,
                         groupName: g.group_name,
+                        groupCreator: g.creator || null,
                         ephemeral: false,
                         isGroup: true,
                         messages: []
@@ -243,6 +245,10 @@ export async function syncUserGroups() {
                 } else {
                     if (state.chats[g.group_id].groupName !== g.group_name) {
                         state.chats[g.group_id].groupName = g.group_name;
+                        changed = true;
+                    }
+                    if (g.creator && state.chats[g.group_id].groupCreator !== g.creator) {
+                        state.chats[g.group_id].groupCreator = g.creator;
                         changed = true;
                     }
                 }

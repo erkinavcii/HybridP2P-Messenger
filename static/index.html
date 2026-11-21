@@ -192,6 +192,10 @@
                             <button id="view-once-btn" class="action-icon-btn view-once-circle-btn" title="Send next message as View-Once">
                                 <span class="view-once-circle-label">1</span>
                             </button>
+                            <!-- Group Info & Members -->
+                            <button id="group-info-btn" class="action-icon-btn hidden" title="Group Info & Members">
+                                👥
+                            </button>
                             <!-- Group Rekey -->
                             <button id="group-rekey-btn" class="action-icon-btn hidden" title="Generate New Group Key" style="color: var(--accent-hover);">
                                 🔑
@@ -333,6 +337,10 @@
                     <label for="group-members-input">Group Members (comma-separated)</label>
                     <input type="text" id="group-members-input" class="input-control" placeholder="alice, bob, charlie">
                 </div>
+                <div class="my-groups-section">
+                    <div class="list-section-header" style="padding: 4px 0;">MY GROUPS</div>
+                    <div id="my-groups-list" class="contacts-list" style="max-height: 160px;"></div>
+                </div>
             </div>
             
             <div class="modal-footer" style="margin-top: 20px;">
@@ -445,6 +453,30 @@
             <input type="text" id="contacts-search" class="input-control" placeholder="Search by name...">
             <div id="contacts-list" class="contacts-list"></div>
             <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Compare this fingerprint with your contact over a separate channel (in person, phone) to verify the key really belongs to them.</p>
+        </div>
+    </div>
+
+    <!-- Modal: Group Info & Members -->
+    <div id="group-info-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 460px;">
+            <div class="modal-header">
+                <span class="modal-title" id="gi-group-name">Group Info</span>
+                <button id="gi-close-btn" class="action-icon-btn">✕</button>
+            </div>
+            <div class="gi-meta-row">
+                <span id="gi-group-id" class="contact-fp" style="font-size: 11px;">group_...</span>
+                <button id="gi-copy-id-btn" class="action-icon-btn" title="Copy Group ID">📋</button>
+            </div>
+            <div id="gi-creator-label" style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;"></div>
+            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <input type="text" id="gi-add-member-input" class="input-control" placeholder="Add member by username..." style="margin-bottom: 0; flex: 1;">
+                <button id="gi-add-member-btn" class="btn" style="width: auto; padding: 8px 14px; font-size: 13px; white-space: nowrap;">+ Add</button>
+            </div>
+            <div id="gi-members-list" class="contacts-list" style="max-height: 240px;"></div>
+            <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: space-between;">
+                <button id="gi-leave-btn" class="btn" style="width: auto; padding: 8px 14px; background-color: var(--danger); font-size: 13px;">Leave Group</button>
+                <button id="gi-rekey-btn" class="btn" style="width: auto; padding: 8px 14px; font-size: 13px;">🔑 Rotate Key</button>
+            </div>
         </div>
     </div>
 

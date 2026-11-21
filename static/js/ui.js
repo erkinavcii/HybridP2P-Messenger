@@ -61,6 +61,7 @@ const audioCallBtn = document.getElementById("audio-call-btn");
 const videoCallBtn = document.getElementById("video-call-btn");
 const ephemeralBtn = document.getElementById("ephemeral-btn");
 const viewOnceBtn = document.getElementById("view-once-btn");
+const groupInfoBtn = document.getElementById("group-info-btn");
 const groupRekeyBtn = document.getElementById("group-rekey-btn");
 const leaveGroupBtn = document.getElementById("leave-group-btn");
 
@@ -334,6 +335,7 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
         viewOnceBtn.classList.add("hidden");
         attachBtn.classList.add("hidden");
         if (voiceBtn) voiceBtn.classList.add("hidden");
+        if (groupInfoBtn) groupInfoBtn.classList.remove("hidden");
         groupRekeyBtn.classList.remove("hidden");
         leaveGroupBtn.classList.remove("hidden");
     } else {
@@ -343,6 +345,7 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
         viewOnceBtn.classList.remove("hidden");
         attachBtn.classList.remove("hidden");
         if (voiceBtn) voiceBtn.classList.remove("hidden");
+        if (groupInfoBtn) groupInfoBtn.classList.add("hidden");
         groupRekeyBtn.classList.add("hidden");
         leaveGroupBtn.classList.add("hidden");
         
@@ -375,10 +378,14 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
     if (!isGroup) maybeSendAvatar(partner, sendFrameWithFallback);
 
     // Set online indicator dynamically
+    const statusDot = chatPartnerStatus.querySelector(".status-dot");
     if (isGroup) {
-        chatPartnerStatus.style.visibility = "hidden";
+        chatPartnerStatus.style.visibility = "visible";
+        if (statusDot) statusDot.style.backgroundColor = "var(--accent-color)";
+        statusLabel.innerText = "End-to-end encrypted group";
     } else {
         chatPartnerStatus.style.visibility = "visible";
+        if (statusDot) statusDot.style.backgroundColor = "";
         queryUserPresence(partner);
     }
 }

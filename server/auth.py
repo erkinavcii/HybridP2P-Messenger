@@ -14,6 +14,8 @@ async def verify_request_signature(request: Request, username: str, timestamp: s
         now = datetime.now(timezone.utc)
         if abs((now - req_dt).total_seconds()) > 300:
             raise HTTPException(status_code=401, detail="Zaman aşımı veya geçersiz timestamp.")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=400, detail="Geçersiz timestamp formatı.")
 

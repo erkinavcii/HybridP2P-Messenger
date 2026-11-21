@@ -27,8 +27,8 @@ from server.limiter import limiter
 from server.routes.users import router as users_router
 from server.routes.messages import (
     router as messages_router, _make_chat_id, relay_avatar_update,
-    relay_or_queue, build_message_frame, relay_message_change,
-    relay_group_key_dist, GROUP_KEY_REJECTED,
+    relay_or_queue, build_message_frame, build_file_message_frame,
+    relay_message_change, relay_group_key_dist, GROUP_KEY_REJECTED,
 )
 from server.routes.groups import router as groups_router
 from server.routes.voip import router as voip_router
@@ -318,35 +318,9 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 })
 
             elif msg_type == "file_message":
-                recipient    = message.get("recipient", "")
-                sender       = username
-                file_uuid    = message.get("file_uuid", "")
-                original_name = message.get("original_name", "dosya")
-                file_type    = message.get("file_type", "document")
-                view_once    = bool(message.get("view_once", False))
-                timestamp    = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
-
-                file_msg = {
-                    "type":          "file_message",
-                    "sender":        sender,
-                    "file_uuid":     file_uuid,
-                    "original_name": original_name,
-                    "file_type":     file_type,
-                    "view_once":     view_once,
-                    "timestamp":     timestamp,
-                }
-
-                if manager.is_online(recipient):
-                    await manager.send_to_user(recipient, file_msg)
-                else:
-                    async with db_session() as db:
-                        await db.execute(
-                            """INSERT INTO offline_msgs
-                               (sender, recipient, msg_type, extra_data, timestamp)
-                               VALUES (?, ?, 'file_message', ?, ?)""",
-                            (sender, recipient, json.dumps(file_msg), timestamp)
-                        )
-                        await db.commit()
+                recipient = message.get("recipient", "")
+                file_msg = build_file_message_frame(username, message)
+                await relay_or_queue(username, recipient, file_msg, "file_message", "", file_msg)
 
             elif msg_type == "ephemeral_toggle":
                 recipient = message.get("recipient", "")

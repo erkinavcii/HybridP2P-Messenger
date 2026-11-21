@@ -141,8 +141,16 @@ class RestClientMixin:
             resp = self.signed_get(f"/api/chat_settings/{self.state['username']}", timeout=5)
             if resp.status_code == 200:
                 for s in resp.json().get("settings", []):
-                    parts   = s["chat_id"].split("_", 1)
-                    partner = parts[0] if len(parts) > 1 and parts[1] == self.state["username"] else parts[-1]
+                    cid = s["chat_id"]
+                    me = self.state["username"]
+                    partner = s.get("partner")
+                    if not partner:
+                        if ":" in cid:
+                            u1, u2 = cid.split(":", 1)
+                            partner = u2 if u1 == me else u1
+                        else:
+                            parts = cid.split("_", 1)
+                            partner = parts[0] if len(parts) > 1 and parts[1] == me else parts[-1]
                     if self.state["store"]:
                         self.state["store"].set_ephemeral(partner, s["ephemeral"], s.get("changed_by"))
                     if partner == self.state["recipient"]:

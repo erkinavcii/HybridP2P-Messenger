@@ -307,16 +307,41 @@ class MessageStore:
         finally:
             conn.close()
 
+    @staticmethod
+    def _parse_iso_utc(ts: str):
+        if not ts:
+            return None
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
     def mark_sent_messages_as_read(self, partner: str, max_timestamp: str):
-        """Karşı tarafın gönderdiğimiz mesajları okuduğunu yerel DB'de işaretler."""
+        """Karşı tarafın gönderdiğimiz mesajları (max_timestamp dahil öncesini) okuduğunu işaretler."""
         cid = self._chat_id(partner)
+        max_dt = self._parse_iso_utc(max_timestamp)
         conn = sqlite3.connect(self.db_path)
         try:
-            conn.execute(
-                "UPDATE messages SET is_read = 1 WHERE chat_id = ? AND is_mine = 1 AND timestamp = ? AND is_read = 0",
-                (cid, max_timestamp)
-            )
-            conn.commit()
+            rows = conn.execute(
+                "SELECT id, timestamp FROM messages WHERE chat_id = ? AND is_mine = 1 AND is_read = 0",
+                (cid,)
+            ).fetchall()
+            matched_ids = []
+            for row_id, row_ts in rows:
+                if row_ts == max_timestamp:
+                    matched_ids.append(row_id)
+                elif max_dt is not None:
+                    row_dt = self._parse_iso_utc(row_ts)
+                    if row_dt is not None and row_dt <= max_dt:
+                        matched_ids.append(row_id)
+            if matched_ids:
+                placeholders = ",".join("?" * len(matched_ids))
+                conn.execute(
+                    f"UPDATE messages SET is_read = 1 WHERE id IN ({placeholders})",
+                    matched_ids
+                )
+                conn.commit()
         except Exception as ex:
             print(f"[DB Error] mark_sent_messages_as_read error: {ex}")
         finally:

@@ -139,8 +139,16 @@ export async function syncChatSettingsFromServer() {
         if (res.status === 200) {
             const data = await res.json();
             for (let setting of data.settings) {
-                const parts = setting.chat_id.split("_");
-                const partner = parts[0] === state.username ? parts[1] : parts[0];
+                let partner = setting.partner;
+                if (!partner) {
+                    if (setting.chat_id.includes(":")) {
+                        const [u1, u2] = setting.chat_id.split(":");
+                        partner = u1 === state.username ? u2 : u1;
+                    } else {
+                        const parts = setting.chat_id.split("_");
+                        partner = parts[0] === state.username ? parts[1] : parts[0];
+                    }
+                }
                 
                 if (!state.chats[partner]) {
                     state.chats[partner] = {

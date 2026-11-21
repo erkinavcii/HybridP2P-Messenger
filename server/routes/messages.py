@@ -43,8 +43,35 @@ class WsFallbackRequest(BaseModel):
 
 
 def _make_chat_id(user1: str, user2: str) -> str:
-    """İki kullanıcı için tutarlı chat_id üretir (sıralı)."""
-    return "_".join(sorted([user1, user2]))
+    """İki kullanıcı için çakışmasız ve tutarlı chat_id üretir.
+
+    Kullanıcı adları yalnızca [a-z0-9_] alabildiği için ':' ayırıcısı alt çizgi
+    içeren adlarda (ör. alice_1 ve bob_2) bölünme hatasını ve LIKE sızıntısını önler.
+    """
+    return ":".join(sorted([user1, user2]))
+
+
+def _resolve_chat_partner(chat_id: str, username: str, known_users: set[str] | None = None) -> str | None:
+    """Verilen chat_id gerçekten `username` kullanıcısına aitse karşı tarafı döndürür."""
+    if ":" in chat_id:
+        u1, u2 = chat_id.split(":", 1)
+        if u1 == username:
+            return u2
+        if u2 == username:
+            return u1
+        return None
+    # Eski '_' ayırıcılı kayıtlar: iki tarafın da geçerli kullanıcı adı olduğunu doğrula
+    prefix = f"{username}_"
+    suffix = f"_{username}"
+    if chat_id.startswith(prefix):
+        other = chat_id[len(prefix):]
+        if other and username <= other and (known_users is None or other in known_users):
+            return other
+    if chat_id.endswith(suffix):
+        other = chat_id[:-len(suffix)]
+        if other and other <= username and (known_users is None or other in known_users):
+            return other
+    return None
 
 
 async def relay_or_queue(sender: str, recipient: str, frame: dict, msg_type: str,
@@ -65,6 +92,23 @@ async def relay_or_queue(sender: str, recipient: str, frame: dict, msg_type: str
              frame.get("timestamp") or datetime.now(timezone.utc).isoformat()))
         await db.commit()
     return False
+
+
+def build_file_message_frame(sender: str, message: dict) -> dict:
+    """file_message çerçevesini üretir (WS ve REST fallback ortak yolu)."""
+    sig = message.get("signature") or ""
+    if not isinstance(sig, str):
+        sig = ""
+    return {
+        "type":          "file_message",
+        "sender":        sender,
+        "file_uuid":     message.get("file_uuid", ""),
+        "original_name": message.get("original_name", "dosya"),
+        "file_type":     message.get("file_type", "document"),
+        "view_once":     bool(message.get("view_once", False)),
+        "signature":     sig,
+        "timestamp":     message.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def build_message_frame(sender: str, message: dict) -> tuple[dict, dict]:
@@ -202,25 +246,29 @@ async def get_chat_settings(
     if x_username != username:
         raise HTTPException(status_code=403, detail="Yetkisiz erisim.")
     async with db_session() as db:
-        # Bu kullanıcıyı içeren tüm chat_settings satırlarını al
+        # Yeni ':' ve eski '_' ayırıcılı satırları çekip kesin kullanıcı eşleşmesiyle süz
         cursor = await db.execute(
             """SELECT chat_id, ephemeral, changed_by, changed_at
                FROM chat_settings
-               WHERE chat_id LIKE ? OR chat_id LIKE ?""",
-            (f"{username}_%", f"%_{username}")
+               WHERE chat_id LIKE ? OR chat_id LIKE ? OR chat_id LIKE ? OR chat_id LIKE ?""",
+            (f"{username}:%", f"%:{username}", f"{username}_%", f"%_{username}")
         )
         rows = await cursor.fetchall()
-        return {
-            "settings": [
-                {
-                    "chat_id": r["chat_id"],
-                    "ephemeral": bool(r["ephemeral"]),
-                    "changed_by": r["changed_by"],
-                    "changed_at": r["changed_at"],
-                }
-                for r in rows
-            ]
-        }
+        u_cursor = await db.execute("SELECT username FROM users")
+        known_users = {u["username"] for u in await u_cursor.fetchall()}
+        settings = []
+        for r in rows:
+            partner = _resolve_chat_partner(r["chat_id"], username, known_users)
+            if partner is None:
+                continue
+            settings.append({
+                "chat_id": r["chat_id"],
+                "partner": partner,
+                "ephemeral": bool(r["ephemeral"]),
+                "changed_by": r["changed_by"],
+                "changed_at": r["changed_at"],
+            })
+        return {"settings": settings}
 
 
 @router.post("/api/ephemeral_toggle")
@@ -432,33 +480,8 @@ async def send_ws_fallback(
 
     elif msg_type == "file_message":
         recipient = message.get("recipient", "")
-        file_uuid = message.get("file_uuid", "")
-        original_name = message.get("original_name", "dosya")
-        file_type = message.get("file_type", "document")
-        view_once = bool(message.get("view_once", False))
-        timestamp = message.get("timestamp") or ts
-        
-        file_msg = {
-            "type":          "file_message",
-            "sender":        x_username,
-            "file_uuid":     file_uuid,
-            "original_name": original_name,
-            "file_type":     file_type,
-            "view_once":     view_once,
-            "timestamp":     timestamp,
-        }
-        
-        if manager.is_online(recipient):
-            await manager.send_to_user(recipient, file_msg)
-        else:
-            async with db_session() as db:
-                await db.execute(
-                    """INSERT INTO offline_msgs
-                       (sender, recipient, msg_type, extra_data, timestamp)
-                       VALUES (?, ?, 'file_message', ?, ?)""",
-                    (x_username, recipient, json.dumps(file_msg), timestamp)
-                )
-                await db.commit()
+        file_msg = build_file_message_frame(x_username, message)
+        await relay_or_queue(x_username, recipient, file_msg, "file_message", "", file_msg)
                 
     elif msg_type == "ephemeral_toggle":
         recipient = message.get("recipient", "")

@@ -457,11 +457,11 @@ export async function unpackSDPJS(packedStr) {
         // yalnızca SDP'yi okur; imza ve kimlik doğrulaması S3'te (serverless.html) gelecek.
         const b64 = packedStr.substring(3).replace(/-/g, "+").replace(/_/g, "/");
         const p = JSON.parse(await decompressStringJS(b64));
-        if (p.v !== 2) throw new Error("Desteklenmeyen kod sürümü");
+        if (p.v !== 2) throw new Error("Unsupported code version");
         if (p.m === "chat") {
-            throw new Error("Bu kod yazılı mesajlaşma için; web istemcisi henüz desteklemiyor (yalnızca sesli/görüntülü arama).");
+            throw new Error("This code is for text chat; the web client only supports audio/video calls here.");
         }
-        console.warn("[P2P] İmzalı kod okundu ama web istemcisi henüz kimliği doğrulamıyor:", p.u);
+        console.warn("[P2P] Signed code read, but the web client does not verify identity here:", p.u);
         return { sdp: p.s, type: p.t, call_type: p.m };
     }
     if (packedStr.startsWith("z1:")) {
@@ -677,7 +677,7 @@ export function initVoipEvents() {
             document.execCommand("copy");
             const btn = document.getElementById("p2p-copy-offer-btn");
             btn.innerText = "Copied!";
-            setTimeout(() => { btn.innerText = "Teklifi Kopyala"; }, 2000);
+            setTimeout(() => { btn.innerText = "Copy Offer"; }, 2000);
         });
     }
 
@@ -818,7 +818,7 @@ export function initVoipEvents() {
             document.execCommand("copy");
             const btn = document.getElementById("p2p-copy-answer-btn");
             btn.innerText = "Copied!";
-            setTimeout(() => { btn.innerText = "Cevabı Kopyala"; }, 2000);
+            setTimeout(() => { btn.innerText = "Copy Answer"; }, 2000);
         });
     }
 }

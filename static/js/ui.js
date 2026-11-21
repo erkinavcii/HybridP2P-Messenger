@@ -125,7 +125,7 @@ export function showTyping(partner, isTyping) {
     statusLabel.classList.toggle("typing-label", !!isTyping);
     if (isTyping) {
         statusLabel.dataset.prev = statusLabel.dataset.prev || statusLabel.innerText;
-        statusLabel.innerText = "yazıyor…";
+        statusLabel.innerText = "typing…";
         typingTimer = setTimeout(() => showTyping(partner, false), TYPING_EXPIRE_MS);
     } else if (statusLabel.dataset.prev) {
         statusLabel.innerText = statusLabel.dataset.prev;
@@ -194,7 +194,7 @@ export function renderInbox(query = "") {
         const lastMsgObj = c.messages[c.messages.length - 1];
         let snippet = lastMsgObj ? lastMsgObj.content : "No messages yet";
         if (lastMsgObj && lastMsgObj.view_once) snippet = "👁 View-once message";
-        if (lastMsgObj && lastMsgObj.deleted) snippet = "🚫 Bu mesaj silindi";
+        if (lastMsgObj && lastMsgObj.deleted) snippet = "🚫 This message was deleted";
         
         if (snippet && snippet.length > 30) snippet = snippet.substring(0, 27) + "...";
         
@@ -382,9 +382,9 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
     }
 }
 
-// ── Tarih ayırıcı ("Bugün" / "Dün" / "6 Ekim 2026"), yerel saate göre ──
-const TR_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz",
-                   "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+// ── Tarih ayırıcı ("Today" / "Yesterday" / "6 October 2026"), yerel saate göre ──
+const EN_MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+                   "August", "September", "October", "November", "December"];
 
 function dayKey(isoStr) {
     const d = new Date(isoStr);
@@ -395,11 +395,11 @@ function dayKey(isoStr) {
 export function formatDayLabel(isoStr, now = new Date()) {
     const d = new Date(isoStr);
     const key = dayKey(isoStr);
-    if (key === dayKey(now.toISOString())) return "Bugün";
+    if (key === dayKey(now.toISOString())) return "Today";
     const y = new Date(now); y.setDate(now.getDate() - 1);
-    if (key === dayKey(y.toISOString())) return "Dün";
+    if (key === dayKey(y.toISOString())) return "Yesterday";
     const yearPart = d.getFullYear() !== now.getFullYear() ? ` ${d.getFullYear()}` : "";
-    return `${d.getDate()} ${TR_MONTHS[d.getMonth()]}${yearPart}`;
+    return `${d.getDate()} ${EN_MONTHS[d.getMonth()]}${yearPart}`;
 }
 
 // Sohbet başlığındaki avatar (foto varsa foto, yoksa baş harfler)
@@ -430,7 +430,7 @@ async function renderContacts() {
     const contacts = (await listContacts()).filter(c => !q || c.username.includes(q));
     contactsList.innerHTML = "";
     if (contacts.length === 0) {
-        contactsList.innerHTML = `<div class="contacts-empty">${q ? "Eşleşen kişi yok." : "Rehberiniz boş. Biriyle sohbet başlattığınızda burada görünür."}</div>`;
+        contactsList.innerHTML = `<div class="contacts-empty">${q ? "No matching contacts." : "Your contacts list is empty. Contacts appear here when you start a chat."}</div>`;
         return;
     }
     for (const c of contacts) {
@@ -445,9 +445,9 @@ async function renderContacts() {
                 <span class="contact-fp" title="${escapeHtml(fp)}">${escapeHtml(fp)}</span>
             </div>
             <div class="contact-actions">
-                <button class="action-icon-btn" data-act="chat" title="Sohbet aç">💬</button>
-                <button class="action-icon-btn" data-act="copy" title="Parmak izini kopyala">📋</button>
-                <button class="action-icon-btn" data-act="delete" title="Kişiyi sil" style="color: var(--danger);">🗑</button>
+                <button class="action-icon-btn" data-act="chat" title="Open chat">💬</button>
+                <button class="action-icon-btn" data-act="copy" title="Copy fingerprint">📋</button>
+                <button class="action-icon-btn" data-act="delete" title="Remove contact" style="color: var(--danger);">🗑</button>
             </div>`;
         row.querySelector('[data-act="chat"]').addEventListener("click", () => {
             contactsModal.classList.remove("active");
@@ -457,7 +457,7 @@ async function renderContacts() {
             navigator.clipboard.writeText(fp).then(() => { e.target.innerText = "✓"; });
         });
         row.querySelector('[data-act="delete"]').addEventListener("click", async () => {
-            if (!confirm(`'${c.username}' rehberden silinsin mi? Sohbet geçmişi silinmez; tekrar yazışırsanız anahtarı yeniden doğrulamanız gerekir.`)) return;
+            if (!confirm(`Remove '${c.username}' from contacts? Chat history is kept; if you message again, you will need to re-verify their key.`)) return;
             await deleteContact(c.username);
             forgetAvatar(c.username);
             await renderContacts();
@@ -579,7 +579,7 @@ export function renderMessages() {
                 `;
             }
         } else if (m.deleted) {
-            textNodeHtml = `<span class="msg-deleted">🚫 Bu mesaj silindi</span>`;
+            textNodeHtml = `<span class="msg-deleted">🚫 This message was deleted</span>`;
         } else {
             textNodeHtml = linkPreviewCardHtml(m.preview) + `<span class="msg-text">${escapeHtml(m.content || "")}</span>`;
         }
@@ -594,10 +594,10 @@ export function renderMessages() {
                 ${state.isGroup && !isMe ? `<span class="msg-sender">${escapeHtml(m.sender)}</span>` : ""}
                 ${textNodeHtml}
                 <div class="msg-meta">
-                    ${m.edited && !m.deleted ? `<span class="msg-edited">düzenlendi</span>` : ""}
+                    ${m.edited && !m.deleted ? `<span class="msg-edited">edited</span>` : ""}
                     <span class="msg-time">${formatTime(m.timestamp)}</span>
                     ${isMe ? `<span class="msg-status-tick ${m.read ? 'read' : ''}">${m.read ? '✓✓' : '✓'}</span>` : ""}
-                    ${actionable ? `<button class="msg-actions-btn" title="Düzenle / sil" onclick="openMessageActions(${idx})">⋮</button>` : ""}
+                    ${actionable ? `<button class="msg-actions-btn" title="Edit / delete" onclick="openMessageActions(${idx})">⋮</button>` : ""}
                 </div>
             </div>
         `;
@@ -643,7 +643,7 @@ let recordingTick = null;
 function setRecordingUi(on) {
     recordingBar.classList.toggle("hidden", !on);
     voiceBtn.classList.toggle("recording", on);
-    voiceBtn.title = on ? "Kaydı bitir ve gönder" : "Sesli mesaj kaydet";
+    voiceBtn.title = on ? "Finish and send recording" : "Record voice message";
     clearInterval(recordingTick);
     if (on) {
         const t0 = Date.now();
@@ -660,7 +660,7 @@ async function finishVoiceRecording() {
     setRecordingUi(false);
     const rec = await stopRecording();
     if (!rec) {
-        appendSystemMessage(target, "Sesli mesaj çok kısa, gönderilmedi.");
+        appendSystemMessage(target, "Voice message too short, not sent.");
         return;
     }
     try {
@@ -669,8 +669,8 @@ async function finishVoiceRecording() {
         renderMessages();
         renderInbox();
     } catch (err) {
-        console.error("Sesli mesaj gönderilemedi:", err);
-        appendSystemMessage(target, "⚠️ Sesli mesaj gönderilemedi: " + err.message);
+        console.error("Failed to send voice message:", err);
+        appendSystemMessage(target, "⚠️ Failed to send voice message: " + err.message);
     }
 }
 
@@ -685,7 +685,7 @@ if (voiceBtn) {
             await startRecording(() => finishVoiceRecording());
             setRecordingUi(true);
         } catch (err) {
-            alert("Mikrofon kullanılamıyor: " + err.message);
+            alert("Microphone unavailable: " + err.message);
         }
     });
     document.getElementById("recording-cancel-btn").addEventListener("click", () => {
@@ -727,7 +727,7 @@ export async function openViewOnceMessage(element, partner, msgIndex) {
         closeBtn.addEventListener("click", handleClose);
         
     } catch (err) {
-        alert("Mesaj çözülemedi: " + err);
+        alert("Failed to decrypt message: " + err);
     }
 }
 
@@ -873,7 +873,7 @@ export async function sendMessage() {
     const staged = state.staged_file;
     if (!text && !staged) return;
     if (!state.recipient) {
-        alert("Lütfen önce bir sohbet seçin!");
+        alert("Please select a chat first!");
         return;
     }
     
@@ -896,7 +896,7 @@ export async function sendMessage() {
         fileInput.value = "";
         
         uploadProgressContainer.classList.remove("hidden");
-        uploadStatusText.innerText = "Dosya okunuyor...";
+        uploadStatusText.innerText = "Reading file...";
         uploadProgressBar.style.width = "10%";
         uploadPercentageText.innerText = "10%";
 
@@ -905,13 +905,13 @@ export async function sendMessage() {
             try {
                 const arrayBuffer = fileReader.result;
                 
-                uploadStatusText.innerText = "Dosya şifreleniyor (E2EE)...";
+                uploadStatusText.innerText = "Encrypting file (E2EE)...";
                 uploadProgressBar.style.width = "30%";
                 uploadPercentageText.innerText = "30%";
                 
                 const encryptedB64 = await encryptBytesJS(arrayBuffer, state.recipientPubKey);
                 
-                uploadStatusText.innerText = "Sunucuya yükleniyor...";
+                uploadStatusText.innerText = "Uploading to server...";
                 uploadProgressBar.style.width = "60%";
                 uploadPercentageText.innerText = "60%";
                 
@@ -938,7 +938,7 @@ export async function sendMessage() {
                 
                 if (resp.status !== 200) {
                     const errText = await resp.text();
-                    throw new Error("Yükleme başarısız: " + errText);
+                    throw new Error("Upload failed: " + errText);
                 }
                 
                 const uploadData = await resp.json();
@@ -991,19 +991,19 @@ export async function sendMessage() {
                 
                 uploadProgressBar.style.width = "100%";
                 uploadPercentageText.innerText = "100%";
-                uploadStatusText.innerText = "Tamamlandı!";
+                uploadStatusText.innerText = "Completed!";
                 setTimeout(() => {
                     uploadProgressContainer.classList.add("hidden");
                     uploadProgressBar.style.width = "0%";
                 }, 1000);
                 
             } catch (err) {
-                alert("Dosya gönderilemedi: " + err.message);
+                alert("Failed to send file: " + err.message);
                 uploadProgressContainer.classList.add("hidden");
             }
         };
         fileReader.onerror = function() {
-            alert("Dosya okuma hatası.");
+            alert("File read error.");
             uploadProgressContainer.classList.add("hidden");
         };
         fileReader.readAsArrayBuffer(staged);
@@ -1018,7 +1018,7 @@ export async function sendMessage() {
             if (state.isGroup) {
                 const groupKeyHex = await dbGet("group_keys", state.recipient);
                 if (!groupKeyHex) {
-                    alert("Bu grubun şifreleme anahtarı yerel depoda bulunamadı!");
+                    alert("Encryption key for this group was not found in local storage!");
                     return;
                 }
                 encryptedPayload = await encryptSymmetricJS(text, groupKeyHex);
@@ -1071,8 +1071,8 @@ export async function sendMessage() {
             
             await sendFrameWithFallback(textMsgPayload);
         } catch (err) {
-            console.error("Mesaj gönderilemedi:", err);
-            alert("Mesaj gönderilemedi: " + err);
+            console.error("Failed to send message:", err);
+            alert("Failed to send message: " + err);
         }
     }
 }
@@ -1114,8 +1114,8 @@ async function commitMessageChange(kind) {
     try {
         await sendMessageChange(kind, partner, msgUid, newText);
     } catch (err) {
-        console.error("Değişiklik gönderilemedi:", err);
-        appendSystemMessage(partner, "⚠️ Değişiklik karşı tarafa gönderilemedi.");
+        console.error("Failed to send modification:", err);
+        appendSystemMessage(partner, "⚠️ Failed to send modification to peer.");
     }
 }
 

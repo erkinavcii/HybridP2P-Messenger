@@ -276,9 +276,9 @@ async function receiveGroupKey(sender, groupId, encPayload, signature) {
         if (!sigValid) {
             console.error(`[GroupKey] '${sender}' grup anahtarı imzası GEÇERSİZ — reddedildi (${groupId}).`);
             if (existing) {
-                await addGroupSystemMessage(groupId, `⚠️ UYARI: '${sender}' adına gelen grup anahtarı imza doğrulamasından geçemedi ve reddedildi (taklit girişimi olabilir). Eski anahtar korundu.`);
+                await addGroupSystemMessage(groupId, `⚠️ WARNING: Group key from '${sender}' failed signature verification and was rejected (possible impersonation). Kept previous key.`);
             } else {
-                alert(`Güvenlik uyarısı: '${sender}' adına gelen grup anahtarının imzası doğrulanamadı ve reddedildi.`);
+                alert(`Security warning: The group key signature from '${sender}' could not be verified and was rejected.`);
             }
             return "rejected";
         }
@@ -287,26 +287,26 @@ async function receiveGroupKey(sender, groupId, encPayload, signature) {
     let keyHex;
     try {
         keyHex = String(await decryptMessageJS(encPayload, state.privateKeyPem)).trim().toLowerCase();
-        if (!/^[0-9a-f]{64}$/.test(keyHex)) throw new Error("beklenmeyen anahtar biçimi");
+        if (!/^[0-9a-f]{64}$/.test(keyHex)) throw new Error("unexpected key format");
     } catch (ex) {
-        console.error("Grup anahtarı çözme hatası:", ex);
+        console.error("Failed to decrypt group key:", ex);
         return "error";
     }
 
     if (existing && String(existing).toLowerCase() === keyHex) return "unchanged";
 
     if (decideGroupKey(!!existing, !!signature, sigValid) !== "accept") {
-        console.error(`[GroupKey] '${sender}' imzasız anahtar değişikliği reddedildi (${groupId}).`);
-        await addGroupSystemMessage(groupId, `⚠️ UYARI: '${sender}' imzasız bir grup anahtarı değişikliği gönderdi ve reddedildi. Eski anahtar korundu.`);
+        console.error(`[GroupKey] Unsigned key rotation from '${sender}' rejected (${groupId}).`);
+        await addGroupSystemMessage(groupId, `⚠️ WARNING: '${sender}' sent an unsigned group key rotation, which was rejected. Kept previous key.`);
         return "rejected";
     }
 
     await dbSet("group_keys", groupId, keyHex);
     if (existing) {
-        await addGroupSystemMessage(groupId, `🔑 '${sender}' grup anahtarını yeniledi.`);
+        await addGroupSystemMessage(groupId, `🔑 '${sender}' rotated the group key.`);
         return "replaced";
     }
-    console.log(`Grup anahtarı alındı: ${groupId} (Gönderen: ${sender})`);
+    console.log(`Group key received: ${groupId} (Sender: ${sender})`);
     await syncUserGroups();
     return "accepted";
 }
@@ -315,7 +315,7 @@ function warnBlockedMessage(sender) {
     window.dispatchEvent(new CustomEvent('system-message', {
         detail: {
             partner: sender,
-            text: `⚠️ '${sender}' adına gelen bir mesajın imzası doğrulanamadı ve mesaj engellendi (taklit girişimi olabilir).`
+            text: `⚠️ A message from '${sender}' failed signature verification and was blocked (possible impersonation).`
         }
     }));
 }
@@ -401,8 +401,8 @@ export function connectWebSocket() {
                 if (!isValidChallenge(challenge)) {
                     // İmzalama yok: bağlantıyı kapat ve kullanıcıyı uyar
                     challengeRejected = true;
-                    console.error("[WS Güvenlik] Sunucu geçersiz challenge gönderdi, imzalanmadı:", challenge);
-                    const warn = "⚠️ Güvenlik uyarısı: sunucu geçersiz bir kimlik doğrulama isteği (challenge) gönderdi. Bağlantı güvenlik için reddedildi; 5 dk sonra yeniden denenecek.";
+                    console.error("[WS Security] Server sent invalid challenge, not signed:", challenge);
+                    const warn = "⚠️ Security warning: the server sent an invalid authentication challenge. Connection rejected for security; retrying in 5 minutes.";
                     window.dispatchEvent(new CustomEvent('system-message', {
                         detail: { partner: state.recipient, text: warn }
                     }));
@@ -523,9 +523,9 @@ export function connectWebSocket() {
                     }
                     window.dispatchEvent(new CustomEvent('chats-updated'));
                 } catch (err) {
-                    console.error(`[Voice] '${sender}' sesli mesajı alınamadı:`, err);
+                    console.error(`[Voice] Failed to receive voice message from '${sender}':`, err);
                     window.dispatchEvent(new CustomEvent('system-message', {
-                        detail: { partner: sender, text: `⚠️ '${sender}' adlısından gelen sesli mesaj alınamadı.` }
+                        detail: { partner: sender, text: `⚠️ Failed to receive voice message from '${sender}'.` }
                     }));
                 }
             }
@@ -643,12 +643,12 @@ export function connectWebSocket() {
                 }
                 
                 if (!verified) {
-                    console.error(`HATA: '${sender}' kullanıcısının grup imza doğrulaması başarısız!`);
+                    console.error(`ERROR: Group signature verification failed for '${sender}'!`);
                     if (isActive) {
                         window.dispatchEvent(new CustomEvent('system-message', {
                             detail: {
                                 partner: groupId,
-                                text: `⚠️ UYARI: '${sender}' adlı kullanıcının kimliği doğrulanamadı (Taklit Teşebbüsü)!`
+                                text: `⚠️ WARNING: Could not verify identity of '${sender}' (possible impersonation)!`
                             }
                         }));
                     }

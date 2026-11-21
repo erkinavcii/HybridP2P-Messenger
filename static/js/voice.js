@@ -80,7 +80,7 @@ export function isRecording() {
 export async function startRecording(onLimit) {
     if (recorder) return;
     const mime = pickMime();
-    if (!mime) throw new Error("Bu tarayıcı Opus ses kaydını desteklemiyor.");
+    if (!mime) throw new Error("This browser does not support Opus audio recording.");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     chunks = [];
     recorder = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
@@ -132,7 +132,7 @@ export async function sendVoice(recipient, recipientPubKey, recording, sendFrame
     const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "POST", path, bodyText);
     headers["Content-Type"] = "application/json";
     const resp = await fetch(`${API_URL}${path}`, { method: "POST", headers, body: bodyText });
-    if (resp.status !== 200) throw new Error(`yükleme başarısız (${resp.status})`);
+    if (resp.status !== 200) throw new Error(`upload failed (${resp.status})`);
     const fileUuid = (await resp.json()).uuid;
     const timestamp = new Date().toISOString();
     await sendFrame({
@@ -142,7 +142,7 @@ export async function sendVoice(recipient, recipientPubKey, recording, sendFrame
     await storeAudio(recipient, fileUuid, recording.bytes);
     return {
         sender: state.username, is_voice: true, file_uuid: fileUuid, original_name: originalName,
-        duration: recording.duration, timestamp, content: "🎤 Sesli mesaj", read: false
+        duration: recording.duration, timestamp, content: "🎤 Voice message", read: false
     };
 }
 
@@ -151,12 +151,12 @@ export async function receiveVoice(sender, fileUuid, originalName, timestamp) {
     const path = `/api/download_file/${fileUuid}`;
     const headers = await makeAuthHeadersJS(state.username, state.privateKeyPem, "GET", path);
     const res = await fetch(`${API_URL}${path}`, { headers });
-    if (res.status !== 200) throw new Error(`indirme başarısız (${res.status})`);
+    if (res.status !== 200) throw new Error(`download failed (${res.status})`);
     const bytes = await decryptBytesJS((await res.json()).encrypted_data, state.privateKeyPem);
     await storeAudio(sender, fileUuid, bytes);
     return {
         sender, is_voice: true, file_uuid: fileUuid, original_name: originalName,
-        duration: await measureDuration(bytes), timestamp, content: "🎤 Sesli mesaj",
+        duration: await measureDuration(bytes), timestamp, content: "🎤 Voice message",
         read: state.recipient === sender
     };
 }

@@ -169,22 +169,22 @@ if (newChatConfirmBtn) {
                     closeModal();
                     selectChat(partner, data.public_key, false);
                 } else {
-                    alert(`Kullanıcı '${partner}' bulunamadı veya sunucu hatası.`);
+                    alert(`User '${partner}' not found or server error.`);
                 }
             } catch (err) {
-                alert("Bağlantı hatası: " + err);
+                alert("Connection error: " + err);
             }
         } else {
             // Group Chat Creation
             const groupName = document.getElementById("group-name-input").value.trim();
             const membersRaw = document.getElementById("group-members-input").value.trim().toLowerCase();
             if (!groupName) {
-                alert("Lütfen bir grup adı girin.");
+                alert("Please enter a group name.");
                 return;
             }
             const members = membersRaw.split(",").map(m => m.trim()).filter(m => m.length > 0);
             if (members.length === 0) {
-                alert("Lütfen en az bir üye girin.");
+                alert("Please enter at least one member.");
                 return;
             }
             
@@ -251,10 +251,10 @@ if (newChatConfirmBtn) {
                     selectChat(groupId, null, true);
                 } else {
                     const errTxt = await resp.text();
-                    alert("Grup oluşturulurken hata oluştu: " + errTxt);
+                    alert("Error creating group: " + errTxt);
                 }
             } catch (err) {
-                alert("Grup oluşturulamadı: " + err.message);
+                alert("Failed to create group: " + err.message);
             } finally {
                 newChatConfirmBtn.disabled = false;
                 newChatConfirmBtn.innerText = "Create Group";
@@ -267,7 +267,7 @@ if (newChatConfirmBtn) {
 if (groupRekeyBtn) {
     groupRekeyBtn.addEventListener("click", async () => {
         if (!state.recipient || !state.isGroup) return;
-        if (!confirm("Bu gruba ait şifreleme anahtarını yenilemek istiyor musunuz? Gruptaki tüm aktif üyeler yeni anahtarla güncellenecektir.")) return;
+        if (!confirm("Rotate the encryption key for this group? All active members will receive the new key.")) return;
         
         groupRekeyBtn.disabled = true;
         try {
@@ -289,12 +289,12 @@ if (groupRekeyBtn) {
                         console.error("Rekey distribution error for member:", m.username, err);
                     }
                 }
-                alert("Grup anahtarı başarıyla yenilendi ve dağıtıldı.");
+                alert("Group key rotated and distributed successfully.");
             } else {
-                alert("Grup üyeleri listesi alınamadı.");
+                alert("Could not retrieve group members list.");
             }
         } catch (err) {
-            alert("Anahtar yenileme hatası: " + err.message);
+            alert("Key rotation error: " + err.message);
         } finally {
             groupRekeyBtn.disabled = false;
         }
@@ -304,7 +304,7 @@ if (groupRekeyBtn) {
 if (leaveGroupBtn) {
     leaveGroupBtn.addEventListener("click", async () => {
         if (!state.recipient || !state.isGroup) return;
-        if (!confirm("Bu gruptan çıkmak ve tüm grup mesaj geçmişini silmek istediğinize emin misiniz?")) return;
+        if (!confirm("Are you sure you want to leave this group and delete all local group message history?")) return;
         
         leaveGroupBtn.disabled = true;
         try {
@@ -323,13 +323,13 @@ if (leaveGroupBtn) {
                 emptyChatState.classList.remove("hidden");
                 activeChat.classList.add("hidden");
                 renderInbox();
-                alert("Gruptan başarıyla çıkıldı.");
+                alert("Left the group successfully.");
             } else {
                 const txt = await res.text();
-                alert("Gruptan çıkılamadı: " + txt);
+                alert("Failed to leave group: " + txt);
             }
         } catch (err) {
-            alert("Gruptan çıkma hatası: " + err.message);
+            alert("Error leaving group: " + err.message);
         } finally {
             leaveGroupBtn.disabled = false;
         }
@@ -459,7 +459,7 @@ if (importKeyFile) {
 if (attachBtn) {
     attachBtn.addEventListener("click", () => {
         if (!state.recipient) {
-            alert("Lütfen önce bir sohbet seçin!");
+            alert("Please select a chat first!");
             return;
         }
         fileInput.click();
@@ -472,7 +472,7 @@ if (fileInput) {
         if (!file) return;
 
         if (file.size > 10 * 1024 * 1024) {
-            alert("Dosya boyutu çok büyük! Maksimum limit 10 MB'tır.");
+            alert("File size is too large! Maximum limit is 10 MB.");
             fileInput.value = "";
             return;
         }
@@ -500,7 +500,7 @@ if (loginBtn) {
         if (!username) return;
         // Sunucudaki kuralın aynısı (server/routes/users.py USERNAME_RE)
         if (!/^[a-z0-9_]{2,32}$/.test(username)) {
-            alert("Geçersiz kullanıcı adı: 2-32 karakter, yalnızca a-z, 0-9 ve _ kullanılabilir.");
+            alert("Invalid username: 2-32 characters; only a-z, 0-9, and _ are allowed.");
             return;
         }
         
@@ -511,7 +511,7 @@ if (loginBtn) {
             if (importKeyCheckbox.checked) {
                 let importedPem = privateKeyInput.value.trim();
                 if (!importedPem) {
-                    alert("Lütfen özel anahtarınızı (Private Key PEM) yapıştırın veya dosya yükleyin.");
+                    alert("Please paste your Private Key PEM or upload a key file.");
                     loginBtn.disabled = false;
                     loginBtn.innerText = "Sign In";
                     return;
@@ -520,7 +520,7 @@ if (loginBtn) {
                 if (decryptKeyCheckbox.checked) {
                     const password = decryptPasswordInput.value;
                     if (!password) {
-                        alert("Şifreli anahtarı çözmek için lütfen parola girin.");
+                        alert("Please enter a password to decrypt the key.");
                         loginBtn.disabled = false;
                         loginBtn.innerText = "Sign In";
                         return;
@@ -528,7 +528,7 @@ if (loginBtn) {
                     try {
                         importedPem = await decryptPrivateKey(importedPem, password);
                     } catch (decryptErr) {
-                        alert("Şifre çözme başarısız! Parola yanlış veya dosya bozuk olabilir.");
+                        alert("Decryption failed! Wrong password or corrupted file.");
                         loginBtn.disabled = false;
                         loginBtn.innerText = "Sign In";
                         return;
@@ -542,7 +542,7 @@ if (loginBtn) {
                     await dbSet("keys", "private_key", importedPem);
                     await dbSet("keys", "public_key", pubKeyPem);
                 } catch (e) {
-                    alert("İçeri aktarma hatası: Geçersiz Özel Anahtar (Private Key PEM) formatı.");
+                    alert("Import error: Invalid Private Key PEM format.");
                     loginBtn.disabled = false;
                     loginBtn.innerText = "Sign In";
                     return;
@@ -604,10 +604,10 @@ if (loginBtn) {
                 connectWebSocket();
             } else {
                 const errText = await registerRes.text();
-                alert("Giriş başarısız: " + errText);
+                alert("Sign in failed: " + errText);
             }
         } catch (err) {
-            alert("Bağlantı hatası: " + err);
+            alert("Connection error: " + err);
         } finally {
             loginBtn.disabled = false;
             loginBtn.innerText = "Sign In";
@@ -662,7 +662,7 @@ if (backupKeyEncryptDownloadBtn) {
     backupKeyEncryptDownloadBtn.addEventListener("click", async () => {
         const password = backupPasswordInput.value;
         if (!password) {
-            alert("Lütfen yedek dosyasını şifrelemek için bir parola girin.");
+            alert("Please enter a password to encrypt the backup file.");
             return;
         }
         try {
@@ -682,9 +682,9 @@ if (backupKeyEncryptDownloadBtn) {
             backupPasswordInput.value = "";
             backupKeyEncryptDownloadBtn.disabled = false;
             backupKeyEncryptDownloadBtn.innerText = "Encrypt & Download";
-            alert("Şifreli yedek dosyası başarıyla indirildi.");
+            alert("Encrypted backup file downloaded successfully.");
         } catch (err) {
-            alert("Şifreleme hatası: " + err.message);
+            alert("Encryption error: " + err.message);
             backupKeyEncryptDownloadBtn.disabled = false;
             backupKeyEncryptDownloadBtn.innerText = "Encrypt & Download";
         }
@@ -772,12 +772,12 @@ if (ownAvatarBtn && ownAvatarInput) {
         try {
             await setOwnAvatar(await file.arrayBuffer());
         } catch (err) {
-            alert("Fotoğraf kullanılamadı: " + err.message);
+            alert("Could not use photo: " + err.message);
             return;
         }
         refreshOwnAvatarButton();
         const sent = await broadcastAvatar(sendFrameWithFallback);
-        console.log(`Profil fotoğrafı ${sent} kişiye şifreli gönderildi.`);
+        console.log(`Encrypted profile photo sent to ${sent} contacts.`);
     });
 }
 
@@ -788,12 +788,12 @@ const soundToggleBtn = document.getElementById("sound-toggle-btn");
 
 function refreshPrefButtons() {
     if (themeToggleBtn) {
-        themeToggleBtn.title = getPref("theme") === "light" ? "Koyu temaya geç" : "Açık temaya geç";
+        themeToggleBtn.title = getPref("theme") === "light" ? "Switch to dark theme" : "Switch to light theme";
     }
     if (soundToggleBtn) {
         const on = !!getPref("sound_enabled");
         soundToggleBtn.classList.toggle("pref-off", !on);
-        soundToggleBtn.title = on ? "Bildirim sesi açık (kapatmak için tıkla)" : "Bildirim sesi kapalı (açmak için tıkla)";
+        soundToggleBtn.title = on ? "Notification sound on (click to mute)" : "Notification sound muted (click to unmute)";
     }
 }
 if (themeToggleBtn) themeToggleBtn.addEventListener("click", () => { toggleTheme(); refreshPrefButtons(); });

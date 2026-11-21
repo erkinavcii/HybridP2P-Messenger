@@ -106,20 +106,20 @@
                         <button id="add-chat-btn" class="action-icon-btn" title="New Chat / Group">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                         </button>
-                        <button id="pure-p2p-btn" class="action-icon-btn" title="Pure P2P (Sunucusuz Bağlantı)">
+                        <button id="pure-p2p-btn" class="action-icon-btn" title="Pure P2P (Serverless Call)">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
                         </button>
-                        <button id="contacts-btn" class="action-icon-btn" title="Kişi rehberi">
+                        <button id="contacts-btn" class="action-icon-btn" title="Contacts">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                         </button>
-                        <button id="own-avatar-btn" class="action-icon-btn own-avatar-btn" title="Profil fotoğrafı (kişilerinize uçtan uca şifreli gönderilir)">
+                        <button id="own-avatar-btn" class="action-icon-btn own-avatar-btn" title="Profile photo (sent end-to-end encrypted to your contacts)">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.88 17.8M15 10a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                         </button>
                         <input type="file" id="own-avatar-input" accept="image/*" class="hidden">
-                        <button id="theme-toggle-btn" class="action-icon-btn" title="Tema değiştir (açık / koyu)">
+                        <button id="theme-toggle-btn" class="action-icon-btn" title="Toggle theme (light / dark)">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
                         </button>
-                        <button id="sound-toggle-btn" class="action-icon-btn" title="Bildirim sesi">
+                        <button id="sound-toggle-btn" class="action-icon-btn" title="Notification sound">
                             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
                         </button>
                         <button id="logout-btn" class="action-icon-btn" title="Sign Out">
@@ -159,7 +159,7 @@
                 <div id="empty-chat-state" class="empty-chat-state">
                     <div class="empty-chat-icon">💬</div>
                     <h3>Start Messaging Securely</h3>
-                    <p style="font-size: 13px; color: var(--text-muted); max-width: 320px; text-align: center;">All cryptographic keys are generated in your browser. Sunucu mesaj içeriklerinizi göremez.</p>
+                    <p style="font-size: 13px; color: var(--text-muted); max-width: 320px; text-align: center;">All cryptographic keys are generated in your browser. The server cannot read your messages.</p>
                 </div>
 
                 <!-- Active Chat Window -->
@@ -239,13 +239,13 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                 </svg>
                             </button>
-                            <button id="voice-btn" class="action-icon-btn voice-btn" title="Sesli mesaj kaydet">
+                            <button id="voice-btn" class="action-icon-btn voice-btn" title="Record voice message">
                                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
                             </button>
                             <div id="recording-bar" class="recording-bar hidden">
                                 <span class="rec-dot"></span>
                                 <span id="recording-time">0:00</span>
-                                <button id="recording-cancel-btn" class="action-icon-btn" title="Kaydı iptal et">✕</button>
+                                <button id="recording-cancel-btn" class="action-icon-btn" title="Cancel recording">✕</button>
                             </div>
                             <input type="text" id="message-input" class="input-message-box" placeholder="Type your secure message...">
                             <button id="send-btn" class="btn" style="width: auto; padding: 10px 18px; border-radius: 24px;">
@@ -342,70 +342,70 @@
         </div>
     </div>
 
-    <!-- Modal: Pure P2P (Sunucusuz) Connection -->
+    <!-- Modal: Pure P2P (Serverless) Connection -->
     <div id="p2p-modal" class="modal-overlay">
         <div class="modal" style="max-width: 480px;">
             <div class="modal-header">
-                <span class="modal-title">Pure P2P (Sunucusuz Bağlantı)</span>
+                <span class="modal-title">Pure P2P (Serverless Call)</span>
                 <button id="p2p-close-btn" class="action-icon-btn">✕</button>
             </div>
             <p style="font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 12px;">
-                Sunucusuz doğrudan E2EE bağlantısı kurmak için SDP kodlarını kopyalayıp yapıştırın.
+                Copy and paste SDP codes to establish a direct serverless E2EE connection.
             </p>
             
             <!-- Tab Headers -->
             <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
-                <button id="p2p-tab-caller" class="tab-btn active" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-color); border-bottom: 2px solid var(--accent-color); font-weight: 600; cursor: pointer;">Arama Başlat (Caller)</button>
-                <button id="p2p-tab-callee" class="tab-btn" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-muted); border-bottom: 2px solid transparent; font-weight: 600; cursor: pointer;">Aramaya Cevap Ver (Callee)</button>
+                <button id="p2p-tab-caller" class="tab-btn active" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-color); border-bottom: 2px solid var(--accent-color); font-weight: 600; cursor: pointer;">Start Call (Caller)</button>
+                <button id="p2p-tab-callee" class="tab-btn" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-muted); border-bottom: 2px solid transparent; font-weight: 600; cursor: pointer;">Answer Call (Callee)</button>
             </div>
 
             <!-- Caller Tab Content -->
             <div id="p2p-content-caller" class="tab-content">
                 <div class="input-group" style="margin-bottom: 10px;">
-                    <label for="p2p-call-type">Görüşme Tipi</label>
+                    <label for="p2p-call-type">Call Type</label>
                     <select id="p2p-call-type" class="input-control" style="background-color: var(--surface-deep); border: 1px solid var(--border-color); color: var(--text-color); padding: 10px; border-radius: 4px; width: 100%;">
-                        <option value="audio">🎙️ Sesli Arama (Audio)</option>
-                        <option value="video">📹 Görüntülü Arama (Video)</option>
+                        <option value="audio">🎙️ Audio Call</option>
+                        <option value="video">📹 Video Call</option>
                     </select>
                 </div>
-                <button id="p2p-gen-offer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">1. Arama Teklifi (Offer) Üret</button>
+                <button id="p2p-gen-offer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">1. Generate Call Offer</button>
                 
                 <div id="p2p-caller-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--accent-hover);">
                     <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                    <span style="font-size: 12px;">ICE adayları toplanıyor (bu işlem 2-5 sn sürebilir)...</span>
+                    <span style="font-size: 12px;">Gathering ICE candidates (this may take 2–5s)...</span>
                 </div>
                 
                 <div class="input-group" style="margin-bottom: 8px;">
-                    <label for="p2p-offer-code">Sizin Teklifiniz (Offer Kodu)</label>
-                    <textarea id="p2p-offer-code" class="input-control" rows="4" readonly placeholder="Burada kod üretilecek..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
+                    <label for="p2p-offer-code">Your Offer Code</label>
+                    <textarea id="p2p-offer-code" class="input-control" rows="4" readonly placeholder="Offer code will appear here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
-                <button id="p2p-copy-offer-btn" class="btn" style="background-color: var(--border-color); margin-bottom: 15px;" disabled>Teklifi Kopyala</button>
+                <button id="p2p-copy-offer-btn" class="btn" style="background-color: var(--border-color); margin-bottom: 15px;" disabled>Copy Offer</button>
 
                 <div class="input-group" style="margin-bottom: 8px;">
-                    <label for="p2p-caller-answer-code">2. Karşı Tarafın Cevabı (Answer Kodu)</label>
-                    <textarea id="p2p-caller-answer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Answer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
+                    <label for="p2p-caller-answer-code">2. Peer's Answer Code</label>
+                    <textarea id="p2p-caller-answer-code" class="input-control" rows="4" placeholder="Paste the Answer code from your peer here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
-                <button id="p2p-connect-btn" class="btn" style="background-color: var(--accent-color);" disabled>3. Bağlan ve Görüşmeyi Başlat</button>
+                <button id="p2p-connect-btn" class="btn" style="background-color: var(--accent-color);" disabled>3. Connect & Start Call</button>
             </div>
 
             <!-- Callee Tab Content -->
             <div id="p2p-content-callee" class="tab-content hidden">
                 <div class="input-group" style="margin-bottom: 10px;">
-                    <label for="p2p-callee-offer-code">1. Karşı Tarafın Teklifi (Offer Kodu)</label>
-                    <textarea id="p2p-callee-offer-code" class="input-control" rows="4" placeholder="Karşı taraftan gelen Offer kodunu buraya yapıştırın..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
+                    <label for="p2p-callee-offer-code">1. Peer's Offer Code</label>
+                    <textarea id="p2p-callee-offer-code" class="input-control" rows="4" placeholder="Paste the Offer code from your peer here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
-                <button id="p2p-gen-answer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">2. Kabul Et ve Cevap (Answer) Üret</button>
+                <button id="p2p-gen-answer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">2. Accept & Generate Answer</button>
                 
                 <div id="p2p-callee-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--accent-hover);">
                     <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                    <span style="font-size: 12px;">ICE adayları toplanıyor (bu işlem 2-5 sn sürebilir)...</span>
+                    <span style="font-size: 12px;">Gathering ICE candidates (this may take 2–5s)...</span>
                 </div>
                 
                 <div class="input-group" style="margin-bottom: 8px;">
-                    <label for="p2p-answer-code">Kabul Cevabınız (Answer Kodu)</label>
-                    <textarea id="p2p-answer-code" class="input-control" rows="4" readonly placeholder="Cevap kodunuz burada üretilecek..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
+                    <label for="p2p-answer-code">Your Answer Code</label>
+                    <textarea id="p2p-answer-code" class="input-control" rows="4" readonly placeholder="Your Answer code will appear here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
                 </div>
-                <button id="p2p-copy-answer-btn" class="btn" style="background-color: var(--border-color);" disabled>Cevabı Kopyala</button>
+                <button id="p2p-copy-answer-btn" class="btn" style="background-color: var(--border-color);" disabled>Copy Answer</button>
             </div>
         </div>
     </div>
@@ -435,32 +435,32 @@
         </div>
     </div>
 
-    <!-- Modal: Kişi rehberi -->
+    <!-- Modal: Contacts -->
     <div id="contacts-modal" class="modal-overlay">
         <div class="modal" style="max-width: 440px;">
             <div class="modal-header">
-                <span class="modal-title">Kişi rehberi</span>
+                <span class="modal-title">Contacts</span>
                 <button id="contacts-close-btn" class="action-icon-btn">✕</button>
             </div>
-            <input type="text" id="contacts-search" class="input-control" placeholder="İsme göre ara...">
+            <input type="text" id="contacts-search" class="input-control" placeholder="Search by name...">
             <div id="contacts-list" class="contacts-list"></div>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Parmak izini karşı tarafla başka bir kanaldan (yüz yüze, telefon) karşılaştırarak anahtarın gerçekten ona ait olduğunu doğrulayın.</p>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Compare this fingerprint with your contact over a separate channel (in person, phone) to verify the key really belongs to them.</p>
         </div>
     </div>
 
-    <!-- Modal: Mesajı düzenle / herkesten sil -->
+    <!-- Modal: Edit / delete message -->
     <div id="edit-message-modal" class="modal-overlay">
         <div class="modal" style="max-width: 420px;">
             <div class="modal-header">
-                <span class="modal-title">Mesajı düzenle</span>
+                <span class="modal-title">Edit Message</span>
             </div>
             <textarea id="edit-message-input" class="input-control" rows="3" maxlength="8000" style="resize: vertical;"></textarea>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">"Herkesten sil" karşı tarafta da kaldırır; mesaj daha önce okunmuş veya kopyalanmış olabilir.</p>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">"Delete for everyone" also removes it on the recipient's device; the message may have already been read or copied.</p>
             <div class="modal-footer" style="display: flex; gap: 8px; justify-content: space-between;">
-                <button id="edit-message-delete-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--danger);">Herkesten sil</button>
+                <button id="edit-message-delete-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--danger);">Delete for everyone</button>
                 <div style="display: flex; gap: 8px;">
-                    <button id="edit-message-cancel-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--border-color); color: var(--text-color);">İptal</button>
-                    <button id="edit-message-save-btn" class="btn" style="width: auto; padding: 10px 16px;">Kaydet</button>
+                    <button id="edit-message-cancel-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--border-color); color: var(--text-color);">Cancel</button>
+                    <button id="edit-message-save-btn" class="btn" style="width: auto; padding: 10px 16px;">Save</button>
                 </div>
             </div>
         </div>

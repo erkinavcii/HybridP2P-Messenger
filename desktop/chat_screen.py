@@ -101,7 +101,7 @@ class ChatScreenMixin:
             if not new_text or new_text == current_text:
                 close(); return
             if not self.state["store"].edit_message(recipient, msg_uid, me, new_text):
-                self.log_status("Mesaj düzenlenemedi."); close(); return
+                self.log_status("Could not edit message."); close(); return
             close()
             threading.Thread(target=self.send_message_change,
                              args=("message_edit", recipient, msg_uid, new_text), daemon=True).start()
@@ -110,29 +110,29 @@ class ChatScreenMixin:
 
         def do_delete(e):
             if not self.state["store"].delete_message(recipient, msg_uid, me):
-                self.log_status("Mesaj silinemedi."); close(); return
+                self.log_status("Could not delete message."); close(); return
             close()
             threading.Thread(target=self.send_message_change,
                              args=("message_delete", recipient, msg_uid), daemon=True).start()
             self.load_history_to_chat()
             self.load_inbox_chats()
-            self.log_status("Mesaj herkesten silindi.")
+            self.log_status("Message deleted for everyone.")
 
         dialog = ft.AlertDialog(
-            title=ft.Text("Mesaj", size=16, color=C.text, weight=ft.FontWeight.BOLD),
+            title=ft.Text("Edit message", size=16, color=C.text, weight=ft.FontWeight.BOLD),
             content=ft.Container(
                 content=ft.Column([
                     edit_field,
-                    ft.Text("Düzenleme ve silme karşı tarafa da uygulanır (uçtan uca şifreli, imzalı).",
+                    ft.Text("Edits and deletions also apply to the peer (end-to-end encrypted, signed).",
                             size=10, color=C.text_muted),
                 ], tight=True, spacing=6),
                 width=340,
             ),
             actions=[
-                ft.TextButton("Herkesten sil", on_click=do_delete,
+                ft.TextButton("Delete for everyone", on_click=do_delete,
                               style=ft.ButtonStyle(color=C.danger)),
-                ft.TextButton("İptal", on_click=close, style=ft.ButtonStyle(color=C.text_muted)),
-                ft.TextButton("Kaydet", on_click=do_edit, style=ft.ButtonStyle(color=C.accent)),
+                ft.TextButton("Cancel", on_click=close, style=ft.ButtonStyle(color=C.text_muted)),
+                ft.TextButton("Save", on_click=do_edit, style=ft.ButtonStyle(color=C.accent)),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=C.surface,
@@ -154,13 +154,13 @@ class ChatScreenMixin:
         self.recording_bar.visible = on
         self.voice_btn.icon = ft.Icons.STOP_CIRCLE if on else ft.Icons.MIC_NONE
         self.voice_btn.icon_color = C.danger if on else C.text_muted
-        self.voice_btn.tooltip = "Kaydı bitir ve gönder" if on else "Sesli mesaj kaydet"
+        self.voice_btn.tooltip = "Finish and send recording" if on else "Record voice message"
         self.message_input.disabled = on
         try: self.page.update()
         except: pass
 
     def toggle_voice_recording(self, e):
-        """1. tık: kaydı başlat. 2. tık (veya "Gönder"): durdur, şifrele, gönder."""
+        """1. tık: kaydı başlat. 2. tık (veya "Send"): durdur, şifrele, gönder."""
         from desktop import voice
         rec = self._voice_recorder()
 
@@ -173,13 +173,13 @@ class ChatScreenMixin:
 
         recipient = self.state.get("recipient")
         if not recipient or self.state.get("is_group", False):
-            self.log_status("Sesli mesaj yalnızca birebir sohbetlerde gönderilebilir.")
+            self.log_status("Voice messages can only be sent in direct chats.")
             return
         if not self.state.get("recipient_pub_key"):
-            self.log_status("Alıcının anahtarı yok, sesli mesaj gönderilemez.")
+            self.log_status("Missing recipient key; cannot send voice message.")
             return
         if self.state.get("call_state") in ("ringing", "calling", "connected"):
-            self.log_status("Arama sırasında sesli mesaj kaydedilemez.")
+            self.log_status("Cannot record voice messages during a call.")
             return
         try:
             rec.start()

@@ -55,7 +55,7 @@ class MessengerApp(
         self.serverless_only = serverless_only
         # ── Sayfa Ayarları ────────────────────────────────────────────
         self.page = page
-        page.title       = "HybridP2P Messenger — Sunucusuz" if serverless_only else "HybridP2P Messenger"
+        page.title       = "HybridP2P Messenger — Serverless" if serverless_only else "HybridP2P Messenger"
         page.window.width  = 480
         page.window.height = 820
         page.padding     = 0
@@ -211,8 +211,8 @@ class MessengerApp(
         # Yalnızca IP modundaki (kendinden imzalı) sunucular için; bir kez girilir,
         # adresle birlikte hatırlanır (desktop/tls_pin.py)
         self.tls_pin_field = ft.TextField(
-            label="Sertifika parmak izi",
-            hint_text="İsteğe bağlı — yalnızca IP ile kurulan sunucular (AB:CD:…)",
+            label="Certificate Fingerprint",
+            hint_text="Optional — for IP-only servers (AB:CD:…)",
             prefix_icon=ft.Icons.VERIFIED_USER,
             border_color=C.accent, focused_border_color=C.accent_light,
             cursor_color=C.accent, text_size=12,
@@ -265,10 +265,10 @@ class MessengerApp(
         # Sunucu olmadan başlat: kayıt/WebSocket yok, yalnızca doğrudan bağlantılar
         self.serverless_btn = ft.TextButton(
             content=ft.Row([ft.Icon(ft.Icons.WIFI_TETHERING, size=18),
-                            ft.Text("Sunucusuz başlat (sunucu olmadan)", size=13)],
+                            ft.Text("Start Serverless (no server)", size=13)],
                            alignment=ft.MainAxisAlignment.CENTER, spacing=6, tight=True),
             on_click=self.on_serverless_start_click,
-            tooltip="Sunucuya bağlanmadan, iki taraf da açıkken bağlantı kodlarıyla doğrudan mesajlaşma",
+            tooltip="Direct messaging with connection codes when both peers are online, without connecting to a server",
             style=ft.ButtonStyle(color=C.accent),
         )
         if self.serverless_only:
@@ -277,7 +277,7 @@ class MessengerApp(
             self.login_btn.visible = False
             self.serverless_btn = ft.Button(
                 content=ft.Row([ft.Icon(ft.Icons.WIFI_TETHERING, size=20),
-                                ft.Text("Sunucusuz başlat", size=15, weight=ft.FontWeight.BOLD)],
+                                ft.Text("Start Serverless", size=15, weight=ft.FontWeight.BOLD)],
                                alignment=ft.MainAxisAlignment.CENTER, spacing=8),
                 on_click=self.on_serverless_start_click, width=280, height=52,
                 style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent,
@@ -328,7 +328,7 @@ class MessengerApp(
                         content=ft.Row(
                             controls=[
                                 ft.Icon(ft.Icons.SHIELD, size=14, color=C.success),
-                                ft.Text("RSA-4096 + AES-256-GCM + E2EE Dosya", size=11, color=C.success),
+                                ft.Text("RSA-4096 + AES-256-GCM + E2EE Files", size=11, color=C.success),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER, spacing=6,
                         ),
@@ -369,8 +369,8 @@ class MessengerApp(
             shift_enter=True,
         )
 
-        # "yazıyor…" göstergesi (sohbet başlığında, alıcı durumunun altında)
-        self.typing_text = ft.Text("yazıyor…", size=10, color=C.accent_light,
+        # "typing…" indicator (in chat header, below peer status)
+        self.typing_text = ft.Text("typing…", size=10, color=C.accent_light,
                                    italic=True, visible=False)
 
         self.username_text = ft.Text("", size=11, color=C.text_secondary)
@@ -452,12 +452,12 @@ class MessengerApp(
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.CONTACTS, icon_color=C.accent,
-                                    icon_size=20, tooltip="Kişi Rehberi",
+                                    icon_size=20, tooltip="Contacts",
                                     on_click=self.open_contacts_dialog,
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.ROUTER, icon_color=C.accent,
-                                    icon_size=20, tooltip="Pure P2P (Sunucusuz Arama)",
+                                    icon_size=20, tooltip="Pure P2P (Serverless Call)",
                                     on_click=self.open_pure_p2p_dialog,
                                 ),
                                 ft.IconButton(
@@ -509,9 +509,9 @@ class MessengerApp(
         # Sesli mesaj: kayıt butonu + kayıt sırasında görünen çubuk
         self.voice_btn = ft.IconButton(
             icon=ft.Icons.MIC_NONE, icon_color=C.text_muted, icon_size=20,
-            tooltip="Sesli mesaj kaydet", on_click=self.toggle_voice_recording,
+            tooltip="Record voice message", on_click=self.toggle_voice_recording,
         )
-        self.recording_label = ft.Text("Kaydediliyor 0:00", size=12, color=C.danger,
+        self.recording_label = ft.Text("Recording 0:00", size=12, color=C.danger,
                                        weight=ft.FontWeight.BOLD)
         self.recording_bar = ft.Container(
             content=ft.Row(
@@ -519,9 +519,9 @@ class MessengerApp(
                     ft.Icon(ft.Icons.FIBER_MANUAL_RECORD, color=C.danger, size=14),
                     self.recording_label,
                     ft.Container(expand=True),
-                    ft.TextButton("İptal", on_click=self.cancel_voice_recording,
+                    ft.TextButton("Cancel", on_click=self.cancel_voice_recording,
                                   style=ft.ButtonStyle(color=C.text_muted)),
-                    ft.TextButton("Gönder", on_click=self.toggle_voice_recording,
+                    ft.TextButton("Send", on_click=self.toggle_voice_recording,
                                   style=ft.ButtonStyle(color=C.accent)),
                 ],
                 spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,

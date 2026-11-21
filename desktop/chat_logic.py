@@ -25,9 +25,9 @@ from desktop.notify import play_notification
 from desktop import settings_store
 from desktop import voice
 
-# Tarih ayracı etiketleri için Türkçe ay adları
-_TR_MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-              "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+# English month names for date separator labels
+_EN_MONTHS = ["January", "February", "March", "April", "May", "June",
+              "July", "August", "September", "October", "November", "December"]
 
 
 class ChatLogicMixin:
@@ -56,7 +56,7 @@ class ChatLogicMixin:
         return dt.date() if dt else None
 
     def _fmt_day_label(self, ts: str) -> str:
-        """Tarih ayracı etiketi: "Bugün" / "Dün" / "12 Haziran" / "12 Haziran 2025"."""
+        """Date separator label: "Today" / "Yesterday" / "12 June" / "12 June 2025"."""
         dt = self._parse_ts(ts)
         if dt is None:
             return ""
@@ -64,12 +64,12 @@ class ChatLogicMixin:
         d = dt.date()
         delta = (today - d).days
         if delta == 0:
-            return "Bugün"
+            return "Today"
         if delta == 1:
-            return "Dün"
+            return "Yesterday"
         if d.year == today.year:
-            return f"{d.day} {_TR_MONTHS[d.month - 1]}"
-        return f"{d.day} {_TR_MONTHS[d.month - 1]} {d.year}"
+            return f"{d.day} {_EN_MONTHS[d.month - 1]}"
+        return f"{d.day} {_EN_MONTHS[d.month - 1]} {d.year}"
 
     def _append_day_separator_if_needed(self, ts: str):
         """Sohbetteki son baloncuktan farklı bir güne geçildiyse tarih ayracı ekler."""

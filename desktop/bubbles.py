@@ -78,7 +78,7 @@ class BubblesMixin:
         sub_color = C.on_accent_muted if is_mine else C.text_muted
         time_row_controls = [ft.Text(time_str, size=10, color=sub_color)]
         if edited:
-            time_row_controls.insert(0, ft.Text("düzenlendi", size=10, italic=True, color=sub_color))
+            time_row_controls.insert(0, ft.Text("edited", size=10, italic=True, color=sub_color))
         if is_mine:
             tick_icon = ft.Icon(
                 ft.Icons.DONE_ALL if is_read else ft.Icons.DONE,
@@ -92,7 +92,7 @@ class BubblesMixin:
         if actionable:
             time_row_controls.append(ft.IconButton(
                 icon=ft.Icons.MORE_VERT, icon_size=14, icon_color=sub_color,
-                tooltip="Düzenle / sil", on_click=open_menu,
+                tooltip="Edit / delete", on_click=open_menu,
                 style=ft.ButtonStyle(padding=0), width=22, height=22))
 
         time_row = ft.Row(
@@ -138,7 +138,7 @@ class BubblesMixin:
                     content=ft.Row(
                         controls=[
                             ft.Icon(ft.Icons.BLOCK, size=14, color=C.text_muted),
-                            ft.Text("Bu mesaj silindi", size=13, italic=True, color=C.text_muted),
+                            ft.Text("This message was deleted", size=13, italic=True, color=C.text_muted),
                             ft.Text(time_str, size=10, color=C.text_faint),
                         ],
                         spacing=6, tight=True,
@@ -524,13 +524,13 @@ class BubblesMixin:
         sub = C.on_accent_muted if is_mine else C.text_muted
         status = ft.Text(voice.fmt_duration(duration), size=12, color=fg)
         play_btn = ft.IconButton(icon=ft.Icons.PLAY_ARROW_ROUNDED, icon_color=fg,
-                                 icon_size=26, tooltip="Oynat")
+                                 icon_size=26, tooltip="Play")
         playing = {"on": False}
 
         def _set_idle():
             playing["on"] = False
             play_btn.icon = ft.Icons.PLAY_ARROW_ROUNDED
-            play_btn.tooltip = "Oynat"
+            play_btn.tooltip = "Play"
             try: self.page.update()
             except: pass
 
@@ -538,7 +538,7 @@ class BubblesMixin:
             data = load_audio()
             if not data:
                 def _missing():
-                    status.value = "ses dosyası bulunamadı"
+                    status.value = "audio file not found"
                     _set_idle()
                 self.run_on_ui(_missing)
                 return
@@ -546,8 +546,8 @@ class BubblesMixin:
                 pcm, sr = voice.decode_audio(data)
                 voice.player.play(pcm, sr, on_done=lambda: self.run_on_ui(_set_idle))
             except Exception as ex:
-                print(f"[Voice] Oynatma hatasi: {ex}")
-                self.log_status("Sesli mesaj oynatılamadı (ses cihazı?).")
+                print(f"[Voice] Playback error: {ex}")
+                self.log_status("Could not play voice message (audio device?).")
                 self.run_on_ui(_set_idle)
 
         def on_play(e):
@@ -556,7 +556,7 @@ class BubblesMixin:
                 return
             playing["on"] = True
             play_btn.icon = ft.Icons.STOP_ROUNDED
-            play_btn.tooltip = "Durdur"
+            play_btn.tooltip = "Stop"
             self.page.update()
             threading.Thread(target=_play_worker, daemon=True).start()
 

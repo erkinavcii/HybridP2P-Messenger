@@ -653,12 +653,12 @@ class InboxScreenMixin:
 
         def on_delete_contact(username):
             self.state["store"].delete_contact(username)
-            self.log_status(f"'{username}' rehberden silindi.")
+            self.log_status(f"'{username}' removed from contacts.")
             render_contacts()
             self.page.update()
 
         contacts_search = ft.TextField(
-            hint_text="Kişilerde ara...",
+            hint_text="Search by name...",
             prefix_icon=ft.Icons.SEARCH,
             border_color=C.surface_alt,
             focused_border_color=C.accent,
@@ -679,13 +679,13 @@ class InboxScreenMixin:
             if not contacts:
                 if query:
                     icon, title, subtitle = (
-                        ft.Icons.SEARCH_OFF, "Sonuç bulunamadı",
-                        f"'{contacts_search.value.strip()}' ile eşleşen kişi yok.",
+                        ft.Icons.SEARCH_OFF, "No results found",
+                        f"No contact matching '{contacts_search.value.strip()}'.",
                     )
                 else:
                     icon, title, subtitle = (
-                        ft.Icons.CONTACTS_OUTLINED, "Rehber boş.",
-                        "Bir kişiyle ilk kez bağlandığınızda anahtarı burada saklanır.",
+                        ft.Icons.CONTACTS_OUTLINED, "Contacts list is empty.",
+                        "Keys are saved here when you connect with someone for the first time.",
                     )
                 contacts_column.controls.append(
                     ft.Container(
@@ -726,17 +726,17 @@ class InboxScreenMixin:
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.CHAT, icon_size=16, icon_color=C.accent,
-                                    tooltip="Sohbet Aç",
+                                    tooltip="Open Chat",
                                     on_click=lambda e, u=uname: on_start_chat(u),
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.FINGERPRINT, icon_size=16, icon_color=C.success,
-                                    tooltip="Parmak İzini Kopyala",
+                                    tooltip="Copy Fingerprint",
                                     on_click=lambda e, f=fp: on_copy_fingerprint(f),
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.DELETE_OUTLINE, icon_size=16, icon_color=C.danger,
-                                    tooltip="Rehberden Sil",
+                                    tooltip="Remove Contact",
                                     on_click=lambda e, u=uname: on_delete_contact(u),
                                 ),
                             ],
@@ -760,7 +760,7 @@ class InboxScreenMixin:
             title=ft.Row(
                 controls=[
                     ft.Icon(ft.Icons.CONTACTS, color=C.accent),
-                    ft.Text("Kişi Rehberi", size=16, color=C.text, weight=ft.FontWeight.BOLD),
+                    ft.Text("Contacts", size=16, color=C.text, weight=ft.FontWeight.BOLD),
                     ft.Container(expand=True),
                     ft.IconButton(
                         icon=ft.Icons.CLOSE, icon_size=18, icon_color=C.text_muted,
@@ -772,7 +772,7 @@ class InboxScreenMixin:
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Text("Doğrulanmış kişilerin yerel anahtar kayıtları.",
+                        ft.Text("Local key records of verified contacts.",
                                 size=11, color=C.text_secondary),
                         contacts_search,
                         ft.Divider(color=C.surface_alt, height=8),
@@ -908,13 +908,13 @@ class InboxScreenMixin:
                 avatar_slot,
                 ft.Column(
                     controls=[
-                        ft.Text("Profil fotoğrafı", size=13, color=C.text, weight=ft.FontWeight.BOLD),
-                        ft.Text("Kişilerinize uçtan uca şifreli gönderilir; sunucu göremez.",
+                        ft.Text("Profile photo", size=13, color=C.text, weight=ft.FontWeight.BOLD),
+                        ft.Text("Sent end-to-end encrypted to your contacts; server cannot view it.",
                                 size=10, color=C.text_muted),
                     ],
                     spacing=2, tight=True, expand=True,
                 ),
-                ft.TextButton("Seç", on_click=on_pick_avatar, style=ft.ButtonStyle(color=C.accent)),
+                ft.TextButton("Choose", on_click=on_pick_avatar, style=ft.ButtonStyle(color=C.accent)),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
@@ -926,7 +926,7 @@ class InboxScreenMixin:
 
         def on_preview_toggle(e):
             settings_store.set("link_previews", bool(e.control.value))
-            self.log_status("Link önizleme açıldı." if e.control.value else "Link önizleme kapatıldı.")
+            self.log_status("Link previews enabled." if e.control.value else "Link previews disabled.")
 
         preview_switch = ft.Switch(value=bool(settings_store.get("link_previews")),
                                    active_color=C.accent, on_change=on_preview_toggle)
@@ -1048,7 +1048,7 @@ class InboxScreenMixin:
                             controls=[
                                 ft.Icon(ft.Icons.DARK_MODE if C.is_dark else ft.Icons.LIGHT_MODE,
                                         size=18, color=C.accent),
-                                ft.Text("Açık tema", size=13, color=C.text, expand=True),
+                                ft.Text("Light theme", size=13, color=C.text, expand=True),
                                 theme_switch,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1056,7 +1056,7 @@ class InboxScreenMixin:
                         ft.Row(
                             controls=[
                                 ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, size=18, color=C.accent),
-                                ft.Text("Bildirim sesi", size=13, color=C.text, expand=True),
+                                ft.Text("Notification sound", size=13, color=C.text, expand=True),
                                 sound_switch,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1066,8 +1066,8 @@ class InboxScreenMixin:
                                 ft.Icon(ft.Icons.LINK, size=18, color=C.accent),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Link önizleme", size=13, color=C.text),
-                                        ft.Text("Önizlemeyi siz çekersiniz; site IP'nizi görür, alıcınınkini görmez.",
+                                        ft.Text("Link previews", size=13, color=C.text),
+                                        ft.Text("You fetch the preview; the site sees your IP, not the recipient's.",
                                                 size=10, color=C.text_muted),
                                     ],
                                     spacing=1, tight=True, expand=True,

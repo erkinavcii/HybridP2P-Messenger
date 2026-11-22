@@ -11,26 +11,44 @@ import threading
 import uuid as uuid_lib
 
 import flet as ft
-from desktop.theme import C
+from desktop.theme import C, t, get_lang
 from desktop import settings_store
 
 from crypto_utils import public_key_to_pem_string, serialize_private_key
 
 
+def _format_fp(fp: str) -> str:
+    clean = "".join((fp or "").split())
+    return " ".join(clean[i:i + 4] for i in range(0, len(clean), 4)) if clean else "—"
+
+
 class InboxScreenMixin:
 
     def make_avatar(self, partner: str, is_group: bool, radius: int = 20):
-        """Kişinin E2EE avatarı varsa onu, yoksa ikonlu varsayılanı döndürür."""
+        """Kişinin E2EE avatarı varsa onu, yoksa baş harf/ikonlu varsayılanı döndürür."""
         icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
         bg = C.accent if is_group else C.avatar_dm
         b64 = None
         if not is_group and self.state.get("store"):
             b64 = self.state["store"].get_contact_avatar(partner)
         if b64:
-            return ft.CircleAvatar(foreground_image_src=f"data:image/jpeg;base64,{b64}",
-                                   bgcolor=bg, radius=radius)
-        return ft.CircleAvatar(content=ft.Icon(icon, color=C.on_accent, size=int(radius * 0.9)),
-                               bgcolor=bg, radius=radius)
+            return ft.CircleAvatar(
+                foreground_image_src=f"data:image/jpeg;base64,{b64}",
+                bgcolor=bg,
+                radius=radius,
+            )
+        if not is_group and partner:
+            initials = partner[:2].upper()
+            return ft.CircleAvatar(
+                content=ft.Text(initials, color=C.on_accent, size=max(10, int(radius * 0.65)), weight=ft.FontWeight.BOLD),
+                bgcolor=bg,
+                radius=radius,
+            )
+        return ft.CircleAvatar(
+            content=ft.Icon(icon, color=C.on_accent, size=int(radius * 0.9)),
+            bgcolor=bg,
+            radius=radius,
+        )
 
     def refresh_avatars(self):
         """Yeni bir avatar gelince görünen yerleri günceller (UI thread'inde çağrılır)."""
@@ -49,8 +67,79 @@ class InboxScreenMixin:
         self.page.add(self.inbox_view)
         self.page.update()
 
+    def _build_chat_tile(self, partner: str, is_group: bool, last_msg: str, last_time: str, unread_count: int):
+        if len(last_msg) > 42:
+            last_msg = last_msg[:39] + "..."
+
+        def on_chat_tile_click(e, p=partner):
+            self.recipient_field.value = p
+            self.on_connect_recipient(None)
+
+        row2_controls = [
+            ft.Text(
+                last_msg or t("no_messages_yet"),
+                size=12,
+                color=C.text_secondary,
+                max_lines=1,
+                overflow=ft.TextOverflow.ELLIPSIS,
+                expand=True,
+            )
+        ]
+        if unread_count > 0:
+            row2_controls.append(
+                ft.Container(
+                    content=ft.Text(
+                        str(unread_count),
+                        size=10,
+                        color=C.on_accent,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                    bgcolor=C.accent,
+                    border_radius=10,
+                    padding=ft.Padding(7, 2, 7, 2),
+                    alignment=ft.Alignment(0, 0),
+                )
+            )
+
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    self.make_avatar(partner, is_group, radius=21),
+                    ft.Column(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Text(partner, weight=ft.FontWeight.W_600, size=14, color=C.text),
+                                    ft.Text(
+                                        last_time,
+                                        size=10,
+                                        color=C.accent_light if unread_count > 0 else C.text_muted,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            ft.Row(
+                                controls=row2_controls,
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                        ],
+                        spacing=3,
+                        expand=True,
+                    ),
+                ],
+                spacing=12,
+            ),
+            padding=ft.Padding(12, 10, 12, 10),
+            border_radius=12,
+            ink=True,
+            on_click=on_chat_tile_click,
+            bgcolor=C.surface,
+            border=ft.Border.all(1, C.border),
+        )
+
     def load_inbox_chats(self, query: str = None):
-        if not self.state["store"]: return
+        if not self.state["store"]:
+            return
         self.inbox_list.controls.clear()
 
         if not query:
@@ -60,86 +149,26 @@ class InboxScreenMixin:
                     ft.Container(
                         content=ft.Column(
                             controls=[
-                                ft.Icon(ft.Icons.CHAT_BUBBLE_OUTLINE, size=48, color=C.border),
-                                ft.Text("No chats yet.", size=14, color=C.text_secondary),
-                                ft.Text("Start a new chat by clicking the '+' button.", size=11, color=C.text_faint),
+                                ft.Icon(ft.Icons.CHAT_BUBBLE_OUTLINE, size=44, color=C.border),
+                                ft.Text(t("no_chats"), size=14, weight=ft.FontWeight.W_600, color=C.text_secondary),
+                                ft.Text(t("no_chats_sub"), size=12, color=C.text_faint, text_align=ft.TextAlign.CENTER),
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                             spacing=6,
                         ),
-                        padding=40,
+                        padding=48,
                         alignment=ft.Alignment(0, 0),
                     )
                 )
             else:
                 for c in chats:
                     partner = c["partner"]
-                    chat_id = c["chat_id"]
                     is_group = bool(c.get("is_group", 0))
                     last_msg = c.get("last_message") or ""
                     last_time = self._fmt_time(c.get("last_time")) if c.get("last_time") else ""
                     unread_count = c.get("unread_count", 0)
-
-                    if len(last_msg) > 35:
-                        last_msg = last_msg[:32] + "..."
-
-                    avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
-                    avatar_color = C.accent if is_group else C.avatar_dm
-
-                    def on_chat_tile_click(e, p=partner, ig=is_group):
-                        self.recipient_field.value = p
-                        self.on_connect_recipient(None)
-
-                    row2_controls = [
-                        ft.Text(last_msg or "No messages yet", size=12, color=C.text_secondary, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
-                    ]
-                    if unread_count > 0:
-                        row2_controls.append(
-                            ft.Container(
-                                content=ft.Text(
-                                    str(unread_count),
-                                    size=10,
-                                    color=C.on_accent,
-                                    weight=ft.FontWeight.BOLD,
-                                ),
-                                bgcolor=C.accent,
-                                border_radius=10,
-                                padding=ft.Padding(6, 2, 6, 2),
-                                alignment=ft.Alignment(0, 0),
-                            )
-                        )
-
                     self.inbox_list.controls.append(
-                        ft.Container(
-                            content=ft.Row(
-                                controls=[
-                                    self.make_avatar(partner, is_group, radius=20),
-                                    ft.Column(
-                                        controls=[
-                                            ft.Row(
-                                                controls=[
-                                                    ft.Text(partner, weight=ft.FontWeight.BOLD, size=14, color=C.text),
-                                                    ft.Text(last_time, size=10, color=C.success if unread_count > 0 else C.text_muted),
-                                                ],
-                                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                            ),
-                                            ft.Row(
-                                                controls=row2_controls,
-                                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                            ),
-                                        ],
-                                        spacing=2,
-                                        expand=True,
-                                    ),
-                                ],
-                                spacing=12,
-                            ),
-                            padding=ft.Padding(12, 10, 12, 10),
-                            border_radius=8,
-                            ink=True,
-                            on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click(e, p, ig),
-                            bgcolor=C.surface,
-                        )
+                        self._build_chat_tile(partner, is_group, last_msg, last_time, unread_count)
                     )
         else:
             results = self.state["store"].search_chats_and_messages(query)
@@ -151,9 +180,9 @@ class InboxScreenMixin:
                     ft.Container(
                         content=ft.Column(
                             controls=[
-                                ft.Icon(ft.Icons.SEARCH_OFF, size=48, color=C.border),
-                                ft.Text("No results found", size=14, color=C.text_secondary),
-                                ft.Text("Try checking the spelling or searching for another keyword.", size=11, color=C.text_faint),
+                                ft.Icon(ft.Icons.SEARCH_OFF, size=44, color=C.border),
+                                ft.Text(t("no_results"), size=14, color=C.text_secondary),
+                                ft.Text(t("no_results_sub"), size=11, color=C.text_faint),
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                             spacing=6,
@@ -163,15 +192,15 @@ class InboxScreenMixin:
                     )
                 )
             else:
-                def on_chat_tile_click_search(e, p, ig):
+                def on_chat_tile_click_search(e, p):
                     self.recipient_field.value = p
                     self.on_connect_recipient(None)
 
                 if matching_chats:
                     self.inbox_list.controls.append(
                         ft.Container(
-                            content=ft.Text("CHATS", size=11, weight=ft.FontWeight.BOLD, color=C.accent),
-                            padding=ft.Padding(12, 8, 12, 4)
+                            content=ft.Text(t("sec_chats"), size=11, weight=ft.FontWeight.BOLD, color=C.accent_light),
+                            padding=ft.Padding(12, 8, 12, 4),
                         )
                     )
                     for c in matching_chats:
@@ -180,70 +209,15 @@ class InboxScreenMixin:
                         last_msg = c.get("last_message") or ""
                         last_time = self._fmt_time(c.get("last_time")) if c.get("last_time") else ""
                         unread_count = c.get("unread_count", 0)
-
-                        if len(last_msg) > 35:
-                            last_msg = last_msg[:32] + "..."
-
-                        avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
-                        avatar_color = C.accent if is_group else C.avatar_dm
-
-                        row2_controls = [
-                            ft.Text(last_msg or "No messages yet", size=12, color=C.text_secondary, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
-                        ]
-                        if unread_count > 0:
-                            row2_controls.append(
-                                ft.Container(
-                                    content=ft.Text(
-                                        str(unread_count),
-                                        size=10,
-                                        color=C.on_accent,
-                                        weight=ft.FontWeight.BOLD,
-                                    ),
-                                    bgcolor=C.accent,
-                                    border_radius=10,
-                                    padding=ft.Padding(6, 2, 6, 2),
-                                    alignment=ft.Alignment(0, 0),
-                                )
-                            )
-
                         self.inbox_list.controls.append(
-                            ft.Container(
-                                content=ft.Row(
-                                    controls=[
-                                        self.make_avatar(partner, is_group, radius=20),
-                                        ft.Column(
-                                            controls=[
-                                                ft.Row(
-                                                    controls=[
-                                                        ft.Text(partner, weight=ft.FontWeight.BOLD, size=14, color=C.text),
-                                                        ft.Text(last_time, size=10, color=C.success if unread_count > 0 else C.text_muted),
-                                                    ],
-                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                                ),
-                                                ft.Row(
-                                                    controls=row2_controls,
-                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                                ),
-                                            ],
-                                            spacing=2,
-                                            expand=True,
-                                        ),
-                                    ],
-                                    spacing=12,
-                                ),
-                                padding=ft.Padding(12, 10, 12, 10),
-                                border_radius=8,
-                                ink=True,
-                                on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click_search(e, p, ig),
-                                bgcolor=C.surface,
-                            )
+                            self._build_chat_tile(partner, is_group, last_msg, last_time, unread_count)
                         )
 
                 if matching_msgs:
                     self.inbox_list.controls.append(
                         ft.Container(
-                            content=ft.Text("MESSAGES", size=11, weight=ft.FontWeight.BOLD, color=C.accent),
-                            padding=ft.Padding(12, 12, 12, 4)
+                            content=ft.Text(t("sec_messages"), size=11, weight=ft.FontWeight.BOLD, color=C.accent_light),
+                            padding=ft.Padding(12, 12, 12, 4),
                         )
                     )
                     for m in matching_msgs:
@@ -256,9 +230,6 @@ class InboxScreenMixin:
                         snippet = f"{sender}: {content}"
                         if len(snippet) > 45:
                             snippet = snippet[:42] + "..."
-
-                        avatar_icon = ft.Icons.GROUP if is_group else ft.Icons.PERSON
-                        avatar_color = C.accent if is_group else C.avatar_dm
 
                         self.inbox_list.controls.append(
                             ft.Container(
@@ -274,7 +245,13 @@ class InboxScreenMixin:
                                                     ],
                                                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                                                 ),
-                                                ft.Text(snippet, size=11, color=C.text_secondary, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                                ft.Text(
+                                                    snippet,
+                                                    size=11,
+                                                    color=C.text_secondary,
+                                                    max_lines=1,
+                                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                                ),
                                             ],
                                             spacing=2,
                                             expand=True,
@@ -283,38 +260,45 @@ class InboxScreenMixin:
                                     spacing=10,
                                 ),
                                 padding=ft.Padding(12, 8, 12, 8),
-                                border_radius=6,
+                                border_radius=10,
                                 ink=True,
-                                on_click=lambda e, p=partner, ig=is_group: on_chat_tile_click_search(e, p, ig),
+                                on_click=lambda e, p=partner: on_chat_tile_click_search(e, p),
                                 bgcolor=C.surface_deep,
+                                border=ft.Border.all(1, C.border),
                             )
                         )
-        try: self.page.update()
-        except: pass
+        try:
+            self.page.update()
+        except Exception:
+            pass
 
     def open_new_chat_dialog(self, e, default_tab_index=0):
-        # 1. DM Tab Controls
         name_input = ft.TextField(
-            label="Username",
-            hint_text="Example: bob",
-            border_color=C.accent,
-            focused_border_color=C.accent_light,
+            label=t("username"),
+            hint_text=t("username_hint"),
+            border_color=C.border,
+            focused_border_color=C.accent,
+            border_radius=10,
+            bgcolor=C.surface_deep,
             cursor_color=C.accent,
         )
 
-        # 2. Group Tab Controls
         group_name_input = ft.TextField(
-            label="Group Name",
-            hint_text="Example: Family",
-            border_color=C.accent,
-            focused_border_color=C.accent_light,
+            label=t("group_name"),
+            hint_text="Example: Team",
+            border_color=C.border,
+            focused_border_color=C.accent,
+            border_radius=10,
+            bgcolor=C.surface_deep,
             cursor_color=C.accent,
         )
         group_members_input = ft.TextField(
-            label="Members",
-            hint_text="Example: bob, charlie (comma separated)",
-            border_color=C.accent,
-            focused_border_color=C.accent_light,
+            label=t("group_members"),
+            hint_text="bob, charlie",
+            border_color=C.border,
+            focused_border_color=C.accent,
+            border_radius=10,
+            bgcolor=C.surface_deep,
             cursor_color=C.accent,
         )
 
@@ -322,7 +306,7 @@ class InboxScreenMixin:
         groups_loading = ft.Row(
             controls=[
                 ft.ProgressRing(width=16, height=16, stroke_width=2, color=C.accent),
-                ft.Text(" Loading groups...", size=12, color=C.text_muted)
+                ft.Text(" Loading...", size=12, color=C.text_muted),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
         )
@@ -334,9 +318,10 @@ class InboxScreenMixin:
 
         def on_confirm(e):
             rec = name_input.value.strip().lower()
-            if not rec: return
+            if not rec:
+                return
             if rec == self.state["username"]:
-                name_input.error_text = "You cannot chat with yourself!"
+                name_input.error_text = "You cannot chat with yourself."
                 self.page.update()
                 return
 
@@ -347,7 +332,7 @@ class InboxScreenMixin:
         def on_group_select(group_id, name):
             key = self.state["store"].get_group_key(group_id)
             if not key:
-                self.log_status("Error: You don't have the encryption key for this group!")
+                self.log_status("Error: Missing encryption key for this group.")
                 close_dialog(None)
                 return
 
@@ -360,7 +345,7 @@ class InboxScreenMixin:
             self.ephemeral_btn.disabled = True
 
             self.load_history_to_chat()
-            self.log_status(f"'{name}' grubu ile sohbet basladi.")
+            self.log_status(f"Opened group '{name}'.")
             self.show_chat_screen()
             close_dialog(None)
 
@@ -372,18 +357,18 @@ class InboxScreenMixin:
                 try:
                     m_resp = self.signed_get(f"/api/groups/{group_id}/members", timeout=5)
                     members = m_resp.json().get("members", []) if m_resp.status_code == 200 else []
-                except:
+                except Exception:
                     members = []
 
                 for m in members:
                     m_username = m["username"]
-                    if m_username == self.state["username"]: continue
+                    if m_username == self.state["username"]:
+                        continue
                     m_pub_key = self.fetch_recipient_pub_key(m_username)
-                    if not m_pub_key: continue
-
-                    # İmzalı: alıcılar imzasız anahtar değişikliğini reddeder (K2)
+                    if not m_pub_key:
+                        continue
                     self.send_group_key_to(m_username, group_id, new_key.hex(), m_pub_key)
-                self.log_status(f"'{name}' grubunun anahtari yenilendi ve dagitildi.")
+                self.log_status(f"Rotated and distributed group key for '{name}'.")
 
             threading.Thread(target=do_rekey, daemon=True).start()
             close_dialog(None)
@@ -394,7 +379,7 @@ class InboxScreenMixin:
                     resp = self.signed_delete(f"/api/groups/{group_id}/members/{self.state['username']}", timeout=5)
                     if resp.status_code == 200:
                         def _success():
-                            self.log_status(f"'{name}' grubundan ciktiniz.")
+                            self.log_status(f"Left group '{name}'.")
                             if self.state["recipient"] == group_id:
                                 self.state["recipient"] = None
                                 self.state["is_group"] = False
@@ -403,9 +388,10 @@ class InboxScreenMixin:
                                 self.recipient_field.border_color = C.accent
                                 self.chat_list.controls.clear()
                             self.load_inbox_chats()
+
                         self.run_on_ui(_success)
                 except Exception as ex:
-                    self.log_status(f"Gruptan cikma hatasi: {ex}")
+                    self.log_status(f"Failed to leave group: {ex}")
 
             threading.Thread(target=do_leave, daemon=True).start()
             close_dialog(None)
@@ -415,7 +401,7 @@ class InboxScreenMixin:
             members_raw = group_members_input.value.strip()
 
             if not name:
-                group_name_input.error_text = "Group name cannot be empty!"
+                group_name_input.error_text = "Group name cannot be empty."
                 self.page.update()
                 return
 
@@ -430,17 +416,16 @@ class InboxScreenMixin:
                         "group_id": group_id,
                         "group_name": name,
                         "creator": self.state["username"],
-                        "members": members
+                        "members": members,
                     }, timeout=5)
 
                     if resp.status_code == 200:
                         self.state["store"].save_group_key(group_id, group_key.hex())
                         self.state["store"].get_or_create_group_chat(group_id, name)
 
-                        # Anahtar ancak grup sunucuda oluştuktan (üyeler group_members'a
-                        # yazıldıktan) sonra gönderilir — sunucu üye olmayana iletmez (K2)
                         for m in members:
-                            if m == self.state["username"]: continue
+                            if m == self.state["username"]:
+                                continue
                             m_pub = self.fetch_recipient_pub_key(m)
                             if m_pub:
                                 self.send_group_key_to(m, group_id, group_key.hex(), m_pub)
@@ -453,61 +438,60 @@ class InboxScreenMixin:
                             self.recipient_field.border_color = C.success
                             self.ephemeral_btn.disabled = True
                             self.load_history_to_chat()
-                            self.log_status(f"'{name}' grubu olusturuldu.")
+                            self.log_status(f"Created group '{name}'.")
                             self.show_chat_screen()
+
                         self.run_on_ui(_success)
                     else:
-                        self.log_status(f"Grup olusturma hatasi: {resp.text}")
+                        self.log_status(f"Group creation error: {resp.text}")
                 except Exception as ex:
-                    self.log_status(f"Grup olusturma hatasi: {ex}")
+                    self.log_status(f"Group creation error: {ex}")
 
             threading.Thread(target=do_create, daemon=True).start()
             close_dialog(None)
 
-        # Tabs & layouts
         dm_tab_content = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text("Enter username to chat directly:", size=13, color=C.text_secondary),
+                    ft.Text(t("enter_username_chat"), size=12, color=C.text_secondary),
                     name_input,
-                    ft.Container(height=10),
+                    ft.Container(height=8),
                     ft.Row(
                         controls=[
-                            ft.TextButton("Cancel", on_click=close_dialog),
+                            ft.TextButton(t("cancel"), on_click=close_dialog),
                             ft.Button(
-                                "Start Chat",
+                                t("start_chat"),
                                 on_click=on_confirm,
-                                style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent)
+                                style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent, shape=ft.RoundedRectangleBorder(radius=8)),
                             ),
                         ],
                         alignment=ft.MainAxisAlignment.END,
-                    )
+                    ),
                 ],
                 spacing=8,
                 tight=True,
             ),
-            padding=ft.Padding(12, 16, 12, 16),
+            padding=ft.Padding(8, 14, 8, 12),
         )
 
         group_tab_content = ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Text("Create New Group", weight=ft.FontWeight.BOLD, size=13, color=C.text),
                     group_name_input,
                     group_members_input,
                     ft.Button(
-                        "Create Group",
+                        t("create_group"),
                         on_click=on_create_click,
-                        style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent)
+                        style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent, shape=ft.RoundedRectangleBorder(radius=8)),
                     ),
-                    ft.Divider(color=C.surface_alt),
-                    ft.Text("My Groups", weight=ft.FontWeight.BOLD, size=13, color=C.text),
+                    ft.Divider(color=C.border),
+                    ft.Text(t("my_groups"), weight=ft.FontWeight.BOLD, size=13, color=C.text),
                     groups_list_column,
                 ],
                 spacing=8,
                 tight=True,
             ),
-            padding=ft.Padding(12, 16, 12, 16),
+            padding=ft.Padding(8, 14, 8, 12),
         )
 
         tabs = ft.Tabs(
@@ -517,15 +501,12 @@ class InboxScreenMixin:
                 controls=[
                     ft.TabBar(
                         tabs=[
-                            ft.Tab(label="Direct Message", icon=ft.Icons.PERSON),
-                            ft.Tab(label="Group Chat", icon=ft.Icons.GROUP),
+                            ft.Tab(label=t("direct_message"), icon=ft.Icons.PERSON_OUTLINE),
+                            ft.Tab(label=t("group_chat"), icon=ft.Icons.GROUP_OUTLINED),
                         ],
                     ),
                     ft.TabBarView(
-                        controls=[
-                            dm_tab_content,
-                            group_tab_content,
-                        ],
+                        controls=[dm_tab_content, group_tab_content],
                         expand=True,
                     ),
                 ],
@@ -538,8 +519,8 @@ class InboxScreenMixin:
         dialog = ft.AlertDialog(
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.CHAT_ROUNDED, color=C.accent),
-                    ft.Text("New Conversation", size=16, color=C.text),
+                    ft.Icon(ft.Icons.CHAT_BUBBLE_OUTLINE, color=C.accent_light),
+                    ft.Text(t("new_conversation"), size=16, color=C.text, weight=ft.FontWeight.BOLD),
                     ft.Container(expand=True),
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
@@ -550,11 +531,7 @@ class InboxScreenMixin:
                 ],
                 spacing=8,
             ),
-            content=ft.Container(
-                content=tabs,
-                width=400,
-                height=520,
-            ),
+            content=ft.Container(content=tabs, width=400, height=500),
             bgcolor=C.surface,
         )
 
@@ -562,20 +539,17 @@ class InboxScreenMixin:
             try:
                 resp = self.signed_get(f"/api/groups/{self.state['username']}", timeout=5)
                 groups = resp.json().get("groups", []) if resp.status_code == 200 else []
-            except:
+            except Exception:
                 groups = []
 
             def _update_ui(g_list):
                 groups_list_column.controls.clear()
                 if not g_list:
-                    groups_list_column.controls.append(
-                        ft.Text("No groups found.", size=12, color=C.text_muted)
-                    )
+                    groups_list_column.controls.append(ft.Text(t("no_groups"), size=12, color=C.text_muted))
                 else:
                     for g in g_list:
                         gid = g["group_id"]
                         gname = g["group_name"]
-
                         groups_list_column.controls.append(
                             ft.Container(
                                 content=ft.Column(
@@ -587,53 +561,54 @@ class InboxScreenMixin:
                                                 ft.IconButton(
                                                     icon=ft.Icons.CHAT,
                                                     icon_size=16,
-                                                    icon_color=C.accent,
-                                                    tooltip="Start Chat",
-                                                    on_click=lambda e, gid=gid, gname=gname: on_group_select(gid, gname)
+                                                    icon_color=C.accent_light,
+                                                    tooltip=t("start_chat"),
+                                                    on_click=lambda e, gid=gid, gname=gname: on_group_select(gid, gname),
                                                 ),
                                                 ft.IconButton(
                                                     icon=ft.Icons.KEY,
                                                     icon_size=16,
                                                     icon_color=C.success,
-                                                    tooltip="Refresh Key (Rekey)",
-                                                    on_click=lambda e, gid=gid, gname=gname: on_group_rekey(gid, gname)
+                                                    tooltip="Rotate Key",
+                                                    on_click=lambda e, gid=gid, gname=gname: on_group_rekey(gid, gname),
                                                 ),
                                                 ft.IconButton(
                                                     icon=ft.Icons.EXIT_TO_APP,
                                                     icon_size=16,
                                                     icon_color=C.danger,
                                                     tooltip="Leave Group",
-                                                    on_click=lambda e, gid=gid, gname=gname: on_group_leave(gid, gname)
-                                                )
+                                                    on_click=lambda e, gid=gid, gname=gname: on_group_leave(gid, gname),
+                                                ),
                                             ],
                                             alignment=ft.MainAxisAlignment.CENTER,
-                                            spacing=4
+                                            spacing=4,
                                         ),
-                                        ft.Text(f"ID: {gid}", size=9, color=C.text_muted)
+                                        ft.Text(f"ID: {gid}", size=9, color=C.text_muted),
                                     ],
-                                    spacing=2
+                                    spacing=2,
                                 ),
-                                padding=6,
-                                border=ft.Border(left=ft.BorderSide(1, C.border), top=ft.BorderSide(1, C.border), right=ft.BorderSide(1, C.border), bottom=ft.BorderSide(1, C.border)),
-                                border_radius=8,
-                                bgcolor=C.surface_alt
+                                padding=8,
+                                border=ft.Border.all(1, C.border),
+                                border_radius=10,
+                                bgcolor=C.surface_deep,
                             )
                         )
-                try: self.page.update()
-                except: pass
+                try:
+                    self.page.update()
+                except Exception:
+                    pass
 
             self.run_on_ui(_update_ui, groups)
 
         self.page.overlay.append(dialog)
         dialog.open = True
         self.page.update()
-
         threading.Thread(target=load_groups_async, daemon=True).start()
 
     def open_contacts_dialog(self, e):
         """Yerel rehber: kayıtlı kişiler, parmak izleri, sohbet açma ve kişi silme."""
         if not self.state["store"]:
-            self.log_status("Please sign in first!")
+            self.log_status("Please sign in first.")
             return
 
         contacts_column = ft.Column(spacing=6, height=340, scroll=ft.ScrollMode.AUTO)
@@ -649,19 +624,21 @@ class InboxScreenMixin:
 
         def on_copy_fingerprint(fp):
             self.copy_to_clipboard(fp)
-            self.log_status("Fingerprint copied to clipboard!")
+            self.log_status(t("copied"))
 
         def on_delete_contact(username):
             self.state["store"].delete_contact(username)
-            self.log_status(f"'{username}' removed from contacts.")
+            self.log_status(f"Removed '{username}' from contacts.")
             render_contacts()
             self.page.update()
 
         contacts_search = ft.TextField(
-            hint_text="Search by name...",
+            hint_text=t("search_by_name"),
             prefix_icon=ft.Icons.SEARCH,
-            border_color=C.surface_alt,
+            border_color=C.border,
             focused_border_color=C.accent,
+            border_radius=10,
+            bgcolor=C.surface_deep,
             cursor_color=C.accent,
             height=38,
             text_size=13,
@@ -679,22 +656,23 @@ class InboxScreenMixin:
             if not contacts:
                 if query:
                     icon, title, subtitle = (
-                        ft.Icons.SEARCH_OFF, "No results found",
+                        ft.Icons.SEARCH_OFF,
+                        t("no_results"),
                         f"No contact matching '{contacts_search.value.strip()}'.",
                     )
                 else:
                     icon, title, subtitle = (
-                        ft.Icons.CONTACTS_OUTLINED, "Contacts list is empty.",
-                        "Keys are saved here when you connect with someone for the first time.",
+                        ft.Icons.PEOPLE_OUTLINE,
+                        t("contacts_empty"),
+                        t("contacts_empty_sub"),
                     )
                 contacts_column.controls.append(
                     ft.Container(
                         content=ft.Column(
                             controls=[
-                                ft.Icon(icon, size=42, color=C.border),
+                                ft.Icon(icon, size=40, color=C.border),
                                 ft.Text(title, size=13, color=C.text_secondary),
-                                ft.Text(subtitle, size=11, color=C.text_faint,
-                                        text_align=ft.TextAlign.CENTER),
+                                ft.Text(subtitle, size=11, color=C.text_faint, text_align=ft.TextAlign.CENTER),
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                             spacing=6,
@@ -708,8 +686,8 @@ class InboxScreenMixin:
             for c in contacts:
                 uname = c["username"]
                 fp = c.get("fingerprint", "")
-                # Parmak izini iki satıra sığacak şekilde kısalt
-                fp_short = " ".join(fp.split()[:8]) + " …" if fp else "—"
+                fp_fmt = _format_fp(fp)
+                fp_short = " ".join(fp_fmt.split()[:8]) + (" …" if len(fp_fmt.split()) > 8 else "")
 
                 contacts_column.controls.append(
                     ft.Container(
@@ -718,34 +696,49 @@ class InboxScreenMixin:
                                 self.make_avatar(uname, False, radius=16),
                                 ft.Column(
                                     controls=[
-                                        ft.Text(uname, weight=ft.FontWeight.BOLD, size=13, color=C.text),
-                                        ft.Text(fp_short, size=9, color=C.text_muted,
-                                                max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                        ft.Text(uname, weight=ft.FontWeight.W_600, size=13, color=C.text),
+                                        ft.Text(
+                                            fp_short,
+                                            size=9,
+                                            color=C.text_muted,
+                                            font_family="monospace",
+                                            max_lines=1,
+                                            overflow=ft.TextOverflow.ELLIPSIS,
+                                        ),
                                     ],
-                                    spacing=1, tight=True, expand=True,
+                                    spacing=1,
+                                    tight=True,
+                                    expand=True,
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.CHAT, icon_size=16, icon_color=C.accent,
-                                    tooltip="Open Chat",
+                                    icon=ft.Icons.CHAT_BUBBLE_OUTLINE,
+                                    icon_size=16,
+                                    icon_color=C.accent_light,
+                                    tooltip=t("start_chat"),
                                     on_click=lambda e, u=uname: on_start_chat(u),
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.FINGERPRINT, icon_size=16, icon_color=C.success,
+                                    icon=ft.Icons.FINGERPRINT,
+                                    icon_size=16,
+                                    icon_color=C.success,
                                     tooltip="Copy Fingerprint",
                                     on_click=lambda e, f=fp: on_copy_fingerprint(f),
                                 ),
                                 ft.IconButton(
-                                    icon=ft.Icons.DELETE_OUTLINE, icon_size=16, icon_color=C.danger,
+                                    icon=ft.Icons.DELETE_OUTLINE,
+                                    icon_size=16,
+                                    icon_color=C.danger,
                                     tooltip="Remove Contact",
                                     on_click=lambda e, u=uname: on_delete_contact(u),
                                 ),
                             ],
-                            spacing=4,
+                            spacing=2,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        padding=ft.Padding(8, 6, 8, 6),
-                        border_radius=8,
-                        bgcolor=C.surface_alt,
+                        padding=ft.Padding(10, 6, 8, 6),
+                        border_radius=10,
+                        bgcolor=C.surface_deep,
+                        border=ft.Border.all(1, C.border),
                     )
                 )
 
@@ -759,11 +752,13 @@ class InboxScreenMixin:
         dialog = ft.AlertDialog(
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.CONTACTS, color=C.accent),
-                    ft.Text("Contacts", size=16, color=C.text, weight=ft.FontWeight.BOLD),
+                    ft.Icon(ft.Icons.PEOPLE_OUTLINE, color=C.accent_light),
+                    ft.Text(t("contacts_title"), size=16, color=C.text, weight=ft.FontWeight.BOLD),
                     ft.Container(expand=True),
                     ft.IconButton(
-                        icon=ft.Icons.CLOSE, icon_size=18, icon_color=C.text_muted,
+                        icon=ft.Icons.CLOSE,
+                        icon_size=18,
+                        icon_color=C.text_muted,
                         on_click=close_dialog,
                     ),
                 ],
@@ -772,13 +767,13 @@ class InboxScreenMixin:
             content=ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Text("Local key records of verified contacts.",
-                                size=11, color=C.text_secondary),
+                        ft.Text(t("contacts_sub"), size=11, color=C.text_secondary),
                         contacts_search,
-                        ft.Divider(color=C.surface_alt, height=8),
+                        ft.Divider(color=C.border, height=8),
                         contacts_column,
                     ],
-                    spacing=6, tight=True,
+                    spacing=6,
+                    tight=True,
                 ),
                 width=380,
             ),
@@ -794,10 +789,8 @@ class InboxScreenMixin:
         self.load_inbox_chats(query)
 
     def perform_logout(self, e=None):
-        # 1. Set logged_in flag to False to break ws loop
         self.state["logged_in"] = False
 
-        # 2. Close WS if exists
         ws = self.state.get("ws")
         loop = self.state.get("ws_loop")
         if ws and loop:
@@ -807,7 +800,6 @@ class InboxScreenMixin:
             except Exception as ex:
                 print(f"[Logout] Error closing ws: {ex}")
 
-        # 3. Reset state
         self.state["username"] = None
         self.state["private_key"] = None
         self.state["public_key"] = None
@@ -820,14 +812,13 @@ class InboxScreenMixin:
         self.state["view_once_mode"] = False
         self.state["staged_file"] = None
 
-        # 4. Reset login inputs
         self.username_field.value = ""
         self.username_field.error_text = None
         self.import_key_checkbox.value = False
         self.import_key_field.value = ""
         self.import_key_field.visible = False
 
-        self.log_status("Signed out successfully.")
+        self.log_status("Signed out.")
         self.show_login_screen()
 
     def open_settings_dialog(self, e):
@@ -836,7 +827,6 @@ class InboxScreenMixin:
             body_lines = [line for line in lines if not line.strip().startswith("-----")]
             return "\n".join(body_lines).strip()
 
-        # Format keys
         try:
             pub_pem = public_key_to_pem_string(self.state["public_key"])
             pub_pem_display = clean_pem_for_display(pub_pem)
@@ -851,40 +841,47 @@ class InboxScreenMixin:
             priv_pem = f"Error: {ex}"
             priv_pem_display = priv_pem
 
-        # Public Key textfield (read-only, multiline)
         pub_key_tf = ft.TextField(
-            label="Public Key PEM",
+            label=t("public_key_label"),
             value=pub_pem_display,
             multiline=True,
-            min_lines=3,
-            max_lines=5,
+            min_lines=2,
+            max_lines=4,
             read_only=True,
-            border_color=C.surface_alt,
+            border_color=C.border,
             focused_border_color=C.accent,
+            border_radius=10,
+            bgcolor=C.surface_deep,
             text_size=11,
             cursor_color=C.accent,
         )
 
-        # ── Görünüm & bildirim tercihleri (cihaz geneli, settings.json) ──
         def on_theme_toggle(e):
-            # Diyalog eski paletle kurulu; set_theme onu kapatıp tüm UI'ı yeniden kurar
             self.set_theme("light" if e.control.value else "dark")
 
         def on_sound_toggle(e):
             settings_store.set("sound_enabled", bool(e.control.value))
-            self.log_status("Bildirim sesi açıldı." if e.control.value else "Bildirim sesi kapatıldı.")
+            self.log_status("Sound enabled." if e.control.value else "Sound muted.")
 
-        # ── Profil fotoğrafı (E2EE dağıtılır) ──
+        def on_lang_change(e):
+            self.set_language(lang_dd.value)
+
         from desktop import avatar as avatar_mod
         me = self.state["username"]
 
         def _own_preview():
             jpeg = avatar_mod.load_own(me)
             if jpeg:
-                return ft.CircleAvatar(foreground_image_src=avatar_mod.to_data_url(jpeg),
-                                       bgcolor=C.accent, radius=26)
-            return ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=C.on_accent, size=26),
-                                   bgcolor=C.accent, radius=26)
+                return ft.CircleAvatar(
+                    foreground_image_src=avatar_mod.to_data_url(jpeg),
+                    bgcolor=C.accent,
+                    radius=24,
+                )
+            return ft.CircleAvatar(
+                content=ft.Text(me[:2].upper(), color=C.on_accent, size=16, weight=ft.FontWeight.BOLD),
+                bgcolor=C.accent,
+                radius=24,
+            )
 
         avatar_slot = ft.Container(content=_own_preview())
 
@@ -896,7 +893,7 @@ class InboxScreenMixin:
                 from pathlib import Path
                 jpeg = avatar_mod.normalize(Path(files[0].path).read_bytes())
             except (OSError, ValueError) as ex:
-                self.log_status(f"Fotoğraf kullanılamadı: {ex}")
+                self.log_status(f"Invalid image: {ex}")
                 return
             avatar_mod.save_own(me, jpeg)
             avatar_slot.content = _own_preview()
@@ -908,41 +905,56 @@ class InboxScreenMixin:
                 avatar_slot,
                 ft.Column(
                     controls=[
-                        ft.Text("Profile photo", size=13, color=C.text, weight=ft.FontWeight.BOLD),
-                        ft.Text("Sent end-to-end encrypted to your contacts; server cannot view it.",
-                                size=10, color=C.text_muted),
+                        ft.Text(t("profile_photo"), size=13, color=C.text, weight=ft.FontWeight.W_600),
+                        ft.Text(t("profile_photo_sub"), size=10, color=C.text_muted),
                     ],
-                    spacing=2, tight=True, expand=True,
+                    spacing=2,
+                    tight=True,
+                    expand=True,
                 ),
-                ft.TextButton("Choose", on_click=on_pick_avatar, style=ft.ButtonStyle(color=C.accent)),
+                ft.TextButton(t("choose"), on_click=on_pick_avatar, style=ft.ButtonStyle(color=C.accent_light)),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        theme_switch = ft.Switch(value=not C.is_dark, active_color=C.accent,
-                                 on_change=on_theme_toggle)
-        sound_switch = ft.Switch(value=bool(settings_store.get("sound_enabled")),
-                                 active_color=C.accent, on_change=on_sound_toggle)
+        theme_switch = ft.Switch(value=not C.is_dark, active_color=C.accent, on_change=on_theme_toggle)
+        sound_switch = ft.Switch(value=bool(settings_store.get("sound_enabled")), active_color=C.accent, on_change=on_sound_toggle)
+        lang_dd = ft.Dropdown(
+            value=get_lang(),
+            dense=True,
+            width=128,
+            border_color=C.border,
+            focused_border_color=C.accent,
+            on_select=on_lang_change,
+            options=[
+                ft.dropdown.Option("en", "English"),
+                ft.dropdown.Option("tr", "Türkçe"),
+            ],
+        )
 
         def on_preview_toggle(e):
             settings_store.set("link_previews", bool(e.control.value))
-            self.log_status("Link previews enabled." if e.control.value else "Link previews disabled.")
+            self.log_status("Link previews updated.")
 
-        preview_switch = ft.Switch(value=bool(settings_store.get("link_previews")),
-                                   active_color=C.accent, on_change=on_preview_toggle)
+        preview_switch = ft.Switch(
+            value=bool(settings_store.get("link_previews")),
+            active_color=C.accent,
+            on_change=on_preview_toggle,
+        )
 
-        # Private Key container. Initially hidden (shown as dots)
         priv_key_value = "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
 
         priv_key_tf = ft.TextField(
-            label="Private Key PEM (Secret)",
+            label=t("private_key_label"),
             value=priv_key_value,
             multiline=True,
-            min_lines=3,
-            max_lines=5,
+            min_lines=2,
+            max_lines=4,
             read_only=True,
-            border_color=C.surface_alt,
+            border_color=C.border,
             focused_border_color=C.danger,
+            border_radius=10,
+            bgcolor=C.surface_deep,
             text_size=11,
             cursor_color=C.accent,
         )
@@ -951,14 +963,14 @@ class InboxScreenMixin:
             icon=ft.Icons.VISIBILITY,
             icon_color=C.danger,
             icon_size=20,
-            tooltip="Reveal Private Key",
+            tooltip=t("reveal_key"),
         )
 
         copy_btn = ft.IconButton(
             icon=ft.Icons.COPY,
-            icon_color=C.accent,
+            icon_color=C.accent_light,
             icon_size=20,
-            tooltip="Copy Private Key",
+            tooltip=t("copy_key"),
             visible=False,
         )
 
@@ -985,17 +997,17 @@ class InboxScreenMixin:
                 title=ft.Row(
                     controls=[
                         ft.Icon(ft.Icons.WARNING_ROUNDED, color=C.danger),
-                        ft.Text("Warning: Reveal Private Key", size=16, color=C.danger, weight=ft.FontWeight.BOLD),
+                        ft.Text(t("reveal_key"), size=16, color=C.danger, weight=ft.FontWeight.BOLD),
                     ],
                     spacing=8,
                 ),
                 content=ft.Text(
-                    "Are you sure you want to reveal your Private Key?\n\nAnyone with access to this key can decrypt and read your E2EE messages. Keep it highly secure!",
+                    "Anyone with access to this key can decrypt your messages and impersonate you. Keep it secret!",
                     size=13,
-                    color=C.text_bubble_other
+                    color=C.text_bubble_other,
                 ),
                 actions=[
-                    ft.TextButton("Cancel", on_click=cancel_reveal),
+                    ft.TextButton(t("cancel"), on_click=cancel_reveal),
                     ft.TextButton("Reveal", on_click=proceed_reveal, style=ft.ButtonStyle(color=C.danger)),
                 ],
                 bgcolor=C.surface,
@@ -1008,7 +1020,7 @@ class InboxScreenMixin:
 
         def copy_private_key(e):
             self.copy_to_clipboard(priv_pem)
-            self.log_status("Private Key copied to clipboard!")
+            self.log_status(t("copied"))
 
         copy_btn.on_click = copy_private_key
 
@@ -1020,8 +1032,8 @@ class InboxScreenMixin:
         dialog = ft.AlertDialog(
             title=ft.Row(
                 controls=[
-                    ft.Icon(ft.Icons.SETTINGS, color=C.accent),
-                    ft.Text("Settings", size=18, color=C.text, weight=ft.FontWeight.BOLD),
+                    ft.Icon(ft.Icons.TUNE_ROUNDED, color=C.accent_light),
+                    ft.Text(t("settings_title"), size=17, color=C.text, weight=ft.FontWeight.BOLD),
                     ft.Container(expand=True),
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
@@ -1037,51 +1049,58 @@ class InboxScreenMixin:
                     controls=[
                         ft.Row(
                             controls=[
-                                ft.Text("Logged in as:", size=12, color=C.text_muted),
+                                ft.Text(f"{t('logged_in_as')}:", size=12, color=C.text_muted),
                                 ft.Text(self.state["username"], size=14, color=C.text, weight=ft.FontWeight.BOLD),
                             ],
-                            alignment=ft.MainAxisAlignment.START,
+                            spacing=6,
                         ),
-                        ft.Divider(color=C.surface_alt, height=10),
+                        ft.Divider(color=C.border, height=8),
                         avatar_row,
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.DARK_MODE if C.is_dark else ft.Icons.LIGHT_MODE,
-                                        size=18, color=C.accent),
-                                ft.Text("Light theme", size=13, color=C.text, expand=True),
+                                ft.Icon(ft.Icons.DARK_MODE_OUTLINED if C.is_dark else ft.Icons.LIGHT_MODE_OUTLINED, size=18, color=C.accent_light),
+                                ft.Text(t("appearance"), size=13, color=C.text, expand=True),
                                 theme_switch,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, size=18, color=C.accent),
-                                ft.Text("Notification sound", size=13, color=C.text, expand=True),
+                                ft.Icon(ft.Icons.LANGUAGE, size=18, color=C.accent_light),
+                                ft.Text(t("language_label"), size=13, color=C.text, expand=True),
+                                lang_dd,
+                            ],
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.NOTIFICATIONS_NONE, size=18, color=C.accent_light),
+                                ft.Text(t("notif_sound"), size=13, color=C.text, expand=True),
                                 sound_switch,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                         ft.Row(
                             controls=[
-                                ft.Icon(ft.Icons.LINK, size=18, color=C.accent),
+                                ft.Icon(ft.Icons.LINK, size=18, color=C.accent_light),
                                 ft.Column(
                                     controls=[
-                                        ft.Text("Link previews", size=13, color=C.text),
-                                        ft.Text("You fetch the preview; the site sees your IP, not the recipient's.",
-                                                size=10, color=C.text_muted),
+                                        ft.Text(t("link_previews"), size=13, color=C.text),
+                                        ft.Text(t("link_previews_sub"), size=10, color=C.text_muted),
                                     ],
-                                    spacing=1, tight=True, expand=True,
+                                    spacing=1,
+                                    tight=True,
+                                    expand=True,
                                 ),
                                 preview_switch,
                             ],
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        ft.Divider(color=C.surface_alt, height=10),
+                        ft.Divider(color=C.border, height=8),
                         pub_key_tf,
-                        ft.Container(height=5),
                         ft.Row(
                             controls=[
-                                ft.Text("Private Key PEM", size=12, color=C.text_muted, weight=ft.FontWeight.BOLD),
+                                ft.Text(t("private_key_label"), size=12, color=C.text_muted, weight=ft.FontWeight.W_600),
                                 ft.Container(expand=True),
                                 reveal_btn,
                                 copy_btn,
@@ -1089,12 +1108,12 @@ class InboxScreenMixin:
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         ),
                         priv_key_tf,
-                        ft.Container(height=15),
+                        ft.Container(height=8),
                         ft.Button(
                             content=ft.Row(
                                 controls=[
                                     ft.Icon(ft.Icons.LOGOUT, size=18, color=C.on_accent),
-                                    ft.Text("Sign Out", size=14, weight=ft.FontWeight.BOLD, color=C.on_accent),
+                                    ft.Text(t("sign_out"), size=14, weight=ft.FontWeight.W_600, color=C.on_accent),
                                 ],
                                 alignment=ft.MainAxisAlignment.CENTER,
                                 spacing=8,
@@ -1103,16 +1122,18 @@ class InboxScreenMixin:
                             style=ft.ButtonStyle(
                                 bgcolor=C.danger,
                                 padding=ft.Padding(16, 12, 16, 12),
-                                shape=ft.RoundedRectangleBorder(radius=6),
+                                shape=ft.RoundedRectangleBorder(radius=10),
                             ),
-                            width=300,
+                            width=340,
                         ),
                     ],
                     spacing=8,
+                    scroll=ft.ScrollMode.AUTO,
                     tight=True,
                 ),
-                width=360,
-                padding=ft.Padding(0, 10, 0, 10),
+                width=370,
+                height=520,
+                padding=ft.Padding(0, 6, 0, 6),
             ),
             bgcolor=C.surface,
         )
@@ -1123,7 +1144,9 @@ class InboxScreenMixin:
 
     def refresh_inbox_and_messages(self):
         self.search_field.value = ""
+
         def do_refresh():
             self.fetch_offline_messages()
             self.run_on_ui(self.load_inbox_chats)
+
         threading.Thread(target=do_refresh, daemon=True).start()

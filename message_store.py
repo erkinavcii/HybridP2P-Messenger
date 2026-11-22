@@ -350,7 +350,7 @@ class MessageStore:
     def get_messages(self, partner: str, limit: int = 200) -> list:
         """
         Belirli bir partnerle olan mesaj geçmişini döndürür.
-        En eskiden en yeniye sıralı.
+        En son `limit` mesajı en eskiden en yeniye sıralı döndürür (M1).
         """
         cid = self._chat_id(partner)
         conn = sqlite3.connect(self.db_path)
@@ -359,10 +359,15 @@ class MessageStore:
             rows = conn.execute(
                 """SELECT sender, content, timestamp, is_mine, msg_type, is_read,
                           msg_uid, COALESCE(edited, 0) AS edited, preview
-                   FROM messages
-                   WHERE chat_id = ?
-                   ORDER BY timestamp ASC
-                   LIMIT ?""",
+                   FROM (
+                       SELECT id, sender, content, timestamp, is_mine, msg_type, is_read,
+                              msg_uid, edited, preview
+                       FROM messages
+                       WHERE chat_id = ?
+                       ORDER BY timestamp DESC, id DESC
+                       LIMIT ?
+                   )
+                   ORDER BY timestamp ASC, id ASC""",
                 (cid, limit)
             ).fetchall()
             return [dict(r) for r in rows]
@@ -506,12 +511,16 @@ class MessageStore:
             conn.close()
 
     def save_contact(self, username: str, public_key: str, fingerprint: str):
-        """Kullanıcının public key ve fingerprint bilgilerini yerel contacts tablosuna kaydeder."""
+        """Kullanıcının public key ve fingerprint bilgilerini yerel contacts tablosuna kaydeder.
+        Mevcut kişi güncellenirken signs_messages ve avatar sütunları korunur (M4)."""
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute(
-                """INSERT OR REPLACE INTO contacts (username, public_key, fingerprint, created_at)
-                   VALUES (?, ?, ?, ?)""",
+                """INSERT INTO contacts (username, public_key, fingerprint, created_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(username) DO UPDATE SET
+                       public_key = excluded.public_key,
+                       fingerprint = excluded.fingerprint""",
                 (username, public_key, fingerprint, self._now())
             )
             conn.commit()

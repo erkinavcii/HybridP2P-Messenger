@@ -28,7 +28,7 @@ class ConnectionManager:
         print(f"[WS] '{username}' connected. Active connections: {len(self.active_connections)}")
 
     def disconnect(self, username: str, websocket: WebSocket = None):
-        """Bağlantıyı listeden çıkarır. Devam eden aramayı da temizler.
+        """Bağlantıyı listeden çıkarır. Devam eden aramayı da temizler (S2).
 
         `websocket` verilirse yalnızca kayıtlı bağlantı o nesneyse silinir. Bu,
         kullanıcı hızla yeniden bağlandığında eski handler'ın kapanırken YENİ
@@ -37,13 +37,25 @@ class ConnectionManager:
         if websocket is not None and self.active_connections.get(username) is not websocket:
             return
         self.active_connections.pop(username, None)
-        # Kullanıcı bir aramanın içindeyse, call_id'yi temizle
-        call_id = self.active_calls.pop(username, None)
+        # Kullanıcı bir aramanın içindeyse her iki tarafı da active_calls'tan
+        # çıkar ve karşı tarafa call_end bildir (S2)
+        call_id = self.active_calls.get(username)
         if call_id:
-            # Timeout task varsa iptal et
-            task = self.call_timers.pop(call_id, None)
-            if task and not task.done():
-                task.cancel()
+            partners = [u for u, cid in self.active_calls.items() if cid == call_id and u != username]
+            self.end_call(call_id)
+            if partners:
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+                if loop is not None:
+                    for partner in partners:
+                        loop.create_task(self.send_to_user(partner, {
+                            "type": "call_end",
+                            "call_id": call_id,
+                            "duration_seconds": 0,
+                            "reason": "peer_disconnected",
+                        }))
         print(f"[WS] '{username}' disconnected. Active connections: {len(self.active_connections)}")
 
     def is_online(self, username: str) -> bool:

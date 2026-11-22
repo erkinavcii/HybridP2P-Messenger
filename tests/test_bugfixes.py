@@ -173,3 +173,75 @@ def test_web_crypto_exports_file_sig_data():
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip().encode("utf-8") == file_sig_data("bob", "alice", "u1", "a.png", "image", True)
 
+
+def test_get_messages_returns_newest_limit_m1(isolated_keys_dir):
+    store = MessageStore("m1_alice")
+    base = datetime(2026, 11, 20, 12, 0, 0, tzinfo=timezone.utc)
+    for i in range(250):
+        ts = (base + timedelta(seconds=i)).isoformat()
+        store.save_message("m1_bob", "m1_alice", f"msg-{i:03d}", True, timestamp=ts)
+
+    msgs = store.get_messages("m1_bob", limit=200)
+    assert len(msgs) == 200
+    assert [m["content"] for m in msgs[:3]] == ["msg-050", "msg-051", "msg-052"]
+    assert [m["content"] for m in msgs[-3:]] == ["msg-247", "msg-248", "msg-249"]
+
+
+def test_save_contact_preserves_signs_and_avatar_m4(isolated_keys_dir):
+    store = MessageStore("m4_alice")
+    store.save_contact("m4_bob", "PEM_1", "FP_1")
+    store.mark_contact_signs_messages("m4_bob")
+    store.set_contact_avatar("m4_bob", "AVATAR_B64")
+    store.set_avatar_sent_hash("m4_bob", "HASH_123")
+
+    # Updating contact key/fingerprint must not wipe signs_messages or avatar columns
+    store.save_contact("m4_bob", "PEM_2", "FP_2")
+    assert store.contact_signs_messages("m4_bob") is True
+    assert store.get_contact_avatar("m4_bob") == "AVATAR_B64"
+    assert store.get_avatar_sent_hash("m4_bob") == "HASH_123"
+    assert store.get_contact("m4_bob")["fingerprint"] == "FP_2"
+
+
+def test_call_disconnect_notifies_partner_and_clears_busy_s2(make_user):
+    alice = make_user("s2a")
+    bob = make_user("s2b")
+    carol = make_user("s2c")
+    call_id = uuid.uuid4().hex
+    call_id_2 = uuid.uuid4().hex
+
+    async def scenario():
+        ws_a = await alice.connect()
+        ws_b = await bob.connect()
+        ws_c = await carol.connect()
+        try:
+            await ws_a.send(json.dumps({
+                "type": "call_offer",
+                "recipient": bob.name,
+                "call_id": call_id,
+                "call_type": "audio",
+                "sdp_offer": "v=0",
+            }))
+            offer = await recv_until(ws_b, "call_offer", match=lambda d: d["call_id"] == call_id)
+            assert offer["caller"] == alice.name
+
+            # Alice drops abruptly mid-call; Bob must get call_end and no longer be marked busy
+            await ws_a.close()
+            ended = await recv_until(ws_b, "call_end", match=lambda d: d["call_id"] == call_id)
+            assert ended.get("reason") == "peer_disconnected"
+
+            await ws_c.send(json.dumps({
+                "type": "call_offer",
+                "recipient": bob.name,
+                "call_id": call_id_2,
+                "call_type": "audio",
+                "sdp_offer": "v=0",
+            }))
+            offer2 = await recv_until(ws_b, "call_offer", match=lambda d: d["call_id"] == call_id_2)
+            assert offer2["caller"] == carol.name
+        finally:
+            await ws_b.close()
+            await ws_c.close()
+
+    run(scenario())
+
+

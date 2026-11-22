@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import flet as ft
-from desktop.theme import C
+from desktop.theme import C, t
 from desktop import linkpreview, settings_store
 
 from crypto_utils import (
@@ -44,34 +44,74 @@ class ChatScreenMixin:
             if self.state.get("is_group", False):
                 chat_info = self.state["store"].get_chat_info(self.state["recipient"])
                 display_name = chat_info.get("partner", self.state["recipient"])
-                self.chat_title_text.value = f"Group: {display_name}"
+                self.chat_title_text.value = display_name
                 self.call_icon_btn.visible = False
                 self.video_call_icon_btn.visible = False
                 self.voice_btn.visible = False
             else:
-                self.chat_title_text.value = f"Chat: {self.state['recipient']}"
+                self.chat_title_text.value = self.state["recipient"]
                 self.call_icon_btn.visible = True
                 self.video_call_icon_btn.visible = True
                 self.voice_btn.visible = True
         else:
-            self.chat_title_text.value = "No active chat"
+            self.chat_title_text.value = ""
             self.call_icon_btn.visible = False
             self.video_call_icon_btn.visible = False
 
         self.update_chat_header_avatar()
-        self.username_text.value = f"User: {self.state['username']}"
-        # Önceki sohbetten kalmış bir "yazıyor…" yeni sohbette görünmesin
+        self.username_text.value = self.state["username"]
         self.typing_text.visible = False
         self.refresh_recipient_status()
         self.page.controls.clear()
         self.page.add(self.chat_view)
         self.page.update()
 
+    def _open_safety_dialog(self, e=None):
+        rec = self.state.get("recipient")
+        if not rec or self.state.get("is_group", False) or not self.state.get("store"):
+            return
+        contact = self.state["store"].get_contact(rec)
+        fp = (contact or {}).get("fingerprint") or ""
+        clean = "".join(fp.split())
+        fp_fmt = " ".join(clean[i:i + 4] for i in range(0, len(clean), 4)) if clean else "—"
+
+        def close(ev=None):
+            dlg.open = False
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            title=ft.Row([
+                ft.Icon(ft.Icons.VERIFIED_USER_OUTLINED, color=C.success),
+                ft.Text(t("verify_safety_title"), size=16, color=C.text, weight=ft.FontWeight.BOLD),
+            ], spacing=8),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Text(rec, size=15, weight=ft.FontWeight.BOLD, color=C.text),
+                    ft.Text(t("safety_number_sub"), size=12, color=C.text_secondary),
+                    ft.Container(
+                        content=ft.Text(fp_fmt, size=11, color=C.success, font_family="monospace", selectable=True),
+                        bgcolor=C.surface_deep,
+                        border=ft.Border.all(1, C.border),
+                        border_radius=10,
+                        padding=12,
+                    ),
+                ], tight=True, spacing=8),
+                width=350,
+            ),
+            actions=[ft.TextButton(t("close"), on_click=close, style=ft.ButtonStyle(color=C.accent))],
+            bgcolor=C.surface,
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+
     def update_chat_header_avatar(self):
         rec = self.state.get("recipient")
         is_group = self.state.get("is_group", False)
         if rec:
-            self.chat_avatar.content = self.make_avatar(rec, is_group, radius=16)
+            self.chat_avatar.content = self.make_avatar(rec, is_group, radius=17)
+            self.chat_avatar.on_click = None if is_group else self._open_safety_dialog
+            self.chat_avatar.tooltip = None if is_group else t("verify_safety_title")
             self.chat_avatar.visible = True
         else:
             self.chat_avatar.visible = False
@@ -119,20 +159,19 @@ class ChatScreenMixin:
             self.log_status("Message deleted for everyone.")
 
         dialog = ft.AlertDialog(
-            title=ft.Text("Edit message", size=16, color=C.text, weight=ft.FontWeight.BOLD),
+            title=ft.Text(t("edit_message_title"), size=16, color=C.text, weight=ft.FontWeight.BOLD),
             content=ft.Container(
                 content=ft.Column([
                     edit_field,
-                    ft.Text("Edits and deletions also apply to the peer (end-to-end encrypted, signed).",
-                            size=10, color=C.text_muted),
+                    ft.Text(t("edit_message_hint"), size=10, color=C.text_muted),
                 ], tight=True, spacing=6),
                 width=340,
             ),
             actions=[
-                ft.TextButton("Delete for everyone", on_click=do_delete,
+                ft.TextButton(t("delete_for_everyone"), on_click=do_delete,
                               style=ft.ButtonStyle(color=C.danger)),
-                ft.TextButton("Cancel", on_click=close, style=ft.ButtonStyle(color=C.text_muted)),
-                ft.TextButton("Save", on_click=do_edit, style=ft.ButtonStyle(color=C.accent)),
+                ft.TextButton(t("cancel"), on_click=close, style=ft.ButtonStyle(color=C.text_muted)),
+                ft.TextButton(t("save"), on_click=do_edit, style=ft.ButtonStyle(color=C.accent)),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=C.surface,
@@ -154,7 +193,7 @@ class ChatScreenMixin:
         self.recording_bar.visible = on
         self.voice_btn.icon = ft.Icons.STOP_CIRCLE if on else ft.Icons.MIC_NONE
         self.voice_btn.icon_color = C.danger if on else C.text_muted
-        self.voice_btn.tooltip = "Finish and send recording" if on else "Record voice message"
+        self.voice_btn.tooltip = t("voice_finish_tooltip") if on else t("voice_record_tooltip")
         self.message_input.disabled = on
         try: self.page.update()
         except: pass
@@ -196,9 +235,12 @@ class ChatScreenMixin:
         def _tick():
             while rec.recording:
                 elapsed = rec.elapsed
-                def _upd(t=elapsed):
-                    self.recording_label.value = (f"Kaydediliyor {voice.fmt_duration(t)}"
-                                                  f" / {voice.fmt_duration(voice.MAX_SECONDS)}")
+                def _upd(t_val=elapsed):
+                    self.recording_label.value = t(
+                        "recording_fmt",
+                        elapsed=voice.fmt_duration(t_val),
+                        limit=voice.fmt_duration(voice.MAX_SECONDS),
+                    )
                     try: self.page.update()
                     except: pass
                 self.run_on_ui(_upd)
@@ -744,12 +786,12 @@ class ChatScreenMixin:
                 self.recipient_status_row.visible = True
                 if online:
                     self.recipient_status_dot.bgcolor = C.success
-                    self.recipient_status_label.value = "Online"
+                    self.recipient_status_label.value = t("status_online")
                     self.recipient_status_label.color = C.success
                 else:
-                    self.recipient_status_dot.bgcolor = C.danger
-                    self.recipient_status_label.value = "Offline"
-                    self.recipient_status_label.color = C.danger
+                    self.recipient_status_dot.bgcolor = C.text_muted
+                    self.recipient_status_label.value = t("status_offline")
+                    self.recipient_status_label.color = C.text_muted
             try: self.page.update()
             except: pass
         self.run_on_ui(_update)

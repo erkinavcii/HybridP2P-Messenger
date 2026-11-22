@@ -35,8 +35,25 @@ class RestClientMixin:
             return priv, pub
         self.log_status(t("keys_generating"))
         self.page.update()
-        priv, pub = generate_rsa_keypair()
-        save_keys_to_disk(username, priv, pub)
+        # RSA-4096 üretimi birkaç saniye sürebilir: tam ekran zincir yükleyici.
+        # Önceden açık bir yükleyici varsa (ör. "Bağlanıyor…") yalnızca altyazı değişir
+        # ve sonra eski haline döner. Sahte uygulamalarda (testler) busy yoktur.
+        busy = getattr(self, "busy", None)
+        prev = busy.message if busy is not None and busy.shown else None
+        if busy is not None:
+            busy.show(t("loader_keys"), delay=0)
+            # Anahtar üretimi GIL'i tuttuğu için UI döngüsü bu sırada kare çizemez:
+            # önce kaplamanın ekrana gelmesini bekle (en çok 1 sn), sonra üret.
+            busy.wait_visible(1.0)
+        try:
+            priv, pub = generate_rsa_keypair()
+            save_keys_to_disk(username, priv, pub)
+        finally:
+            if busy is not None:
+                if prev is not None:
+                    busy.set_message(prev)
+                else:
+                    busy.hide()
         self.log_status(t("keys_generated"))
         return priv, pub
 

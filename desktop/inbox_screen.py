@@ -13,6 +13,7 @@ import uuid as uuid_lib
 import flet as ft
 from desktop.theme import C, t, get_lang
 from desktop import settings_store
+from desktop.brand_loader import ChainLoader
 
 from crypto_utils import public_key_to_pem_string, serialize_private_key
 
@@ -305,8 +306,7 @@ class InboxScreenMixin:
         groups_list_column = ft.Column(spacing=6, height=180, scroll=ft.ScrollMode.AUTO)
         groups_loading = ft.Row(
             controls=[
-                ft.ProgressRing(width=16, height=16, stroke_width=2, color=C.accent),
-                ft.Text(" Loading...", size=12, color=C.text_muted),
+                ChainLoader(message=t("loader_loading"), size=48),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
         )

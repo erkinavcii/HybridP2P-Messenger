@@ -311,6 +311,12 @@ ARB = {
         "login_key_invalid": "Invalid Private Key PEM: {err}",
         "login_import_failed": "Import failed: {err}",
         "login_failed": "Sign in failed: {err}",
+        # Zincir yükleyici (desktop/brand_loader.py) altyazıları
+        "loader_starting": "Starting…",
+        "loader_keys": "Generating keys…",
+        "loader_waiting_peer": "Waiting for your friend's reply…",
+        "loader_connecting": "Connecting…",
+        "loader_loading": "Loading…",
     },
     "tr": {
         "app_tagline": "Uçtan Uca Şifreli Güvenli İletişim",
@@ -516,6 +522,12 @@ ARB = {
         "login_key_invalid": "Geçersiz Özel Anahtar PEM: {err}",
         "login_import_failed": "İçe aktarma başarısız: {err}",
         "login_failed": "Giriş başarısız: {err}",
+        # Zincir yükleyici (desktop/brand_loader.py) altyazıları
+        "loader_starting": "Başlatılıyor…",
+        "loader_keys": "Anahtar üretiliyor…",
+        "loader_waiting_peer": "Arkadaşının cevabı bekleniyor…",
+        "loader_connecting": "Bağlanıyor…",
+        "loader_loading": "Yükleniyor…",
     },
 }
 

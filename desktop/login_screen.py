@@ -89,6 +89,16 @@ class LoginScreenMixin:
         self.log_status(t("signing_in"))
         self.page.update()
 
+        # Tam ekran zincir yükleyici: kısa girişlerde (<0.25 sn) hiç görünmez;
+        # anahtar üretimi gerekirse initialize_keys altyazıyı "Anahtar üretiliyor…" yapar.
+        busy = getattr(self, "busy", None)
+        if busy is not None:
+            busy.show(t("loader_connecting"))
+
+        def _hide_busy():
+            if busy is not None:
+                busy.hide()
+
         def do_login():
             try:
                 net_config.update_server_urls(server_addr, pin)
@@ -96,6 +106,8 @@ class LoginScreenMixin:
                 if self.import_key_checkbox.value:
                     imported_pem = self.import_key_field.value.strip()
                     if not imported_pem:
+                        _hide_busy()
+
                         def _fail_empty_key():
                             self.login_btn.disabled = False
                             self.login_btn.content.controls[1].value = t("sign_in")
@@ -111,6 +123,8 @@ class LoginScreenMixin:
                         save_keys_to_disk(username, priv, pub)
                         print(f"[Import] Key successfully imported and stored for user '{username}'.")
                     except Exception as e_key:
+                        _hide_busy()
+
                         def _fail_invalid_key(err_msg=str(e_key)):
                             self.login_btn.disabled = False
                             self.login_btn.content.controls[1].value = t("sign_in")
@@ -126,6 +140,7 @@ class LoginScreenMixin:
                 self.state["store"]       = MessageStore(username)
 
                 self.register_with_server(username, pub, priv)
+                _hide_busy()
 
                 async def login_success_ui():
                     self.login_btn.disabled = False
@@ -143,6 +158,8 @@ class LoginScreenMixin:
 
                 self.page.run_task(login_success_ui)
             except Exception as ex:
+                _hide_busy()
+
                 async def login_failed_ui(ex=ex):
                     self.login_btn.disabled = False
                     self.login_btn.content.controls[1].value = t("sign_in")

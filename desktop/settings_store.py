@@ -14,6 +14,7 @@ from crypto_utils import KEYS_DIR
 
 DEFAULTS = {
     "theme": "dark",          # "dark" | "light"
+    "lang": "en",             # "en" | "tr"
     "sound_enabled": True,    # yeni mesaj bildirim sesi
     "link_previews": True,    # gönderirken link önizlemesi üret (site gönderenin IP'sini görür)
     "p2p_ice": "google+cloudflare",  # sunucusuz mod STUN seçimi (desktop/p2p_core.ICE_PRESETS)

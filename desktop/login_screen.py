@@ -9,7 +9,7 @@ import re
 import threading
 
 import flet as ft
-from desktop.theme import C
+from desktop.theme import C, t
 
 from message_store import MessageStore
 from desktop import net_config, tls_pin
@@ -31,24 +31,22 @@ class LoginScreenMixin:
             self.page.update()
 
         dialog = ft.AlertDialog(
-            title=ft.Row([ft.Icon(ft.Icons.GPP_BAD, color=C.danger),
-                          ft.Text("Sunucu kimliği doğrulanamadı", size=16, color=C.text,
-                                  weight=ft.FontWeight.BOLD)], spacing=8),
+            title=ft.Row([
+                ft.Icon(ft.Icons.GPP_BAD, color=C.danger),
+                ft.Text(t("err_pin_dialog_title"), size=16, color=C.text, weight=ft.FontWeight.BOLD),
+            ], spacing=8),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text("Sunucunun sunduğu sertifika, sabitlenen parmak iziyle eşleşmiyor. "
-                            "Bağlantı kurulmadı ve hiçbir veri gönderilmedi.", size=12, color=C.text),
-                    ft.Text("Araya giren biri (MITM) olabilir ya da sunucu sertifikası değişmiş "
-                            "olabilir. Parmak izini sunucu yöneticisinden güvenli bir kanalla "
-                            "(yüz yüze, telefon) yeniden doğrulayın.", size=12, color=C.text_muted),
-                    ft.Text("Beklenen:", size=10, color=C.text_secondary),
+                    ft.Text(t("err_pin_dialog_body"), size=12, color=C.text),
+                    ft.Text(t("err_pin_dialog_mitm"), size=12, color=C.text_muted),
+                    ft.Text(t("expected"), size=10, color=C.text_secondary),
                     ft.Text(err.expected, size=10, color=C.text_secondary, selectable=True),
-                    ft.Text("Görülen:", size=10, color=C.danger),
+                    ft.Text(t("seen"), size=10, color=C.danger),
                     ft.Text(err.seen, size=10, color=C.danger, selectable=True),
                 ], tight=True, spacing=10),
                 width=360,
             ),
-            actions=[ft.TextButton("Tamam", on_click=close, style=ft.ButtonStyle(color=C.accent))],
+            actions=[ft.TextButton(t("ok"), on_click=close, style=ft.ButtonStyle(color=C.accent))],
             bgcolor=C.surface,
         )
         self.page.overlay.append(dialog)
@@ -65,13 +63,11 @@ class LoginScreenMixin:
         # Burada ayrıca kontrol etmek zorunlu: kullanıcı adı anahtar klasörünün
         # adı olarak diske yazılıyor ve bu, sunucuya gitmeden ÖNCE oluyor.
         if not USERNAME_RE.fullmatch(username):
-            self.username_field.error_text = "2-32 karakter; yalnızca a-z, 0-9 ve _"
+            self.username_field.error_text = t("username_rule")
             self.page.update()
             return
         self.username_field.error_text = None
 
-        # Adres ve parmak izi biçimi burada (anında geri bildirim); ağ gerektiren
-        # parmak izi doğrulaması aşağıda, arka plan iş parçacığında yapılır.
         server_addr = self.server_address_field.value.strip()
         pin = (self.tls_pin_field.value or "").strip()
         self.server_address_field.error_text = None
@@ -81,22 +77,20 @@ class LoginScreenMixin:
             if pin:
                 pin = tls_pin.normalize_fingerprint(pin)
                 if not use_tls:
-                    raise ValueError("Parmak izi yalnızca https:// adresleriyle kullanılır.")
+                    raise ValueError(t("err_pin_https_only"))
         except ValueError as bad:
-            target = self.tls_pin_field if pin and "armak izi" in str(bad) else self.server_address_field
+            target = self.tls_pin_field if pin and ("https://" in str(bad) or "armak izi" in str(bad)) else self.server_address_field
             target.error_text = str(bad)
             self.page.update()
             return
 
-        # Disable button and update text
         self.login_btn.disabled = True
-        self.login_btn.content.controls[1].value = "Please wait..."
-        self.log_status("Signing in...")
+        self.login_btn.content.controls[1].value = t("please_wait")
+        self.log_status(t("signing_in"))
         self.page.update()
 
         def do_login():
             try:
-                # https ise parmak izini doğrula/sabitle (ağ işlemi); uyuşmazlıkta PinMismatch
                 net_config.update_server_urls(server_addr, pin)
                 self.state["username"] = username
                 if self.import_key_checkbox.value:
@@ -104,7 +98,7 @@ class LoginScreenMixin:
                     if not imported_pem:
                         def _fail_empty_key():
                             self.login_btn.disabled = False
-                            self.login_btn.content.controls[1].value = "Sign In"
+                            self.login_btn.content.controls[1].value = t("sign_in")
                             self.username_field.error_text = "Please paste your Private Key PEM."
                             self.log_status("Sign in failed. Private key empty.")
                             self.page.update()
@@ -119,7 +113,7 @@ class LoginScreenMixin:
                     except Exception as e_key:
                         def _fail_invalid_key(err_msg=str(e_key)):
                             self.login_btn.disabled = False
-                            self.login_btn.content.controls[1].value = "Sign In"
+                            self.login_btn.content.controls[1].value = t("sign_in")
                             self.username_field.error_text = f"Invalid Private Key PEM: {err_msg}"
                             self.log_status(f"Import failed: {err_msg}")
                             self.page.update()
@@ -133,10 +127,9 @@ class LoginScreenMixin:
 
                 self.register_with_server(username, pub, priv)
 
-                # Reset button state and transition to inbox on Flet's event loop
                 async def login_success_ui():
                     self.login_btn.disabled = False
-                    self.login_btn.content.controls[1].value = "Sign In"
+                    self.login_btn.content.controls[1].value = t("sign_in")
                     self.state["logged_in"] = True
                     self.show_inbox_screen()
 
@@ -150,18 +143,15 @@ class LoginScreenMixin:
 
                 self.page.run_task(login_success_ui)
             except Exception as ex:
-                # ex, except bloğu bitince silinir; sonradan çalışan fonksiyona
-                # varsayılan argümanla aktarılmalı (yoksa NameError → hata hiç görünmez)
                 async def login_failed_ui(ex=ex):
                     self.login_btn.disabled = False
-                    self.login_btn.content.controls[1].value = "Sign In"
+                    self.login_btn.content.controls[1].value = t("sign_in")
                     if isinstance(ex, tls_pin.PinMismatch):
-                        # Olası MITM: gözden kaçmayacak bir uyarı penceresi
-                        self.tls_pin_field.error_text = "Parmak izi eşleşmiyor — bağlanılmadı."
+                        self.tls_pin_field.error_text = t("err_pin_mismatch")
                         self._show_pin_mismatch_dialog(ex)
                     else:
-                        self.username_field.error_text = f"Hata: {ex}"
-                    self.log_status(f"Giris sirasinda hata olustu: {ex}")
+                        self.username_field.error_text = f"Error: {ex}"
+                    self.log_status(f"Sign in failed: {ex}")
                     self.page.update()
                 self.page.run_task(login_failed_ui)
 

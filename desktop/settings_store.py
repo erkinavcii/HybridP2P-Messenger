@@ -19,6 +19,9 @@ DEFAULTS = {
     "link_previews": True,    # gönderirken link önizlemesi üret (site gönderenin IP'sini görür)
     "p2p_ice": "google+cloudflare",  # sunucusuz mod STUN seçimi (desktop/p2p_core.ICE_PRESETS)
     "p2p_ice_custom": "",     # "custom" seçiliyse satır başına bir STUN/TURN sunucusu
+    # Sıkı mod: doğrulanmamış kişiyle dosya aktarımı ve görüntülü arama engellenir;
+    # yazılı sohbet ve sesli arama açık — doğrulama (güvenlik kodu) sesli aramada yapılır.
+    "p2p_strict": False,
 }
 
 _lock = threading.Lock()

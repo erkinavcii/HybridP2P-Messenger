@@ -124,6 +124,14 @@ class MessageStore:
             except sqlite3.OperationalError:
                 pass
 
+        # Kişi doğrulama (güvenlik kodu): doğrulandı bayrağı, doğrulanan anahtarın
+        # parmak izi ve zamanı. Anahtar değişirse doğrulama kendiliğinden geçersizleşir.
+        for col in ("verified INTEGER DEFAULT 0", "verified_fp TEXT", "verified_at TEXT"):
+            try:
+                cursor.execute(f"ALTER TABLE contacts ADD COLUMN {col}")
+            except sqlite3.OperationalError:
+                pass
+
         # Mesaj düzenleme/silme: cihazlar arası kararlı mesaj kimliği (uuid4) ve
         # düzenlendi bayrağı. msg_uid'si olmayan (eski) mesajlar düzenlenemez/silinemez.
         for col in ("msg_uid TEXT", "edited INTEGER DEFAULT 0", "preview TEXT"):
@@ -512,7 +520,9 @@ class MessageStore:
 
     def save_contact(self, username: str, public_key: str, fingerprint: str):
         """Kullanıcının public key ve fingerprint bilgilerini yerel contacts tablosuna kaydeder.
-        Mevcut kişi güncellenirken signs_messages ve avatar sütunları korunur (M4)."""
+        Mevcut kişi güncellenirken signs_messages ve avatar sütunları korunur (M4).
+        Parmak izi değişirse (yeni anahtar) kişi doğrulaması sıfırlanır; aynı anahtar
+        yeniden kaydedilirse doğrulama korunur."""
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute(
@@ -520,6 +530,12 @@ class MessageStore:
                    VALUES (?, ?, ?, ?)
                    ON CONFLICT(username) DO UPDATE SET
                        public_key = excluded.public_key,
+                       verified = CASE WHEN contacts.fingerprint = excluded.fingerprint
+                                       THEN contacts.verified ELSE 0 END,
+                       verified_fp = CASE WHEN contacts.fingerprint = excluded.fingerprint
+                                          THEN contacts.verified_fp ELSE NULL END,
+                       verified_at = CASE WHEN contacts.fingerprint = excluded.fingerprint
+                                          THEN contacts.verified_at ELSE NULL END,
                        fingerprint = excluded.fingerprint""",
                 (username, public_key, fingerprint, self._now())
             )
@@ -527,17 +543,53 @@ class MessageStore:
         finally:
             conn.close()
 
+    @staticmethod
+    def _contact_dict(row) -> dict:
+        """Satırı sözlüğe çevirir; "is_verified" = doğrulama hâlâ geçerli mi (anahtar aynı mı)."""
+        d = dict(row)
+        d["is_verified"] = bool(d.get("verified")) and bool(d.get("verified_fp"))             and d.get("verified_fp") == d.get("fingerprint")
+        return d
+
     def get_contact(self, username: str) -> dict:
-        """Kayıtlı bir kullanıcının yerel bilgilerini döndürür."""
+        """Kayıtlı bir kullanıcının yerel bilgilerini döndürür (doğrulama durumu dahil)."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
             row = conn.execute(
                 "SELECT * FROM contacts WHERE username = ?", (username,)
             ).fetchone()
-            return dict(row) if row else None
+            return self._contact_dict(row) if row else None
         finally:
             conn.close()
+
+    def mark_contact_verified(self, username: str) -> bool:
+        """Kişiyi güvenlik kodu karşılaştırıldı olarak işaretler; o anki parmak izini saklar.
+        Kişi rehberde yoksa False döner."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cur = conn.execute(
+                """UPDATE contacts SET verified = 1, verified_fp = fingerprint, verified_at = ?
+                   WHERE username = ?""", (self._now(), username))
+            conn.commit()
+            return cur.rowcount > 0
+        finally:
+            conn.close()
+
+    def unmark_contact_verified(self, username: str):
+        """Kişinin doğrulamasını kaldırır."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "UPDATE contacts SET verified = 0, verified_fp = NULL, verified_at = NULL WHERE username = ?",
+                (username,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def is_contact_verified(self, username: str) -> bool:
+        """Yalnızca doğrulanmış VE doğrulanan parmak izi güncel anahtarla aynıysa True."""
+        c = self.get_contact(username)
+        return bool(c and c["is_verified"])
 
     def contact_signs_messages(self, username: str) -> bool:
         """Bu kişiden daha önce geçerli imzalı bir mesaj görüldü mü?
@@ -652,7 +704,7 @@ class MessageStore:
             rows = conn.execute(
                 "SELECT * FROM contacts ORDER BY username COLLATE NOCASE ASC"
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [self._contact_dict(r) for r in rows]
         finally:
             conn.close()
 

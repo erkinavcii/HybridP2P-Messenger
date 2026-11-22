@@ -20,6 +20,8 @@
     --system-bubble-bg: rgba(30, 41, 59, 0.75);
     --subtle-border: rgba(255, 255, 255, 0.06);
     --login-glow: rgba(37, 99, 235, 0.14);
+    --login-overlay-top: rgba(11, 15, 23, 0.72);
+    --login-overlay-bottom: rgba(11, 15, 23, 0.92);
     --danger: #ef4444;
     color-scheme: dark;
 }
@@ -41,6 +43,8 @@
     --system-bubble-bg: rgba(226, 232, 240, 0.85);
     --subtle-border: rgba(15, 23, 42, 0.06);
     --login-glow: rgba(37, 99, 235, 0.08);
+    --login-overlay-top: rgba(248, 250, 252, 0.88);
+    --login-overlay-bottom: rgba(248, 250, 252, 0.96);
     color-scheme: light;
 }
 
@@ -91,7 +95,9 @@ body {
     overflow-y: auto;
     position: relative;
     background:
+        linear-gradient(to bottom, var(--login-overlay-top) 0%, var(--login-overlay-bottom) 100%),
         radial-gradient(ellipse at 50% 0%, var(--login-glow) 0%, transparent 60%),
+        url("../brand/splash.webp") center top / cover no-repeat,
         var(--bg-color);
 }
 
@@ -297,7 +303,7 @@ body {
 }
 
 /* ── Main Chat Screen ── */
-#chat-screen {
+#chat-screen.active {
     display: flex;
     width: 100%;
     height: 100%;

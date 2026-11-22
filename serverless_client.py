@@ -8,16 +8,19 @@ dosya aktarımı, sesli/görüntülü arama.
 Kullanım:  python serverless_client.py
 Aynı mod normal istemcide de giriş ekranındaki "Sunucusuz başlat" ile açılır.
 Kimlik anahtarı ve rehber normal istemciyle ortaktır (~/.hybridp2p_messenger/).
+Açılışta client.boot() önce zincir yükleyiciyi gösterir, ağır modülleri
+arka planda yükler (L1).
 """
 
 import flet as ft
 
-from client import ASSETS_DIR, MessengerApp
+from client import ASSETS_DIR, boot, prefetch
 
 
 def main(page: ft.Page):
-    MessengerApp(page, serverless_only=True)
+    boot(page, serverless_only=True)
 
 
 if __name__ == "__main__":
+    prefetch()
     ft.run(main, assets_dir=ASSETS_DIR)

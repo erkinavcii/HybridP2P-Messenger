@@ -9,11 +9,14 @@ Hedefler:
     ico      assets/brand/app.ico (16,24,32,48,64,128,256)
     android  android/app/src/main/res/mipmap-*/ic_launcher.png (48..192 px)
              + ic_launcher_foreground.png (108dp tuval, 108..432 px)
-    all      hepsi
+    splash   assets/brand/splash.png (splash_source.png'den) + static/brand/splash.webp
+    all      hepsi (web + ico + android + splash)
+Marka rengi BRAND_HEX sabitinden gelir: kaynaklar mor kalir, cikti tonu kaydirilir.
 Argumansiz = web (assets/brand/icon.png her calismada yazilir).
 
 Gereken: Pillow (yalnizca bu gelistirme betigi icin; uygulamanin bagimliligi degil).
 """
+import colorsys
 import sys
 from pathlib import Path
 
@@ -22,10 +25,36 @@ from PIL import Image, ImageChops, ImageDraw
 BRAND = Path(__file__).resolve().parent
 ROOT = BRAND.parent.parent
 SOURCE = BRAND / "icon_source.png"
+SPLASH_SRC = BRAND / "splash_source.png"
+BRAND_HEX = "#3b82f6"     # marka (kobalt) ana rengi; tek kaynak, degisince her sey yeniden uretilir
+SRC_HEX = "#7747ff"       # icon_source.png'deki mor zemin rengi (donusumun referansi)
+SPLASH_NUDGE = -6         # splash parlamasi mordan geldigi icin biraz daha saf maviye cekilir
 SIZE = 1024
 RADIUS_RATIO = 0.22   # kose yaricapi / kenar
 SS = 4                # maske icin supersample
 SAFE_RATIO = 0.62     # maskable: glif genisligi / kenar (guvenli bolge %66 icinde)
+
+
+def _hsv(hexstr):
+    h = hexstr.lstrip("#")
+    return colorsys.rgb_to_hsv(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+
+
+def recolor(img, nudge=0):
+    """Mor tonu BRAND_HEX'e kaydirir: HSV'de ton kaymasi + doygunluk/parlaklik orani.
+
+    Beyaz glif (doygunluk ~0) ve siyaha yakin zemin (parlaklik ~0) dogal olarak
+    degismez; gradyan ve isik korunur. Kaymayi SRC_HEX -> BRAND_HEX farki belirler;
+    nudge ek ton ofsetidir (0-255 olcekli; negatif = maviye dogru).
+    """
+    (sh, ss, sv), (bh, bs, bv) = _hsv(SRC_HEX), _hsv(BRAND_HEX)
+    dh = round((bh - sh) * 256 + nudge) % 256
+    hsv = img.convert("RGB").convert("HSV")
+    h, s, v = hsv.split()
+    h = h.point(lambda x: (x + dh) % 256)
+    s = s.point(lambda x: min(255, round(x * bs / ss)))
+    v = v.point(lambda x: min(255, round(x * bv / sv)))
+    return Image.merge("HSV", (h, s, v)).convert("RGB")
 
 
 def _is_violet(px):
@@ -61,7 +90,7 @@ def build_rounded(src):
     """
     box = _tile_bbox(src)
     tile = src.crop(box).resize((SIZE, SIZE), Image.LANCZOS)
-    out = tile.convert("RGBA")
+    out = recolor(tile).convert("RGBA")
     out.putalpha(rounded_mask(SIZE))
     return out
 
@@ -77,7 +106,7 @@ def _glyph_alpha(src, bg):
 def build_maskable(src):
     """Tam kapli varyant: duz mor zemin + glif, merkezde ve guvenli bolgede."""
     box = _tile_bbox(src)
-    tile = src.crop(box).resize((SIZE, SIZE), Image.LANCZOS).convert("RGB")
+    tile = recolor(src.crop(box).resize((SIZE, SIZE), Image.LANCZOS))
     # Zemin rengi: tile'in alt-orta bolgesinden medyan (gradyan en az orada)
     patch = tile.crop((412, 880, 612, 980))
     r, g, b = (sorted(c.getdata())[len(c.getdata()) // 2] for c in patch.split())
@@ -136,6 +165,14 @@ def build_foreground(maskable, ratio=0.56):
 
 def target_android(rounded, maskable):
     fg = build_foreground(maskable)
+    # Adaptive arka plan rengi: maskable zemininin duz rengi
+    r, g, b = maskable.convert("RGB").getpixel((5, 5))
+    xml = ROOT / "android/app/src/main/res/values/ic_launcher_background.xml"
+    xml.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+        f'    <color name="ic_launcher_background">#{r:02X}{g:02X}{b:02X}</color>\n'
+        '</resources>\n', encoding="utf-8")
+    print("yazildi: ic_launcher_background.xml", f"#{r:02X}{g:02X}{b:02X}")
     dens = (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192))
     for d, px in dens:
         _save(rounded, f"android/app/src/main/res/mipmap-{d}/ic_launcher.png", px)
@@ -143,7 +180,19 @@ def target_android(rounded, maskable):
         _save(fg, f"android/app/src/main/res/mipmap-{d}/ic_launcher_foreground.png", px * 9 // 4)
 
 
-TARGETS = {"web": target_web, "ico": target_ico, "android": target_android}
+def target_splash(rounded, maskable):
+    """Splash: koyu zemin korunur, parlama/halkalar kobalta kayar; PNG + kucuk WebP."""
+    out = recolor(Image.open(SPLASH_SRC), SPLASH_NUDGE)
+    out.save(BRAND / "splash.png", optimize=True)
+    print("yazildi: assets/brand/splash.png", out.size)
+    web = ROOT / "static/brand/splash.webp"
+    web.parent.mkdir(parents=True, exist_ok=True)
+    out.save(web, format="WEBP", quality=85, method=6)
+    print("yazildi: static/brand/splash.webp", web.stat().st_size, "bayt")
+
+
+TARGETS = {"web": target_web, "ico": target_ico, "android": target_android,
+           "splash": target_splash}
 
 
 def main(argv):

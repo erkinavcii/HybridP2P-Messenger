@@ -12,6 +12,7 @@ import {
 import {
     renderInbox,
     selectChat,
+    closeMobileChat,
     sendMessage,
     formatBytes,
     appendSystemMessage,
@@ -39,7 +40,7 @@ import {
     loadChatsFromLocalStorage
 } from './db.js';
 import { initVoipEvents } from './voip.js';
-import { applyTheme, toggleTheme, getPref, setPref } from './prefs.js';
+import { applyTheme, toggleTheme, getPref, setPref, getLang, setLang, applyI18n, t } from './prefs.js';
 import { loadAvatarCache, setOwnAvatar, broadcastAvatar, avatarUrl } from './avatar.js';
 
 // Initialize VoIP events
@@ -523,9 +524,10 @@ if (giCloseBtn && groupInfoModal) {
 if (giCopyIdBtn) {
     giCopyIdBtn.addEventListener("click", () => {
         if (!state.recipient) return;
+        const origHtml = giCopyIdBtn.innerHTML;
         navigator.clipboard?.writeText(state.recipient).then(() => {
             giCopyIdBtn.textContent = "✓";
-            setTimeout(() => { giCopyIdBtn.textContent = "📋"; }, 1500);
+            setTimeout(() => { giCopyIdBtn.innerHTML = origHtml; }, 1500);
         });
     });
 }
@@ -1043,12 +1045,68 @@ if (ownAvatarBtn && ownAvatarInput) {
     });
 }
 
-// ── Tema ve bildirim sesi düğmeleri ──
+// ── Tema, dil, mobil geri & ayarlar modalı ──
 applyTheme();
+applyI18n();
+
+const mobileBackBtn = document.getElementById("mobile-back-btn");
+if (mobileBackBtn) mobileBackBtn.addEventListener("click", closeMobileChat);
+
+const settingsModal = document.getElementById("settings-modal");
+const settingsBtn = document.getElementById("settings-btn");
+const settingsCloseBtn = document.getElementById("settings-close-btn");
+if (settingsBtn && settingsModal) {
+    settingsBtn.addEventListener("click", () => settingsModal.classList.add("active"));
+}
+if (settingsCloseBtn && settingsModal) {
+    settingsCloseBtn.addEventListener("click", () => settingsModal.classList.remove("active"));
+}
+if (showKeyBtn && settingsModal) {
+    showKeyBtn.addEventListener("click", () => settingsModal.classList.remove("active"));
+}
+if (contactsBtn && settingsModal) {
+    contactsBtn.addEventListener("click", () => settingsModal.classList.remove("active"));
+}
+
+const modeTabServer = document.getElementById("mode-tab-server");
+const modeTabP2p = document.getElementById("mode-tab-p2p");
+const serverLoginPanel = document.getElementById("server-login-panel");
+const p2pLoginPanel = document.getElementById("p2p-login-panel");
+const loginModeHint = document.getElementById("login-mode-hint");
+if (modeTabServer && modeTabP2p && serverLoginPanel && p2pLoginPanel) {
+    modeTabServer.addEventListener("click", () => {
+        modeTabServer.classList.add("active");
+        modeTabP2p.classList.remove("active");
+        serverLoginPanel.classList.remove("hidden");
+        p2pLoginPanel.classList.add("hidden");
+        if (loginModeHint) {
+            loginModeHint.dataset.i18n = "mode_server_hint";
+            loginModeHint.textContent = t("mode_server_hint");
+        }
+    });
+    modeTabP2p.addEventListener("click", () => {
+        modeTabP2p.classList.add("active");
+        modeTabServer.classList.remove("active");
+        p2pLoginPanel.classList.remove("hidden");
+        serverLoginPanel.classList.add("hidden");
+        if (loginModeHint) {
+            loginModeHint.dataset.i18n = "mode_serverless_hint";
+            loginModeHint.textContent = t("mode_serverless_hint");
+        }
+    });
+}
+
 const themeToggleBtn = document.getElementById("theme-toggle-btn");
+const loginThemeBtn = document.getElementById("login-theme-btn");
 const soundToggleBtn = document.getElementById("sound-toggle-btn");
+const soundToggleLabel = document.getElementById("sound-toggle-label");
+const langToggleBtn = document.getElementById("lang-toggle-btn");
+const loginLangBtn = document.getElementById("login-lang-btn");
 
 function refreshPrefButtons() {
+    const lang = getLang();
+    if (langToggleBtn) langToggleBtn.textContent = lang === "tr" ? "Türkçe" : "English";
+    if (loginLangBtn) loginLangBtn.textContent = lang.toUpperCase();
     if (themeToggleBtn) {
         themeToggleBtn.title = getPref("theme") === "light" ? "Switch to dark theme" : "Switch to light theme";
     }
@@ -1056,9 +1114,17 @@ function refreshPrefButtons() {
         const on = !!getPref("sound_enabled");
         soundToggleBtn.classList.toggle("pref-off", !on);
         soundToggleBtn.title = on ? "Notification sound on (click to mute)" : "Notification sound muted (click to unmute)";
+        if (soundToggleLabel) soundToggleLabel.textContent = on ? (lang === "tr" ? "Açık" : "On") : (lang === "tr" ? "Kapalı" : "Off");
     }
 }
 if (themeToggleBtn) themeToggleBtn.addEventListener("click", () => { toggleTheme(); refreshPrefButtons(); });
+if (loginThemeBtn) loginThemeBtn.addEventListener("click", () => { toggleTheme(); refreshPrefButtons(); });
+const _toggleLang = () => {
+    setLang(getLang() === "en" ? "tr" : "en");
+    refreshPrefButtons();
+};
+if (langToggleBtn) langToggleBtn.addEventListener("click", _toggleLang);
+if (loginLangBtn) loginLangBtn.addEventListener("click", _toggleLang);
 if (soundToggleBtn) soundToggleBtn.addEventListener("click", () => {
     setPref("sound_enabled", !getPref("sound_enabled"));
     refreshPrefButtons();

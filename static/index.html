@@ -3,24 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HybridP2P E2EE Web Messenger</title>
-    <meta http-equiv="Content-Security-Policy" 
-          content="default-src 'self'; 
-                   connect-src 'self' ws: wss:; 
-                   script-src 'self' 'unsafe-inline'; 
-                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; 
+    <title>HybridP2P Messenger</title>
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   connect-src 'self' ws: wss:;
+                   script-src 'self' 'unsafe-inline';
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
                    font-src 'self' https://fonts.gstatic.com;
                    media-src 'self' blob:;
                    img-src 'self' data: blob:;">
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="./css/styles.css">
-    <!-- PWA: tarayıcıdan "uygulama olarak kur" / "ana ekrana ekle" -->
     <link rel="manifest" href="./manifest.webmanifest">
-    <meta name="theme-color" content="#8b5cf6">
+    <meta name="theme-color" content="#2563eb">
     <link rel="icon" type="image/png" href="./icons/icon-192.png">
     <link rel="apple-touch-icon" href="./icons/icon-192.png">
     <script>
@@ -35,56 +33,81 @@
     <div id="app">
         <!-- ── SCREEN 1: LOGIN ── -->
         <div id="login-screen" class="screen active">
+            <div class="login-topbar">
+                <button id="login-lang-btn" class="pill-btn" type="button" title="Language">EN</button>
+                <button id="login-theme-btn" class="pill-btn" type="button" title="Toggle theme">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                </button>
+            </div>
             <div class="login-card">
                 <div class="logo-container">
-                    <img class="logo-icon" src="./icons/icon-192.png" width="72" height="72" alt="HybridP2P">
-                    <h2>HybridP2P Messenger</h2>
-                    <p>Browser-Side Zero-Knowledge Encryption client</p>
+                    <img class="logo-icon" src="./icons/icon-192.png" width="60" height="60" alt="HybridP2P">
+                    <h2>HybridP2P</h2>
+                    <p data-i18n="app_tagline">Private End-to-End Encrypted Messaging</p>
                 </div>
-                
+
+                <div class="mode-switcher">
+                    <button id="mode-tab-server" class="mode-tab active" type="button" data-i18n="mode_server">Server Relay</button>
+                    <button id="mode-tab-p2p" class="mode-tab" type="button" data-i18n="mode_serverless">Direct P2P</button>
+                </div>
+                <p id="login-mode-hint" class="mode-hint" data-i18n="mode_server_hint">Connect to this relay server for inbox, groups, and offline delivery.</p>
+
                 <div id="loading-keys-section" class="hidden" style="margin-bottom: 20px;">
                     <div style="display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--accent-hover);">
                         <div class="spinner"></div>
-                        <span id="key-gen-status-text" style="font-size: 13px;">Generating secure 4096-bit RSA keys...</span>
+                        <span id="key-gen-status-text" style="font-size: 13px;" data-i18n="generating_keys">Generating 4096-bit RSA keys...</span>
                     </div>
                 </div>
 
                 <div id="login-form">
-                    <div class="input-group">
-                        <label for="username-input">Enter Username</label>
-                        <input type="text" id="username-input" class="input-control" placeholder="example: alice" autofocus>
-                    </div>
-                    
-                    <div style="text-align: left; margin-bottom: 20px;">
-                        <div style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="import-key-checkbox" style="cursor: pointer; accent-color: var(--accent-color);">
-                            <label for="import-key-checkbox" style="cursor: pointer; font-size: 13px; color: var(--text-muted); margin-bottom: 0; text-transform: none; letter-spacing: normal;">Import existing Private Key (.pem)</label>
+                    <div id="server-login-panel">
+                        <div class="input-group">
+                            <label for="username-input" data-i18n="username">Username</label>
+                            <input type="text" id="username-input" class="input-control" placeholder="example: alice" data-i18n-placeholder="username_placeholder" autofocus>
                         </div>
-                    </div>
-                    
-                    <div id="import-key-section" class="input-group hidden">
-                        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
-                            <label for="import-key-file" style="font-size: 12px; font-weight: bold; text-transform: uppercase;">Or Upload Backup File (.txt / .pem)</label>
-                            <input type="file" id="import-key-file" accept=".pem,.txt" style="font-size: 12px; color: var(--text-muted); background: var(--surface-deep); padding: 6px; border: 1px dashed var(--border-color); border-radius: 4px; cursor: pointer;">
-                        </div>
-                        
-                        <label for="private-key-input">Private Key PEM</label>
-                        <textarea id="private-key-input" class="input-control" rows="4" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="font-family: monospace; font-size: 11px; resize: vertical; margin-bottom: 8px;"></textarea>
-                        
-                        <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
-                            <input type="checkbox" id="decrypt-key-checkbox" style="cursor: pointer; accent-color: var(--accent-color);">
-                            <label for="decrypt-key-checkbox" style="cursor: pointer; font-size: 13px; color: var(--text-muted); margin-bottom: 0; text-transform: none;">This key is password-encrypted</label>
-                        </div>
-                        
-                        <div id="decrypt-password-section" class="hidden" style="margin-bottom: 8px;">
-                            <label for="decrypt-password-input">Decryption Password</label>
-                            <input type="password" id="decrypt-password-input" class="input-control" placeholder="Enter password to decrypt key">
-                        </div>
+
+                        <details class="advanced-details">
+                            <summary>
+                                <span data-i18n="advanced_key_restore">Advanced &amp; Key Restore</span>
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            </summary>
+                            <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 10px;">
+                                <input type="checkbox" id="import-key-checkbox" style="cursor: pointer; accent-color: var(--accent-color);">
+                                <label for="import-key-checkbox" style="cursor: pointer; font-size: 13px; color: var(--text-muted); margin-bottom: 0; text-transform: none; letter-spacing: normal;" data-i18n="import_key_label">Import existing Private Key (.pem)</label>
+                            </div>
+
+                            <div id="import-key-section" class="input-group hidden" style="margin-bottom: 0;">
+                                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
+                                    <label for="import-key-file" style="font-size: 11px; font-weight: 600; text-transform: uppercase;" data-i18n="upload_backup">Upload Backup File (.txt / .pem)</label>
+                                    <input type="file" id="import-key-file" accept=".pem,.txt" style="font-size: 12px; color: var(--text-muted); background: var(--surface-deep); padding: 6px; border: 1px dashed var(--border-color); border-radius: 6px; cursor: pointer;">
+                                </div>
+
+                                <label for="private-key-input" data-i18n="private_key_pem">Private Key PEM</label>
+                                <textarea id="private-key-input" class="input-control" rows="3" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style="font-family: monospace; font-size: 11px; resize: vertical; margin-bottom: 8px;"></textarea>
+
+                                <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
+                                    <input type="checkbox" id="decrypt-key-checkbox" style="cursor: pointer; accent-color: var(--accent-color);">
+                                    <label for="decrypt-key-checkbox" style="cursor: pointer; font-size: 13px; color: var(--text-muted); margin-bottom: 0; text-transform: none;" data-i18n="key_encrypted">This key is password-encrypted</label>
+                                </div>
+
+                                <div id="decrypt-password-section" class="hidden" style="margin-bottom: 4px;">
+                                    <label for="decrypt-password-input" data-i18n="decryption_password">Decryption Password</label>
+                                    <input type="password" id="decrypt-password-input" class="input-control" placeholder="Password">
+                                </div>
+                            </div>
+                        </details>
+
+                        <button id="login-btn" class="btn">
+                            <span data-i18n="sign_in">Continue</span>
+                        </button>
                     </div>
 
-                    <button id="login-btn" class="btn">
-                        <span>Sign In</span>
-                    </button>
+                    <div id="p2p-login-panel" class="hidden">
+                        <a href="./serverless.html" class="btn" style="text-decoration: none;">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+                            <span data-i18n="open_serverless_p2p">Open Direct P2P (No Server)</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -97,33 +120,16 @@
                     <div class="user-profile">
                         <span id="my-username" class="user-name">-</span>
                         <span id="my-fingerprint" class="user-sub">Key fingerprint</span>
-                        <span id="my-private-key-display" class="user-sub" style="font-family: monospace; font-size: 9px; cursor: pointer; color: var(--accent-hover); letter-spacing: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; margin-top: 2px;" title="Click to copy Private Key">••••••••••••••••••••</span>
                     </div>
                     <div class="sidebar-actions">
-                        <button id="show-key-btn" class="action-icon-btn" title="View/Backup Private Key">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m-9 4a4 4 0 110-8 4 4 0 110 8zm0 0v8a1 1 0 001 1h3m-4-1a1 1 0 01-1-1v-3m-6 4a1 1 0 11-2 0 1 1 0 012 0z"></path></svg>
+                        <button id="add-chat-btn" class="action-icon-btn" title="New Chat / Group" data-i18n-title="new_chat_tooltip">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                         </button>
-                        <button id="add-chat-btn" class="action-icon-btn" title="New Chat / Group">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <button id="pure-p2p-btn" class="action-icon-btn" title="Direct P2P (Serverless)" data-i18n-title="p2p_tooltip">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0"/></svg>
                         </button>
-                        <button id="pure-p2p-btn" class="action-icon-btn" title="Pure P2P (Serverless Call)">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-                        </button>
-                        <button id="contacts-btn" class="action-icon-btn" title="Contacts">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                        </button>
-                        <button id="own-avatar-btn" class="action-icon-btn own-avatar-btn" title="Profile photo (sent end-to-end encrypted to your contacts)">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.88 17.8M15 10a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                        </button>
-                        <input type="file" id="own-avatar-input" accept="image/*" class="hidden">
-                        <button id="theme-toggle-btn" class="action-icon-btn" title="Toggle theme (light / dark)">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
-                        </button>
-                        <button id="sound-toggle-btn" class="action-icon-btn" title="Notification sound">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-                        </button>
-                        <button id="logout-btn" class="action-icon-btn" title="Sign Out">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        <button id="settings-btn" class="action-icon-btn" title="Settings &amp; Profile" data-i18n-title="settings_tooltip">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
                         </button>
                     </div>
                 </div>
@@ -131,42 +137,43 @@
                 <!-- Global Search -->
                 <div class="search-wrapper">
                     <div class="search-box">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                        <input type="text" id="global-search-input" placeholder="Search chats and message texts...">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <input type="text" id="global-search-input" placeholder="Search chats and messages..." data-i18n-placeholder="search_chats">
                     </div>
                 </div>
 
                 <!-- Chat Tile Listings -->
-                <div id="inbox-list" class="inbox-list">
-                    <!-- Dynamic -->
-                </div>
+                <div id="inbox-list" class="inbox-list"></div>
 
                 <!-- Sidebar Server Status Footer -->
                 <div class="sidebar-footer" id="sidebar-server-footer">
                     <div class="server-status-container">
                         <span class="server-status-dot offline" id="server-status-dot"></span>
-                        <span class="server-status-text" id="server-status-text">Server Connecting...</span>
+                        <span class="server-status-text" id="server-status-text" data-i18n="server_connecting">Connecting...</span>
                     </div>
                     <button id="reconnect-server-btn" class="action-icon-btn" title="Reconnect to Server" style="padding: 4px;">
-                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.5"></path></svg>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.5"/></svg>
                     </button>
                 </div>
             </div>
 
             <!-- Chat Pane -->
             <div id="chat-window" class="chat-window">
-                <!-- Empty state -->
                 <div id="empty-chat-state" class="empty-chat-state">
-                    <div class="empty-chat-icon">💬</div>
-                    <h3>Start Messaging Securely</h3>
-                    <p style="font-size: 13px; color: var(--text-muted); max-width: 320px; text-align: center;">All cryptographic keys are generated in your browser. The server cannot read your messages.</p>
+                    <div class="empty-chat-icon">
+                        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <h3 data-i18n="empty_chat_title">Start Messaging Securely</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); max-width: 320px; text-align: center;" data-i18n="empty_chat_sub">All cryptographic keys stay on your device. The relay server cannot read your messages.</p>
                 </div>
 
-                <!-- Active Chat Window -->
                 <div id="active-chat" class="hidden" style="display: flex; flex-direction: column; height: 100%; width: 100%;">
                     <!-- Header -->
                     <div class="chat-header">
                         <div class="chat-header-info">
+                            <button id="mobile-back-btn" class="action-icon-btn mobile-back-btn" title="Back" type="button">
+                                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                            </button>
                             <div id="chat-avatar" class="avatar">U</div>
                             <div class="chat-header-meta">
                                 <span id="chat-partner-name" class="chat-header-title">Partner</span>
@@ -176,55 +183,44 @@
                             </div>
                         </div>
                         <div class="chat-header-actions">
-                            <!-- Audio Call -->
-                            <button id="audio-call-btn" class="call-btn" title="Start Audio Call">
+                            <button id="audio-call-btn" class="call-btn" title="Voice Call" data-i18n-title="voice_call_tooltip">
                                 <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                             </button>
-                            <!-- Video Call -->
-                            <button id="video-call-btn" class="call-btn" title="Start Video Call">
+                            <button id="video-call-btn" class="call-btn" title="Video Call" data-i18n-title="video_call_tooltip">
                                 <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                             </button>
-                            <!-- Ephemeral mode toggle -->
-                            <button id="ephemeral-btn" class="action-icon-btn" title="Ephemeral Mode (Don't save chat history)">
-                                <svg id="ephemeral-icon-svg" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                            <button id="ephemeral-btn" class="action-icon-btn" title="Disappearing Chat (Don't save history)" data-i18n-title="ephemeral_tooltip">
+                                <svg id="ephemeral-icon-svg" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </button>
-                            <!-- View Once toggle: circle with bold "1" -->
-                            <button id="view-once-btn" class="action-icon-btn view-once-circle-btn" title="Send next message as View-Once">
+                            <button id="view-once-btn" class="action-icon-btn view-once-circle-btn" title="Send next message as View-Once" data-i18n-title="view_once_tooltip">
                                 <span class="view-once-circle-label">1</span>
                             </button>
-                            <!-- Group Info & Members -->
-                            <button id="group-info-btn" class="action-icon-btn hidden" title="Group Info & Members">
-                                👥
+                            <button id="group-info-btn" class="action-icon-btn hidden" title="Group Info &amp; Members">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                             </button>
-                            <!-- Group Rekey -->
-                            <button id="group-rekey-btn" class="action-icon-btn hidden" title="Generate New Group Key" style="color: var(--accent-hover);">
-                                🔑
+                            <button id="group-rekey-btn" class="action-icon-btn hidden" title="Rotate Group Key" style="color: var(--accent-hover);">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
                             </button>
-                            <!-- Leave Group -->
                             <button id="leave-group-btn" class="action-icon-btn hidden" title="Leave Group" style="color: var(--danger);">
-                                ✕
+                                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                             </button>
                         </div>
                     </div>
 
                     <!-- Scrollable Chat Area -->
-                    <div id="chat-body" class="chat-body">
-                        <!-- Messages dynamic -->
-                    </div>
+                    <div id="chat-body" class="chat-body"></div>
 
                     <!-- Input Panel -->
                     <div class="chat-input-panel" style="flex-direction: column; align-items: stretch; gap: 8px;">
-                        <!-- Staged File Preview -->
-                        <div id="staged-file-container" class="hidden" style="display: flex; align-items: center; justify-content: space-between; background-color: var(--border-color); padding: 8px 12px; border-radius: 8px; font-size: 13px;">
+                        <div id="staged-file-container" class="hidden" style="display: flex; align-items: center; justify-content: space-between; background-color: var(--surface-alt); padding: 8px 12px; border-radius: 10px; font-size: 13px; border: 1px solid var(--border-color);">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 16px;">📎</span>
-                                <span id="staged-file-name" style="font-weight: 500; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">filename.jpg</span>
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                <span id="staged-file-name" style="font-weight: 500; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">filename.jpg</span>
                                 <span id="staged-file-size" style="color: var(--text-muted); font-size: 11px;">(0 KB)</span>
                             </div>
                             <button id="cancel-staged-btn" class="action-icon-btn" style="color: var(--offline-color); padding: 2px;">✕</button>
                         </div>
-                        
-                        <!-- Uploading Progress Bar -->
+
                         <div id="upload-progress-container" class="hidden" style="width: 100%;">
                             <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--accent-hover);">
                                 <span id="upload-status-text">Encrypting and uploading...</span>
@@ -235,25 +231,22 @@
                             </div>
                         </div>
 
-                        <!-- Controls Row -->
-                        <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                        <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
                             <input type="file" id="file-input" class="hidden">
                             <button id="attach-btn" class="action-icon-btn" style="padding: 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background-color: var(--surface-deep); border: 1px solid var(--border-color);" title="Attach file (Max 10MB)">
-                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
-                                </svg>
+                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
                             </button>
                             <button id="voice-btn" class="action-icon-btn voice-btn" title="Record voice message">
-                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
                             </button>
                             <div id="recording-bar" class="recording-bar hidden">
                                 <span class="rec-dot"></span>
                                 <span id="recording-time">0:00</span>
                                 <button id="recording-cancel-btn" class="action-icon-btn" title="Cancel recording">✕</button>
                             </div>
-                            <input type="text" id="message-input" class="input-message-box" placeholder="Type your secure message...">
-                            <button id="send-btn" class="btn" style="width: auto; padding: 10px 18px; border-radius: 24px;">
-                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                            <input type="text" id="message-input" class="input-message-box" placeholder="Message..." data-i18n-placeholder="type_message">
+                            <button id="send-btn" class="btn" style="width: auto; padding: 10px 16px; border-radius: 24px;">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
                             </button>
                         </div>
                     </div>
@@ -266,7 +259,7 @@
     <div id="incoming-call-overlay">
         <div class="incoming-call-card">
             <div id="ic-avatar" class="incoming-call-avatar">U</div>
-            <div id="ic-type" class="incoming-call-type">📞 Incoming Audio Call</div>
+            <div id="ic-type" class="incoming-call-type">Incoming Audio Call</div>
             <div id="ic-name" class="incoming-call-name">Caller</div>
             <div class="incoming-call-actions">
                 <button class="call-action-btn accept" id="ic-accept-btn" title="Accept">
@@ -281,17 +274,16 @@
 
     <!-- ── VoIP: Active Call Screen ── -->
     <div id="active-call-screen">
-        <!-- Hidden audio element for remote stream -->
         <audio id="remote-audio" autoplay playsinline style="display:none;"></audio>
         <video id="remote-video" autoplay playsinline style="display:none; width:100%; max-height:50vh; border-radius:16px; object-fit:cover;"></video>
-        <video id="local-video"  autoplay muted    playsinline style="display:none; position:fixed; bottom:120px; right:24px; width:120px; border-radius:12px; border:2px solid var(--accent-color); z-index:9100;"></video>
+        <video id="local-video" autoplay muted playsinline style="display:none; position:fixed; bottom:120px; right:24px; width:120px; border-radius:12px; border:2px solid var(--accent-color); z-index:9100;"></video>
 
         <div class="active-call-top">
             <div id="ac-avatar" class="active-call-avatar">U</div>
             <div id="ac-name" class="active-call-name">Partner</div>
             <div id="ac-status" class="active-call-status">Connecting...</div>
             <div id="call-timer">00:00</div>
-            <div id="conn-quality" class="conn-quality">🔄 Establishing P2P connection...</div>
+            <div id="conn-quality" class="conn-quality">Establishing direct connection...</div>
         </div>
 
         <div class="active-call-controls">
@@ -307,113 +299,202 @@
         </div>
     </div>
 
+    <!-- Modal: Settings & Profile -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal" style="max-width: 440px;">
+            <div class="modal-header">
+                <span class="modal-title" data-i18n="settings_title">Settings &amp; Profile</span>
+                <button id="settings-close-btn" class="action-icon-btn">✕</button>
+            </div>
+            <div class="settings-list">
+                <div class="settings-row">
+                    <div class="settings-row-info">
+                        <span class="settings-row-title" data-i18n="profile_photo">Profile Photo</span>
+                        <span class="settings-row-sub" data-i18n="profile_photo_sub">Sent end-to-end encrypted to contacts</span>
+                    </div>
+                    <button id="own-avatar-btn" class="settings-btn-sm own-avatar-btn" title="Profile photo">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A9 9 0 1118.88 17.8M15 10a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <span data-i18n="choose">Choose</span>
+                    </button>
+                    <input type="file" id="own-avatar-input" accept="image/*" class="hidden">
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row-info">
+                        <span class="settings-row-title" data-i18n="contacts_title">Contacts</span>
+                        <span class="settings-row-sub" data-i18n="contacts_sub">Verify safety fingerprints</span>
+                    </div>
+                    <button id="contacts-btn" class="settings-btn-sm">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <span data-i18n="open">Open</span>
+                    </button>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row-info">
+                        <span class="settings-row-title" data-i18n="language_label">Language</span>
+                        <span class="settings-row-sub">English / Türkçe</span>
+                    </div>
+                    <button id="lang-toggle-btn" class="settings-btn-sm">EN</button>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row-info">
+                        <span class="settings-row-title" data-i18n="theme_label">Theme</span>
+                        <span class="settings-row-sub" data-i18n="theme_sub">Dark / Light mode</span>
+                    </div>
+                    <button id="theme-toggle-btn" class="settings-btn-sm" title="Toggle theme">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                        <span data-i18n="toggle">Toggle</span>
+                    </button>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row-info">
+                        <span class="settings-row-title" data-i18n="notif_sound">Notification Sound</span>
+                        <span class="settings-row-sub" data-i18n="notif_sub">Audio alert on new message</span>
+                    </div>
+                    <button id="sound-toggle-btn" class="settings-btn-sm" title="Notification sound">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                        <span id="sound-toggle-label">On</span>
+                    </button>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row-info">
+                        <span class="settings-row-title" data-i18n="backup_key_title">Private Key Backup</span>
+                        <span class="settings-row-sub" data-i18n="backup_key_sub">Export encrypted PEM key</span>
+                    </div>
+                    <button id="show-key-btn" class="settings-btn-sm">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                        <span data-i18n="backup">Backup</span>
+                    </button>
+                </div>
+
+                <div class="settings-row">
+                    <div class="settings-row-info">
+                        <span class="settings-row-title" data-i18n="serverless_mode">Serverless P2P Page</span>
+                        <span class="settings-row-sub" data-i18n="serverless_mode_sub">Signed chat, files &amp; calls without relay</span>
+                    </div>
+                    <a href="./serverless.html" class="settings-btn-sm" style="text-decoration: none;" data-i18n="open">Open</a>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 6px; justify-content: space-between;">
+                <button id="logout-btn" class="settings-btn-sm danger" style="width: 100%; justify-content: center; padding: 10px;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    <span data-i18n="sign_out">Sign Out</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Start New Chat -->
     <div id="new-chat-modal" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
-                <span class="modal-title">New Chat / Group</span>
+                <span class="modal-title" data-i18n="new_chat_title">New Chat / Group</span>
                 <button id="modal-close-btn" class="action-icon-btn">✕</button>
             </div>
-            <div class="modal-tabs" style="display: flex; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
-                <button id="tab-dm" class="tab-btn active" style="background: none; border: none; color: var(--accent-color); font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--accent-color); padding-bottom: 5px; font-size: 14px;">Direct Message</button>
-                <button id="tab-group" class="tab-btn" style="background: none; border: none; color: var(--text-muted); font-weight: 600; cursor: pointer; padding-bottom: 5px; font-size: 14px;">Group Chat</button>
+            <div class="modal-tabs" style="display: flex; gap: 15px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                <button id="tab-dm" class="tab-btn active" style="background: none; border: none; color: var(--accent-color); font-weight: 600; cursor: pointer; border-bottom: 2px solid var(--accent-color); padding-bottom: 5px; font-size: 14px;" data-i18n="direct_message">Direct Message</button>
+                <button id="tab-group" class="tab-btn" style="background: none; border: none; color: var(--text-muted); font-weight: 600; cursor: pointer; padding-bottom: 5px; font-size: 14px;" data-i18n="group_chat">Group Chat</button>
             </div>
-            
-            <!-- DM Section -->
+
             <div id="section-dm" class="tab-section">
                 <div class="input-group" style="margin-bottom: 0;">
-                    <label for="new-username-input">Enter Username</label>
+                    <label for="new-username-input" data-i18n="username">Username</label>
                     <input type="text" id="new-username-input" class="input-control" placeholder="bob">
                 </div>
             </div>
-            
-            <!-- Group Section -->
+
             <div id="section-group" class="tab-section" style="display: none; flex-direction: column; gap: 15px;">
                 <div class="input-group" style="margin-bottom: 0;">
-                    <label for="group-name-input">Group Name</label>
+                    <label for="group-name-input" data-i18n="group_name">Group Name</label>
                     <input type="text" id="group-name-input" class="input-control" placeholder="Project Team">
                 </div>
                 <div class="input-group" style="margin-bottom: 0;">
-                    <label for="group-members-input">Group Members (comma-separated)</label>
+                    <label for="group-members-input" data-i18n="group_members">Group Members (comma-separated)</label>
                     <input type="text" id="group-members-input" class="input-control" placeholder="alice, bob, charlie">
                 </div>
                 <div class="my-groups-section">
-                    <div class="list-section-header" style="padding: 4px 0;">MY GROUPS</div>
+                    <div class="list-section-header" style="padding: 4px 0;" data-i18n="my_groups">MY GROUPS</div>
                     <div id="my-groups-list" class="contacts-list" style="max-height: 160px;"></div>
                 </div>
             </div>
-            
-            <div class="modal-footer" style="margin-top: 20px;">
-                <button id="new-chat-cancel-btn" class="btn" style="background-color: var(--border-color); width: auto;">Cancel</button>
-                <button id="new-chat-confirm-btn" class="btn" style="width: auto; padding: 10px 20px;">Start Chat</button>
+
+            <div class="modal-footer" style="margin-top: 16px;">
+                <button id="new-chat-cancel-btn" class="btn" style="background-color: var(--surface-alt); color: var(--text-color); border: 1px solid var(--border-color); width: auto;" data-i18n="cancel">Cancel</button>
+                <button id="new-chat-confirm-btn" class="btn" style="width: auto; padding: 10px 20px;" data-i18n="start_chat">Start Chat</button>
             </div>
         </div>
     </div>
 
     <!-- Modal: Pure P2P (Serverless) Connection -->
     <div id="p2p-modal" class="modal-overlay">
-        <div class="modal" style="max-width: 480px;">
+        <div class="modal" style="max-width: 460px;">
             <div class="modal-header">
-                <span class="modal-title">Pure P2P (Serverless Call)</span>
+                <span class="modal-title" data-i18n="p2p_modal_title">Direct P2P Call</span>
                 <button id="p2p-close-btn" class="action-icon-btn">✕</button>
             </div>
-            <p style="font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 12px;">
-                Copy and paste SDP codes to establish a direct serverless E2EE connection.
-            </p>
-            
-            <!-- Tab Headers -->
-            <div style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
-                <button id="p2p-tab-caller" class="tab-btn active" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-color); border-bottom: 2px solid var(--accent-color); font-weight: 600; cursor: pointer;">Start Call (Caller)</button>
-                <button id="p2p-tab-callee" class="tab-btn" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-muted); border-bottom: 2px solid transparent; font-weight: 600; cursor: pointer;">Answer Call (Callee)</button>
+            <div class="p2p-banner">
+                <span style="font-size: 12px; color: var(--text-muted);" data-i18n="p2p_banner_text">For signed text, files &amp; calls without any server:</span>
+                <a href="./serverless.html" data-i18n="p2p_banner_link">Open Serverless →</a>
             </div>
 
-            <!-- Caller Tab Content -->
+            <div style="display: flex; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
+                <button id="p2p-tab-caller" class="tab-btn active" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-color); border-bottom: 2px solid var(--accent-color); font-weight: 600; cursor: pointer;" data-i18n="p2p_start_call">Start Call</button>
+                <button id="p2p-tab-callee" class="tab-btn" style="flex: 1; padding: 8px; background: transparent; border: none; color: var(--text-muted); border-bottom: 2px solid transparent; font-weight: 600; cursor: pointer;" data-i18n="p2p_answer_call">Join Call</button>
+            </div>
+
             <div id="p2p-content-caller" class="tab-content">
-                <div class="input-group" style="margin-bottom: 10px;">
-                    <label for="p2p-call-type">Call Type</label>
-                    <select id="p2p-call-type" class="input-control" style="background-color: var(--surface-deep); border: 1px solid var(--border-color); color: var(--text-color); padding: 10px; border-radius: 4px; width: 100%;">
-                        <option value="audio">🎙️ Audio Call</option>
-                        <option value="video">📹 Video Call</option>
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <label for="p2p-call-type" data-i18n="p2p_call_type">Call Type</label>
+                    <select id="p2p-call-type" class="input-control">
+                        <option value="audio">Audio Call</option>
+                        <option value="video">Video Call</option>
                     </select>
                 </div>
-                <button id="p2p-gen-offer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">1. Generate Call Offer</button>
-                
-                <div id="p2p-caller-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--accent-hover);">
+                <button id="p2p-gen-offer-btn" class="btn" style="margin-bottom: 8px;" data-i18n="p2p_step1">1. Create Invite Code</button>
+
+                <div id="p2p-caller-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--accent-hover);">
                     <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                    <span style="font-size: 12px;">Gathering ICE candidates (this may take 2–5s)...</span>
+                    <span style="font-size: 12px;">Preparing direct route (2–5s)...</span>
                 </div>
-                
-                <div class="input-group" style="margin-bottom: 8px;">
-                    <label for="p2p-offer-code">Your Offer Code</label>
-                    <textarea id="p2p-offer-code" class="input-control" rows="4" readonly placeholder="Offer code will appear here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
+
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <button id="p2p-copy-offer-btn" class="btn" style="background-color: var(--surface-alt); color: var(--text-color); border: 1px solid var(--border-color);" disabled data-i18n="copy_invite">Copy Invite Code</button>
                 </div>
-                <button id="p2p-copy-offer-btn" class="btn" style="background-color: var(--border-color); margin-bottom: 15px;" disabled>Copy Offer</button>
+
+                <details class="advanced-details" style="margin-bottom: 10px;">
+                    <summary data-i18n="show_raw_code">Show raw invite code</summary>
+                    <textarea id="p2p-offer-code" class="input-control" rows="3" readonly placeholder="Invite code will appear here..." style="font-family: monospace; font-size: 10px; resize: none;"></textarea>
+                </details>
 
                 <div class="input-group" style="margin-bottom: 8px;">
-                    <label for="p2p-caller-answer-code">2. Peer's Answer Code</label>
-                    <textarea id="p2p-caller-answer-code" class="input-control" rows="4" placeholder="Paste the Answer code from your peer here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
+                    <label for="p2p-caller-answer-code" data-i18n="p2p_step2">2. Paste Peer's Answer Code</label>
+                    <textarea id="p2p-caller-answer-code" class="input-control" rows="3" placeholder="Paste the Answer code from your peer..." style="font-family: monospace; font-size: 10px; resize: none;"></textarea>
                 </div>
-                <button id="p2p-connect-btn" class="btn" style="background-color: var(--accent-color);" disabled>3. Connect & Start Call</button>
+                <button id="p2p-connect-btn" class="btn" disabled data-i18n="p2p_step3">3. Connect &amp; Start Call</button>
             </div>
 
-            <!-- Callee Tab Content -->
             <div id="p2p-content-callee" class="tab-content hidden">
-                <div class="input-group" style="margin-bottom: 10px;">
-                    <label for="p2p-callee-offer-code">1. Peer's Offer Code</label>
-                    <textarea id="p2p-callee-offer-code" class="input-control" rows="4" placeholder="Paste the Offer code from your peer here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
-                </div>
-                <button id="p2p-gen-answer-btn" class="btn" style="background-color: var(--accent-color); margin-bottom: 10px;">2. Accept & Generate Answer</button>
-                
-                <div id="p2p-callee-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--accent-hover);">
-                    <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                    <span style="font-size: 12px;">Gathering ICE candidates (this may take 2–5s)...</span>
-                </div>
-                
                 <div class="input-group" style="margin-bottom: 8px;">
-                    <label for="p2p-answer-code">Your Answer Code</label>
-                    <textarea id="p2p-answer-code" class="input-control" rows="4" readonly placeholder="Your Answer code will appear here..." style="font-family: monospace; font-size: 10px; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color); resize: none;"></textarea>
+                    <label for="p2p-callee-offer-code" data-i18n="p2p_join_step1">1. Paste Peer's Invite Code</label>
+                    <textarea id="p2p-callee-offer-code" class="input-control" rows="3" placeholder="Paste the Offer code from your peer..." style="font-family: monospace; font-size: 10px; resize: none;"></textarea>
                 </div>
-                <button id="p2p-copy-answer-btn" class="btn" style="background-color: var(--border-color);" disabled>Copy Answer</button>
+                <button id="p2p-gen-answer-btn" class="btn" style="margin-bottom: 8px;" data-i18n="p2p_join_step2">2. Accept &amp; Generate Answer</button>
+
+                <div id="p2p-callee-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--accent-hover);">
+                    <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <span style="font-size: 12px;">Preparing direct route (2–5s)...</span>
+                </div>
+
+                <button id="p2p-copy-answer-btn" class="btn" style="background-color: var(--surface-alt); color: var(--text-color); border: 1px solid var(--border-color); margin-bottom: 8px;" disabled data-i18n="copy_answer">Copy Answer Code</button>
+                <details class="advanced-details" style="margin-bottom: 0;">
+                    <summary data-i18n="show_raw_code">Show raw answer code</summary>
+                    <textarea id="p2p-answer-code" class="input-control" rows="3" readonly placeholder="Your Answer code will appear here..." style="font-family: monospace; font-size: 10px; resize: none;"></textarea>
+                </details>
             </div>
         </div>
     </div>
@@ -422,23 +503,23 @@
     <div id="backup-key-modal" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
-                <span class="modal-title">Backup Private Key</span>
+                <span class="modal-title" data-i18n="backup_key_title">Backup Private Key</span>
                 <button id="backup-key-close-btn" class="action-icon-btn">✕</button>
             </div>
-            <p style="font-size: 12px; color: var(--danger); font-weight: 500;">WARNING: Keep this private key secret! Anyone with access to this key can read your messages and impersonate you.</p>
-            <div class="input-group" style="margin-bottom: 12px;">
-                <label for="backup-key-textarea">Your Private Key PEM</label>
-                <textarea id="backup-key-textarea" class="input-control" rows="6" readonly style="font-family: monospace; font-size: 10px; resize: none; background-color: var(--surface-deep); color: var(--text-color); border-color: var(--border-color);"></textarea>
+            <p style="font-size: 12px; color: var(--danger); font-weight: 500;">Keep this private key secret. Anyone with access to it can read your messages and impersonate you.</p>
+            <div class="input-group" style="margin-bottom: 8px;">
+                <label for="backup-key-textarea">Private Key PEM</label>
+                <textarea id="backup-key-textarea" class="input-control" rows="5" readonly style="font-family: monospace; font-size: 10px; resize: none;"></textarea>
             </div>
-            <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-bottom: 12px; text-align: left;">
-                <label style="font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 6px; display: block;">🔒 Encrypt Backup with Password (Highly Recommended)</label>
+            <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-bottom: 8px; text-align: left;">
+                <label style="font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 6px; display: block;">Encrypt Backup with Password (Recommended)</label>
                 <div style="display: flex; gap: 8px;">
-                    <input type="password" id="backup-password-input" class="input-control" placeholder="Choose a password for backup" style="margin-bottom: 0; background-color: var(--surface-deep); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 10px;">
-                    <button id="backup-key-encrypt-download-btn" class="btn" style="width: auto; padding: 10px 16px; font-size: 13px; white-space: nowrap; background-color: var(--accent-color);">Encrypt & Download</button>
+                    <input type="password" id="backup-password-input" class="input-control" placeholder="Password for backup" style="margin-bottom: 0;">
+                    <button id="backup-key-encrypt-download-btn" class="btn" style="width: auto; padding: 10px 16px; font-size: 13px; white-space: nowrap;">Encrypt &amp; Download</button>
                 </div>
             </div>
             <div class="modal-footer">
-                <button id="backup-key-copy-btn" class="btn" style="background-color: var(--border-color); width: auto; padding: 10px 20px;">Copy PEM</button>
+                <button id="backup-key-copy-btn" class="btn" style="background-color: var(--surface-alt); color: var(--text-color); border: 1px solid var(--border-color); width: auto; padding: 10px 20px;">Copy PEM</button>
             </div>
         </div>
     </div>
@@ -447,12 +528,12 @@
     <div id="contacts-modal" class="modal-overlay">
         <div class="modal" style="max-width: 440px;">
             <div class="modal-header">
-                <span class="modal-title">Contacts</span>
+                <span class="modal-title" data-i18n="contacts_title">Contacts</span>
                 <button id="contacts-close-btn" class="action-icon-btn">✕</button>
             </div>
             <input type="text" id="contacts-search" class="input-control" placeholder="Search by name...">
             <div id="contacts-list" class="contacts-list"></div>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Compare this fingerprint with your contact over a separate channel (in person, phone) to verify the key really belongs to them.</p>
+            <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Compare fingerprints with your contact over another trusted channel to verify their identity.</p>
         </div>
     </div>
 
@@ -465,7 +546,9 @@
             </div>
             <div class="gi-meta-row">
                 <span id="gi-group-id" class="contact-fp" style="font-size: 11px;">group_...</span>
-                <button id="gi-copy-id-btn" class="action-icon-btn" title="Copy Group ID">📋</button>
+                <button id="gi-copy-id-btn" class="action-icon-btn" title="Copy Group ID">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                </button>
             </div>
             <div id="gi-creator-label" style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;"></div>
             <div style="display: flex; gap: 8px; margin-bottom: 10px;">
@@ -475,7 +558,7 @@
             <div id="gi-members-list" class="contacts-list" style="max-height: 240px;"></div>
             <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: space-between;">
                 <button id="gi-leave-btn" class="btn" style="width: auto; padding: 8px 14px; background-color: var(--danger); font-size: 13px;">Leave Group</button>
-                <button id="gi-rekey-btn" class="btn" style="width: auto; padding: 8px 14px; font-size: 13px;">🔑 Rotate Key</button>
+                <button id="gi-rekey-btn" class="btn" style="width: auto; padding: 8px 14px; font-size: 13px;">Rotate Key</button>
             </div>
         </div>
     </div>
@@ -484,15 +567,15 @@
     <div id="edit-message-modal" class="modal-overlay">
         <div class="modal" style="max-width: 420px;">
             <div class="modal-header">
-                <span class="modal-title">Edit Message</span>
+                <span class="modal-title" data-i18n="edit_message_title">Edit Message</span>
             </div>
             <textarea id="edit-message-input" class="input-control" rows="3" maxlength="8000" style="resize: vertical;"></textarea>
             <p style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">"Delete for everyone" also removes it on the recipient's device; the message may have already been read or copied.</p>
             <div class="modal-footer" style="display: flex; gap: 8px; justify-content: space-between;">
-                <button id="edit-message-delete-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--danger);">Delete for everyone</button>
+                <button id="edit-message-delete-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--danger);" data-i18n="delete_for_everyone">Delete for everyone</button>
                 <div style="display: flex; gap: 8px;">
-                    <button id="edit-message-cancel-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--border-color); color: var(--text-color);">Cancel</button>
-                    <button id="edit-message-save-btn" class="btn" style="width: auto; padding: 10px 16px;">Save</button>
+                    <button id="edit-message-cancel-btn" class="btn" style="width: auto; padding: 10px 16px; background-color: var(--surface-alt); color: var(--text-color); border: 1px solid var(--border-color);" data-i18n="cancel">Cancel</button>
+                    <button id="edit-message-save-btn" class="btn" style="width: auto; padding: 10px 16px;" data-i18n="save">Save</button>
                 </div>
             </div>
         </div>
@@ -503,20 +586,20 @@
         <div class="modal" style="max-width: 400px; text-align: center;">
             <div class="modal-header" style="justify-content: center;">
                 <span class="modal-title" style="color: var(--danger); font-weight: 700; display: flex; align-items: center; gap: 6px;">
-                    👁️ View-Once Message
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    <span data-i18n="view_once_title">View-Once Message</span>
                 </span>
             </div>
-            <div style="background-color: var(--surface-deep); border: 1px solid var(--border-color); border-radius: 8px; padding: 24px; margin: 8px 0; font-size: 15px; word-wrap: break-word; color: var(--text-color); min-height: 80px; display: flex; align-items: center; justify-content: center; line-height: 1.5;">
+            <div style="background-color: var(--surface-deep); border: 1px solid var(--border-color); border-radius: 10px; padding: 24px; margin: 8px 0; font-size: 15px; word-wrap: break-word; color: var(--text-color); min-height: 80px; display: flex; align-items: center; justify-content: center; line-height: 1.5;">
                 <span id="view-once-modal-content"></span>
             </div>
             <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Closing this window will permanently destroy the message.</p>
             <div class="modal-footer" style="justify-content: center;">
-                <button id="view-once-modal-close-btn" class="btn" style="width: auto; padding: 10px 32px; background-color: var(--danger);">Close & Destroy</button>
+                <button id="view-once-modal-close-btn" class="btn" style="width: auto; padding: 10px 32px; background-color: var(--danger);">Close &amp; Destroy</button>
             </div>
         </div>
     </div>
 
-    <!-- Web Crypto Implementation Scripts -->
     <script type="module" src="./js/app.js"></script>
 </body>
 </html>

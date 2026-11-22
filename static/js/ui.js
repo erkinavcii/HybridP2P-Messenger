@@ -299,6 +299,11 @@ export function renderInbox(query = "") {
 }
 
 // Select active chat session
+export function closeMobileChat() {
+    const cs = document.getElementById("chat-screen");
+    if (cs) cs.classList.remove("mobile-chat-open");
+}
+
 export async function selectChat(partner, publicKeyPem, isGroup = false) {
     if (isRecording()) { cancelRecording(); setRecordingUi(false); }
 // Önceki sohbetten kalan "yazıyor…" göstergesini temizle
@@ -360,6 +365,8 @@ export async function selectChat(partner, publicKeyPem, isGroup = false) {
 
     emptyChatState.classList.add("hidden");
     activeChat.classList.remove("hidden");
+    const cs = document.getElementById("chat-screen");
+    if (cs) cs.classList.add("mobile-chat-open");
     
     const chatObj = state.chats[partner];
     const displayName = (isGroup && chatObj) ? chatObj.groupName : partner;
@@ -453,16 +460,22 @@ async function renderContacts() {
                 <span class="contact-fp" title="${escapeHtml(fp)}">${escapeHtml(fp)}</span>
             </div>
             <div class="contact-actions">
-                <button class="action-icon-btn" data-act="chat" title="Open chat">💬</button>
-                <button class="action-icon-btn" data-act="copy" title="Copy fingerprint">📋</button>
-                <button class="action-icon-btn" data-act="delete" title="Remove contact" style="color: var(--danger);">🗑</button>
+                <button class="action-icon-btn" data-act="chat" title="Open chat">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                </button>
+                <button class="action-icon-btn" data-act="copy" title="Copy fingerprint">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                </button>
+                <button class="action-icon-btn" data-act="delete" title="Remove contact" style="color: var(--danger);">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
             </div>`;
         row.querySelector('[data-act="chat"]').addEventListener("click", () => {
             contactsModal.classList.remove("active");
             selectChat(c.username, c.publicKey, false);
         });
         row.querySelector('[data-act="copy"]').addEventListener("click", (e) => {
-            navigator.clipboard.writeText(fp).then(() => { e.target.innerText = "✓"; });
+            navigator.clipboard.writeText(fp).then(() => { e.currentTarget.textContent = "✓"; });
         });
         row.querySelector('[data-act="delete"]').addEventListener("click", async () => {
             if (!confirm(`Remove '${c.username}' from contacts? Chat history is kept; if you message again, you will need to re-verify their key.`)) return;

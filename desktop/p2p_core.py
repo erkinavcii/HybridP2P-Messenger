@@ -236,6 +236,28 @@ def _valid_username(name: str) -> bool:
     return bool(re.fullmatch(r"[a-z0-9_]{2,32}", name or ""))
 
 
+# ─────────────────────────── güvenlik kodu (kişi doğrulama) ───────────────────────────
+# İki taraf da aynı 20 haneyi görür; sesli aramada okunup karşılaştırılır.
+# Algoritma sayfadaki P2PCore.safetyNumber ile birebir aynıdır (testlerle karşılaştırılır).
+
+SAFETY_PREFIX = "hybridp2p-sn:v1:"
+
+
+def _safety_groups(username: str, pub_or_pem) -> str:
+    """Tek kişinin 2 grubu: SHA-256(önek + kullanıcı + ":" + DER SPKI) ilk 10 baytı → 2×5 hane."""
+    digest = hashlib.sha256((SAFETY_PREFIX + username + ":").encode("utf-8") + _der(pub_or_pem)).digest()
+    return " ".join(f"{int.from_bytes(digest[5 * i:5 * i + 5], 'big') % 100000:05d}" for i in range(2))
+
+
+def safety_number(user_a: str, pub_a, user_b: str, pub_b) -> str:
+    """İki kişinin ortak güvenlik kodu ("ddddd ddddd ddddd ddddd"); hesaplayan taraftan bağımsız."""
+    if user_a == user_b:
+        raise ValueError("güvenlik kodu için iki farklı kullanıcı gerekir")
+    parts = sorted([(user_a, _safety_groups(user_a, pub_a)), (user_b, _safety_groups(user_b, pub_b))],
+                   key=lambda p: p[0])
+    return " ".join(p[1] for p in parts)
+
+
 # ─────────────────────────── veri kanalı protokolü ───────────────────────────
 # Her çerçeve tek bir JSON metnidir. Bilinmeyen türler yok sayılır (ileri uyumluluk).
 

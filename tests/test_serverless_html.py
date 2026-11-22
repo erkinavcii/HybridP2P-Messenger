@@ -249,3 +249,62 @@ def test_page_embeds_quality_js_verbatim():
     for line in body.splitlines():
         if line.strip():
             assert ("  " + line) in page, line
+
+
+# ─────────────────────────── güvenlik kodu (kişi doğrulama) ───────────────────────────
+
+# Sabit anahtarlar + bilinen sonuç: algoritma sessizce değişirse iki tarafın kodları uyuşmaz.
+KAT_A_PEM = """-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDKPTwsvjB5r7TfLrXfUaBSBmA/
++/biov2sROsqGhuyEFW4Ouh1Bqo/1b1VDoc2jGIFhTlR9L/O9PtvQNELKojRVrXE
+ZSHS4dTrKEBcn8ixesaTjlFDRgCa0UqN8xquGtlRU2P/IVaUwM3Kys1p1BzhEt1X
+uMvKczu8TJUkdWgWEQIDAQAB
+-----END PUBLIC KEY-----
+"""
+KAT_B_PEM = """-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCjqRD4J8cZtFc0je37TKFPewFp
+jwJFBYfrVrgT4ENKcz7/h5EsGFlh0Y1pmSNhbrbOHtbXwzMXAYx+5VFRV/em0Mq8
+UVIFrN7OyWJ4oc7HN37XlJs22PUqsjnGjNiwk9GhhbOP8Z40UWvAXnfcpvPWwk20
+4G1hF3c71Jw3ELhe2QIDAQAB
+-----END PUBLIC KEY-----
+"""
+KAT_SN = "83593 34410 85029 95495"          # alice=KAT_A, bob=KAT_B
+SN_RE = re.compile(r"^\d{5} \d{5} \d{5} \d{5}$")
+
+
+def test_safety_number_known_answer():
+    assert core.safety_number("alice", KAT_A_PEM, "bob", KAT_B_PEM) == KAT_SN
+    assert core.safety_number("bob", KAT_B_PEM, "alice", KAT_A_PEM) == KAT_SN
+    r = node({"op": "safety", "a": "alice", "a_pem": KAT_A_PEM, "b": "bob", "b_pem": KAT_B_PEM},
+             {"op": "safety", "a": "bob", "a_pem": KAT_B_PEM, "b": "alice", "b_pem": KAT_A_PEM})
+    assert [x["sn"] for x in r] == [KAT_SN, KAT_SN]
+
+
+def test_safety_number_matches_desktop(keys):
+    pems = {n: public_key_to_pem_string(pub) for n, (_, pub) in keys.items()}
+    objs = {n: pub for n, (_, pub) in keys.items()}
+    cases = [("alice", "alice", "bob", "bob"), ("bob", "bob", "alice", "alice"),
+             ("alice", "alice", "mallory", "mallory"), ("bob", "bob", "mallory", "mallory"),
+             ("alice", "mallory", "bob", "bob"),        # alice adına mallory'nin anahtarı
+             ("carol_9", "alice", "bob", "bob"),        # aynı anahtar, farklı ad
+             ("alice", "alice", "bob", "alice")]        # karşı tarafın anahtarı değişti
+    r = node(*[{"op": "safety", "a": ua, "a_pem": pems[ka], "b": ub, "b_pem": pems[kb]}
+               for ua, ka, ub, kb in cases])
+    py = [core.safety_number(ua, objs[ka], ub, objs[kb]) for ua, ka, ub, kb in cases]
+    assert [x["sn"] for x in r] == py
+    assert all(SN_RE.match(s) for s in py)
+    assert py[0] == py[1]                                   # sıradan bağımsız
+    assert core.safety_number("alice", pems["alice"], "bob", pems["bob"]) == py[0]   # PEM = nesne
+    base = py[0]
+    assert py[4] != base and py[5] != base and py[6] != base   # anahtar ya da ad değişirse kod değişir
+    assert core.safety_number("alice", objs["alice"], "bobby", objs["bob"]) != base
+
+
+def test_safety_number_rejects_same_user(keys):
+    _, a_pub = keys["alice"]
+    _, b_pub = keys["bob"]
+    with pytest.raises(ValueError):
+        core.safety_number("alice", a_pub, "alice", b_pub)
+    pem_a, pem_b = public_key_to_pem_string(a_pub), public_key_to_pem_string(b_pub)
+    r = node({"op": "safety", "a": "alice", "a_pem": pem_a, "b": "alice", "b_pem": pem_b})
+    assert "error" in r[0] and "sn" not in r[0]

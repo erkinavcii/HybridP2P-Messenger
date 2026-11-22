@@ -2789,6 +2789,27 @@ var qrcode = function() {
   }
   const isBlocked = (id) => id.status === S.KEY_CHANGED || id.status === S.INVALID;
 
+  // ── güvenlik kodu (kişi doğrulama) — masaüstü p2p_core.safety_number ile birebir ──
+  const SAFETY_PREFIX = "hybridp2p-sn:v1:";
+  async function safetyGroups(username, der) {
+    const head = enc.encode(SAFETY_PREFIX + username + ":"), body = new Uint8Array(der);
+    const buf = new Uint8Array(head.length + body.length); buf.set(head, 0); buf.set(body, head.length);
+    const d = new Uint8Array(await subtle.digest("SHA-256", buf));
+    const groups = [];
+    for (let i = 0; i < 2; i++) {
+      let v = 0;                                           // 5 bayt < 2^40: Number ile kesin
+      for (let j = 0; j < 5; j++) v = v * 256 + d[5 * i + j];
+      groups.push(String(v % 100000).padStart(5, "0"));
+    }
+    return groups.join(" ");
+  }
+  async function safetyNumber(userA, derA, userB, derB) {
+    if (userA === userB) throw new Error("güvenlik kodu için iki farklı kullanıcı gerekir");
+    const parts = [[userA, await safetyGroups(userA, derA)], [userB, await safetyGroups(userB, derB)]];
+    parts.sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
+    return parts.map((p) => p[1]).join(" ");
+  }
+
   // ── veri kanalı çerçeveleri ──
   function textFrame(text, id) {
     return JSON.stringify({ t: "msg", id: id || randHex(16), text: String(text || "").slice(0, MAX_TEXT_CHARS),
@@ -2994,7 +3015,7 @@ var qrcode = function() {
 
   G.P2PCore = { PREFIX_V2, MODES, S, CHUNK_SIZE, FID_BYTES, MAX_FILE_BYTES, MAX_WEB_FILE_BYTES, MAX_TEXT_CHARS, USERNAME_RE,
     b64, unb64, hex, randHex, sha256hex, derToPem, pemToDer, fingerprint, importPublic, importPrivatePkcs8,
-    generateIdentity, sign, verify, makeEnvelope, parseCode, identifyPeer, isBlocked,
+    generateIdentity, sign, verify, makeEnvelope, parseCode, identifyPeer, isBlocked, safetyNumber,
     textFrame, ackFrame, parseFrame, chunkFrame, splitChunk, safeFilename, fmtSize,
     ICE_DEFAULT, ICE_PRESETS, IceConfigError, parseCustomIce, iceServersFor,
     QualityPolicy, classify, statsSample, applyLevel, qualityLabel, startQualityMonitor, WEB_LEVELS };

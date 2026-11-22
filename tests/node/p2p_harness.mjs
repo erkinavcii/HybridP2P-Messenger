@@ -77,6 +77,12 @@ for (const cmd of input) {
       try { out.push({ servers: C.iceServersFor(cmd.preset, cmd.custom || "") }); }
       catch (e) { out.push({ error: e instanceof C.IceConfigError ? e.message : "BEKLENMEYEN: " + e }); }
       break;
+    case "safety":                          // { a, a_pem, b, b_pem } → güvenlik kodu ya da hata
+      try {
+        out.push({ sn: await C.safetyNumber(cmd.a, C.pemToDer(cmd.a_pem, "PUBLIC KEY"),
+                                            cmd.b, C.pemToDer(cmd.b_pem, "PUBLIC KEY")) });
+      } catch (e) { out.push({ error: String(e.message || e) }); }
+      break;
     default:
       throw new Error("bilinmeyen komut: " + cmd.op);
   }

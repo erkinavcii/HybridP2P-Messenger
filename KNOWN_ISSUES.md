@@ -326,3 +326,18 @@ Her 2 sn'de kayıp ve RTT okunur (`desktop/call_quality.py`, `static/js/quality.
 **Hâlâ açık:**
 - `script-src` içinde `'unsafe-inline'` duruyor, çünkü satır içi `onclick` işleyicileri hâlâ var. Onları `addEventListener`'a taşıyıp `'unsafe-inline'`'ı kaldırmak gerekiyor.
 - Gerçek tarayıcıda denenmedi; yalnızca Node testleri ve statik kontroller var.
+
+---
+
+## 13. UI/UX Modernizasyonu, Mod Geçişi & Bug Düzeltmeleri — M1, M4, S2 (2026-11-22)
+
+### 13.1 — ✅ Düzeltildi (`M1`, `M4`, `S2`)
+- **M1 (`message_store.py`):** `get_messages(..., limit=200)` artık en eski 200 yerine en **yeni** `limit` mesajı (`ORDER BY timestamp DESC, id DESC LIMIT ?`) alıp kronolojik sırayla döndürür.
+- **M4 (`message_store.py`):** `save_contact` artık `INSERT OR REPLACE` yerine `ON CONFLICT(username) DO UPDATE` kullanır; mevcut kişi güncellenirken `signs_messages`, `avatar` ve `avatar_sent_hash` korunur.
+- **S2 (`server/websocket_manager.py`):** Bir kullanıcı VoIP araması sırasında bağlantıyı kaybettiğinde `disconnect()` artık `end_call(call_id)` ile her iki tarafı da `active_calls`'tan temizler ve karşı tarafa `call_end` (`reason: "peer_disconnected"`) bildirir. Üçü de `tests/test_bugfixes.py` içinde regresyon testleriyle doğrulandı.
+
+### 13.2 — Signal-Tarzı Arayüz, Basitleştirilmiş Mod Geçişi ve EN/TR Lokalizasyon
+- **Masaüstü (`desktop/theme.py`, `client.py`, `desktop/*.py`):** Kobalt/İndigo mavi (`#3b82f6` / `#2563eb`) + arduvaz koyu/açık tema paleti, ARB tarzı `en` (varsayılan) + `tr` sözlük desteği, giriş ekranında `[ Sunuculu Mod | Doğrudan P2P ]` seçicisi ve daraltılabilir gelişmiş bağlantı/anahtar ayarları, doğal genişlikli mesaj baloncukları (`_bubble_width`), adım adım P2P bağlantı sihirbazı ve sohbet başlığında parmak izi doğrulama diyaloğu eklendi.
+- **Web (`static/index.html`, `static/css/styles.css`, `static/js/`):** Mobil responsive görünüm (`@media (max-width: 768px)`, `.mobile-chat-open` + `#mobile-back-btn`), sadeleştirilmiş sol üst bar + `#settings-modal`, girişte mod seçici ve SVG ikonlar eklendi.
+- **Mobil / Sunucusuz (`static/serverless.html`):** Alt/üst sekmeli mobil gezinme (`Connect` | `Contacts` | `Identity`), daraltılabilir ham SDP kod kutuları, SVG arama kontrolleri ve anlık `EN / TR` dil geçişi eklendi; tüm `test_serverless_html.py` ve `test_android.py` güvenlik/protokol sözleşmeleri korundu.
+

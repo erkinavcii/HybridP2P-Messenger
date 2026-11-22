@@ -55,6 +55,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 - [x] **Deployment (D1–D5):** Docker imajı, docker-compose (Caddy; alan adı + Let's Encrypt ya da yalnızca IP + kendinden imzalı sertifika), masaüstü https/wss + parmak izi sabitleme, coturn (STUN/TURN) ve Google STUN aç/kapa, PWA, Cloudflare Tunnel demosu, `DEPLOY.md`. **Docker'da henüz çalıştırılmadı** — KNOWN_ISSUES §8.
 - [x] **Otomatik Testler:** `tests/` altında pytest paketi (sunucu yolları, imzalar, TLS sabitleme, deployment, PWA önbellek listesi …).
 - [x] **Güvenlik Düzeltmeleri (K1–K4, 2026-11-13):** giriş challenge'ı yalnızca UUIDv4 ise imzalanır; grup anahtarı dağıtımı imzalı ve üyelik kontrollü; masaüstü gelen dosyayı temizlenmiş adla `Downloads/HybridP2P`'ye yazar; web istemcisinde XSS yolları kapatıldı. Kalan işler ve açık kararlar: KNOWN_ISSUES §12, ayrıntı: `fable.md`.
+- [x] **Signal-Tarzı UI/UX Modernizasyonu, EN/TR Lokalizasyon & Bug Düzeltmeleri (2026-11-22):** Masaüstü (`desktop/theme.py`, `client.py`, `desktop/*.py`), Web (`static/index.html`, `styles.css`, `static/js/`) ve Mobil/Sunucusuz (`static/serverless.html`) arayüzleri Kobalt-İndigo + Arduvaz paletine geçirildi; giriş ekranı mod seçicisi ve daraltılabilir gelişmiş ayarlarla sadeleştirildi; adım adım P2P bağlantı sihirbazı, mobil responsive sohbet görünümü, doğal baloncuk genişlikleri, ARB tarzı `en`/`tr` dil desteği ve `M1`/`M4`/`S2` düzeltmeleri tamamlandı (KNOWN_ISSUES §13).
 
 ---
 

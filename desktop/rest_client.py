@@ -23,6 +23,7 @@ from crypto_utils import (
     decrypt_message,
 )
 from desktop import net_config
+from desktop.theme import t
 
 
 class RestClientMixin:
@@ -30,13 +31,13 @@ class RestClientMixin:
     def initialize_keys(self, username: str):
         priv, pub = load_keys_from_disk(username)
         if priv and pub:
-            self.log_status("Existing keys loaded.")
+            self.log_status(t("keys_loaded"))
             return priv, pub
-        self.log_status("Generating RSA-4096 keys...")
+        self.log_status(t("keys_generating"))
         self.page.update()
         priv, pub = generate_rsa_keypair()
         save_keys_to_disk(username, priv, pub)
-        self.log_status("Keys generated.")
+        self.log_status(t("keys_generated"))
         return priv, pub
 
     def _canonical_json(self, payload: dict) -> str:
@@ -165,7 +166,7 @@ class RestClientMixin:
             if resp.status_code == 200:
                 data = resp.json()
                 if data["count"]:
-                    self.log_status(f"{data['count']} cevrimdisi mesaj alindi.")
+                    self.log_status(t("offline_received", n=data['count']))
                     print(f"[REST] {data['count']} yeni cevrimdisi mesaj alindi.")
                 else:
                     print("[REST] Cevrimdisi mesaj yok.")
@@ -194,5 +195,5 @@ class RestClientMixin:
                         self._on_incoming_message(msg["sender"], f"[Hata: {ex}]",
                                              msg.get("timestamp", ""))
         except Exception as e:
-            self.log_status("Failed to fetch offline messages.")
+            self.log_status(t("offline_fetch_failed"))
             print(f"[REST] Cevrimdisi mesajlar sunucudan cekilemedi: {e}")

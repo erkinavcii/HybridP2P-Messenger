@@ -92,7 +92,7 @@ class ServerlessScreenMixin:
 
                 self.run_on_ui(_ui)
             except Exception as ex:
-                msg = f"Failed to start serverless mode: {ex}"
+                msg = t("serverless_start_failed", err=ex)
 
                 def _fail():
                     self.serverless_btn.disabled = False
@@ -156,7 +156,7 @@ class ServerlessScreenMixin:
 
         def import_card(e):
             field = ft.TextField(
-                label="Contact Card (JSON)",
+                label=t("contact_card_label"),
                 multiline=True,
                 min_lines=4,
                 max_lines=7,
@@ -177,15 +177,12 @@ class ServerlessScreenMixin:
                     return
                 existing = store.get_contact(username)
                 if existing and existing.get("fingerprint") != cfp:
-                    err.value = (
-                        f"'{username}' is saved with a DIFFERENT key. "
-                        "Verify out-of-band before replacing."
-                    )
+                    err.value = t("contact_key_differs", user=username)
                     self.page.update()
                     return
                 store.save_contact(username, pem, cfp)
                 dlg.open = False
-                self.log_status(f"Added '{username}' to contacts.")
+                self.log_status(t("contact_added", user=username))
                 render_contacts()
 
             dlg = ft.AlertDialog(

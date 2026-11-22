@@ -41,6 +41,12 @@ LOGIN_ICON = "brand/icon.png"
 LOGIN_SPLASH = "brand/splash.png"
 
 
+def _invert_hex(color: str) -> str:
+    """'#rrggbb' rengin tersi (açık temada splash görselinin tonlaması için)."""
+    value = int(color.lstrip("#")[:6], 16)
+    return f"#{0xFFFFFF - value:06x}"
+
+
 class MessengerApp(
     BubblesMixin,
     RestClientMixin,
@@ -340,6 +346,8 @@ class MessengerApp(
                 ft.Container(height=6),
             ],
             spacing=0,
+            # STRETCH: alanlar kullanıcı adı alanıyla aynı genişlikte ve aynı sol kenarda
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             visible=not is_p2p,
         )
 
@@ -352,6 +360,7 @@ class MessengerApp(
                     self.import_key_field,
                 ],
                 spacing=4,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             ),
             visible=False,
             padding=ft.Padding(0, 8, 0, 0),
@@ -498,47 +507,81 @@ class MessengerApp(
             shadow=ft.BoxShadow(blur_radius=20, color=C.shadow, offset=ft.Offset(0, 6)),
         )
 
-        self.login_view = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Container(content=quick_controls, padding=ft.Padding(16, 10, 16, 0)),
-                    ft.Container(
-                        content=ft.Column(
-                            controls=[
-                                ft.Container(
-                                    content=ft.Image(src=LOGIN_ICON, width=56, height=56, fit=ft.BoxFit.CONTAIN),
-                                    padding=10,
-                                    bgcolor=C.surface,
-                                    border_radius=16,
-                                    border=ft.Border.all(1, C.border),
-                                ),
-                                ft.Text("HybridP2P", size=26, weight=ft.FontWeight.BOLD, color=C.text),
-                                ft.Text(t("app_tagline"), size=13, color=C.text_secondary, text_align=ft.TextAlign.CENTER),
-                                ft.Container(height=12),
-                                login_card,
-                            ],
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                            spacing=6,
-                        ),
-                        expand=True,
-                        alignment=ft.Alignment(0, 0),
-                        padding=ft.Padding(16, 0, 16, 0),
+        # Splash (ilk açılış görseli): giriş ekranının üst kısmında, alta doğru tema
+        # zeminine eriyen ince bir arka plan. Görseldeki parlayan zincir logo görevi görür;
+        # başlık ve kart görselin tamamen eridiği bölgede durduğu için iki temada da okunur.
+        # Açık temada görsel ters çevrilip tonlanır: koyu bir şerit yerine açık zeminde mavi parıltı.
+        hero_h = 300
+        hero_bg = ft.ShaderMask(
+            content=ft.Container(
+                height=hero_h,
+                image=ft.DecorationImage(
+                    src=LOGIN_SPLASH,
+                    fit=ft.BoxFit.COVER,
+                    alignment=ft.Alignment(0, -0.5),     # zincir, başlığın üstündeki boşluğa oturur
+                    # Açık tema: renkler ters çevrilir (koyu zemin → açık), parıltı mavi kalsın
+                    # diye önce vurgu renginin TERSİ ile ton (HUE) uygulanır (Flutter'da
+                    # tersleme renk filtresinden SONRA yapılır).
+                    invert_colors=not C.is_dark,
+                    color_filter=None if C.is_dark else ft.ColorFilter(
+                        color=_invert_hex(C.accent), blend_mode=ft.BlendMode.HUE
                     ),
-                    ft.Container(
-                        content=ft.Row(
-                            controls=[
-                                ft.Icon(ft.Icons.VERIFIED_USER_OUTLINED, size=14, color=C.success),
-                                ft.Text("RSA-4096 · AES-256-GCM · Zero-Knowledge", size=11, color=C.text_muted),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=6,
-                        ),
-                        padding=ft.Padding(0, 8, 0, 18),
-                    ),
-                ],
-                expand=True,
-                scroll=ft.ScrollMode.AUTO,
+                ),
             ),
+            shader=ft.LinearGradient(
+                begin=ft.Alignment(0, -1),
+                end=ft.Alignment(0, 1),
+                colors=[
+                    ft.Colors.with_opacity(1.0 if C.is_dark else 0.9, "#ffffff"),
+                    ft.Colors.with_opacity(0.9 if C.is_dark else 0.75, "#ffffff"),
+                    ft.Colors.with_opacity(0.0, "#ffffff"),
+                ],
+                stops=[0.0, 0.5, 0.95],
+            ),
+            blend_mode=ft.BlendMode.DST_IN,
+            top=0,
+            left=0,
+            right=0,
+            height=hero_h,
+        )
+
+        login_column = ft.Column(
+            controls=[
+                ft.Container(content=quick_controls, padding=ft.Padding(16, 10, 16, 0)),
+                ft.Container(height=hero_h - 200),          # splash'teki zincir burada görünür
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Text("HybridP2P", size=26, weight=ft.FontWeight.BOLD, color=C.text),
+                            ft.Text(t("app_tagline"), size=13, color=C.text_secondary, text_align=ft.TextAlign.CENTER),
+                            ft.Container(height=12),
+                            login_card,
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=6,
+                    ),
+                    alignment=ft.Alignment(0, -1),
+                    padding=ft.Padding(16, 0, 16, 0),
+                ),
+                ft.Container(expand=True),
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.VERIFIED_USER_OUTLINED, size=14, color=C.success),
+                            ft.Text("RSA-4096 · AES-256-GCM · Zero-Knowledge", size=11, color=C.text_muted),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=6,
+                    ),
+                    padding=ft.Padding(0, 8, 0, 18),
+                ),
+            ],
+            expand=True,
+            scroll=ft.ScrollMode.AUTO,
+        )
+
+        self.login_view = ft.Container(
+            content=ft.Stack([hero_bg, login_column], expand=True),
             expand=True,
             bgcolor=C.bg,
         )

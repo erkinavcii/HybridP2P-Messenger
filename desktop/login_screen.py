@@ -99,8 +99,8 @@ class LoginScreenMixin:
                         def _fail_empty_key():
                             self.login_btn.disabled = False
                             self.login_btn.content.controls[1].value = t("sign_in")
-                            self.username_field.error_text = "Please paste your Private Key PEM."
-                            self.log_status("Sign in failed. Private key empty.")
+                            self.username_field.error_text = t("login_key_empty")
+                            self.log_status(t("login_key_empty_status"))
                             self.page.update()
                         self.run_on_ui(_fail_empty_key)
                         return
@@ -114,8 +114,8 @@ class LoginScreenMixin:
                         def _fail_invalid_key(err_msg=str(e_key)):
                             self.login_btn.disabled = False
                             self.login_btn.content.controls[1].value = t("sign_in")
-                            self.username_field.error_text = f"Invalid Private Key PEM: {err_msg}"
-                            self.log_status(f"Import failed: {err_msg}")
+                            self.username_field.error_text = t("login_key_invalid", err=err_msg)
+                            self.log_status(t("login_import_failed", err=err_msg))
                             self.page.update()
                         self.run_on_ui(_fail_invalid_key)
                         return
@@ -150,8 +150,8 @@ class LoginScreenMixin:
                         self.tls_pin_field.error_text = t("err_pin_mismatch")
                         self._show_pin_mismatch_dialog(ex)
                     else:
-                        self.username_field.error_text = f"Error: {ex}"
-                    self.log_status(f"Sign in failed: {ex}")
+                        self.username_field.error_text = t("error_msg", err=ex)
+                    self.log_status(t("login_failed", err=ex))
                     self.page.update()
                 self.page.run_task(login_failed_ui)
 

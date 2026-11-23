@@ -30,14 +30,18 @@
   :root {
     --bg: #0b0f17; --surface: #131a26; --surface-alt: #1e293b; --border: #293548;
     --text: #f8fafc; --muted: #94a3b8; --accent: #3b82f6; --accent-2: #60a5fa;
-    --on-accent: #ffffff; --ok: #22c55e; --info: #60a5fa; --danger: #ef4444;
+    --on-accent: #ffffff; --ok: #22c55e; --info: #60a5fa; --danger: #ef4444; --warn: #f59e0b;
+    --ok-soft: rgba(34, 197, 94, 0.12); --warn-soft: rgba(245, 158, 11, 0.14); --accent-soft: rgba(59, 130, 246, 0.12);
+    --backdrop: rgba(2, 6, 23, 0.6);
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
     :root {
       --bg: #f8fafc; --surface: #ffffff; --surface-alt: #f1f5f9; --border: #e2e8f0;
       --text: #0f172a; --muted: #64748b; --accent: #2563eb; --accent-2: #1d4ed8;
-      --ok: #16a34a; --info: #2563eb; --danger: #dc2626; color-scheme: light;
+      --ok: #16a34a; --info: #2563eb; --danger: #dc2626; --warn: #b45309;
+      --ok-soft: rgba(22, 163, 74, 0.1); --warn-soft: rgba(180, 83, 9, 0.1); --accent-soft: rgba(37, 99, 235, 0.08);
+      --backdrop: rgba(15, 23, 42, 0.45); color-scheme: light;
     }
   }
   * { box-sizing: border-box; }
@@ -104,7 +108,6 @@
             color: var(--on-accent); border-bottom-left-radius: 16px; border-bottom-right-radius: 4px; }
   .msg .meta { font-size: 10px; opacity: .75; margin-top: 2px; text-align: right; }
   .file { max-width: 86%; }
-  progress { width: 100%; }
   .composer { display: flex; gap: 6px; padding-top: 8px; align-items: center; }
   .composer input[type=text] { flex: 1; border-radius: 22px; }
   .badge { font-size: 12px; margin: 4px 0 6px; }
@@ -138,6 +141,92 @@
   #call-end { position: absolute; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 3;
               text-align: center; }
   a.btn { display: inline-block; text-decoration: none; color: var(--accent-2); }
+
+  /* ── Bağlantı adımları: ilerleme göstergesi + adım kutuları ── */
+  .steps { display: flex; align-items: center; gap: 6px; list-style: none; margin: 0 0 12px; padding: 0; }
+  .steps li { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 600; min-width: 0; }
+  .steps li + li::before { content: ""; width: 14px; height: 2px; border-radius: 1px; background: var(--border); flex: none; }
+  .steps li.done + li::before { background: var(--ok); }
+  .steps .n { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+              border: 1.5px solid var(--border); font-size: 12px; flex: none; background: var(--bg); }
+  .steps li.done .n { border-color: var(--ok); background: var(--ok); color: var(--on-accent); }
+  .steps li.cur { color: var(--text); flex: 1; }
+  .steps li.cur .n { border-color: var(--accent); background: var(--accent); color: var(--on-accent);
+                     box-shadow: 0 0 0 4px var(--accent-soft); }
+  .steps li:not(.cur) .t { display: none; }
+  .steps li.cur .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (min-width: 520px) { .steps li .t { display: inline !important; } .steps li { flex: none; } }
+  .step { border: 1px solid var(--border); border-radius: 12px; margin-top: 10px; background: var(--bg); }
+  .step.cur { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
+  .step-head { width: 100%; justify-content: flex-start; border: none; background: transparent; padding: 10px 12px;
+               font-weight: 600; font-size: 14px; text-align: left; border-radius: 12px; }
+  .step-head .n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+                  font-size: 12px; flex: none; border: 1.5px solid var(--border); color: var(--muted); }
+  .step.cur .step-head .n { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .step.done .step-head { color: var(--muted); font-weight: 500; font-size: 13px; padding: 8px 12px; }
+  .step.done .step-head .n { background: var(--ok); border-color: var(--ok); color: var(--on-accent); }
+  .step-head .more { margin-left: auto; font-size: 12px; color: var(--accent-2); font-weight: 600; }
+  .step:not(.done) .step-head .more { display: none; }
+  .step-body { padding: 0 12px 12px; }
+  .step-body > label:first-child { margin-top: 0; }
+  .step.done:not(.open) .step-body, .step.todo .step-body { display: none; }
+  .wait { display: flex; gap: 12px; align-items: center; padding: 4px 0; }
+  .wait strong { display: block; font-size: 14px; }
+  .wait p { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .wait p.keep { color: var(--text); font-weight: 600; }
+  .hint-box { margin-top: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--warn); background: var(--warn-soft); font-size: 13px; }
+  .hint-box ul { margin: 6px 0 0; padding-left: 18px; }
+
+  /* ── Marka yükleyicisi: iç içe iki halka + anahtar deliği (yalnızca SVG + CSS) ── */
+  .chain-loader { display: inline-block; flex: none; width: 64px; height: 38px; color: var(--accent); vertical-align: middle; }
+  .chain-loader.sm { width: 30px; height: 18px; }
+  button .chain-loader { color: inherit; }
+  .chain-loader svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .cl-track { fill: none; stroke: currentColor; stroke-width: 6; opacity: .2; }
+  .cl-fill { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round;
+             stroke-dasharray: 138.3; stroke-dashoffset: 138.3; transform-box: fill-box; transform-origin: center;
+             animation: cl-fill 2.8s ease-in-out infinite, cl-turn 9s linear infinite; }
+  .cl-r { animation-delay: .7s, 0s; }
+  .cl-key { fill: currentColor; }
+  .cl-dot { fill: var(--accent-2); filter: drop-shadow(0 0 3px var(--accent-2));
+            offset-path: path("M22 36A22 22 0 0 1 60 20.9A22 22 0 0 1 98 36"); offset-rotate: 0deg;
+            animation: cl-dot 2.8s ease-in-out infinite; }
+  @keyframes cl-fill { 0% { stroke-dashoffset: 138.3; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -138.3; } }
+  @keyframes cl-turn { to { transform: rotate(360deg); } }
+  @keyframes cl-dot { 0% { offset-distance: 0%; opacity: 0; } 15%, 85% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
+  @keyframes cl-pulse { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) {
+    .chain-loader { animation: cl-pulse 3s ease-in-out infinite; }
+    .chain-loader * { animation: none !important; }
+    .cl-fill { stroke-dashoffset: 0; }
+    .cl-dot { display: none; }
+  }
+  .loading-line { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* ── Kişi doğrulama (güvenlik kodu) ── */
+  .vbadge { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .vchip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 4px 10px; font-size: 12px;
+           font-weight: 700; border: 1px solid; cursor: pointer; background: transparent; }
+  .vchip.ok { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+  .vchip.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+  .vbadge button.small { padding: 4px 10px; font-size: 12px; border-radius: 999px; }
+  .call-sn { margin-top: 6px; font: 600 15px/1.3 ui-monospace, Consolas, monospace; letter-spacing: .06em; opacity: .92; }
+  .call-sn small { display: block; font: 11px system-ui, sans-serif; letter-spacing: 0; opacity: .75; }
+  dialog.dlg { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text);
+               padding: 18px; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+  dialog.dlg::backdrop { background: var(--backdrop); }
+  dialog.dlg h2 { font-size: 17px; margin: 0 0 6px; }
+  dialog.dlg p { font-size: 13px; color: var(--muted); margin: 6px 0; line-height: 1.45; }
+  .sn { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0;
+        font: 700 26px/1.1 ui-monospace, Consolas, monospace; letter-spacing: .08em; text-align: center; }
+  .sn span { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 4px; }
+  @media (min-width: 520px) { .sn { grid-template-columns: repeat(4, 1fr); font-size: 22px; } }
+  .settings-box { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .switch { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; font-size: 14px; color: var(--text); font-weight: 600; }
+  .sys-note { align-self: center; max-width: 92%; text-align: center; font-size: 12px; padding: 6px 10px; border-radius: 10px;
+              color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); }
+  .contact-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .contact-row strong { color: var(--text); }
 </style>
 </head>
 <body>
@@ -171,6 +260,7 @@
       <input id="key-file" type="file" accept=".pem,.txt" class="hidden">
     </div>
     <p class="sub" style="margin-top:10px; margin-bottom:0;" data-i18n="setup_hint">If not remembered, closing the page leaves no trace. Load your desktop/web .pem key to keep the same identity.</p>
+    <div id="setup-loading" class="loading-line hidden"><span class="chain-loader" data-loader></span><span data-i18n="gen_keys">Generating RSA-4096 keys (may take a few seconds on mobile)…</span></div>
     <div id="setup-status" class="status"></div>
   </section>
 
@@ -180,6 +270,11 @@
       <button id="btn-copy-card" data-i18n="copy_card">Copy Contact Card</button>
       <button id="btn-forget" class="danger hidden" data-i18n="forget">Forget</button></div>
     <div id="me-fp" class="fp"></div>
+    <div class="settings-box">
+      <strong data-i18n="settings">Settings</strong>
+      <label class="switch" style="margin-top:8px"><input id="strict-mode" type="checkbox"><span data-i18n="strict_mode">Strict mode</span></label>
+      <p class="sub" style="margin:4px 0 0" data-i18n="strict_hint">With strict mode on, files and video calls work only with contacts you have verified with the safety number. Text chat and voice calls stay allowed (so you can read the number aloud).</p>
+    </div>
   </section>
 
   <!-- ═════════════ 3. Bağlantı Sihirbazı ═════════════ -->
@@ -195,70 +290,132 @@
       <button id="tab-start" class="active" data-i18n="tab_start">Start Invite</button>
       <button id="tab-answer" data-i18n="tab_join">Join with Invite</button>
     </div>
+    <ol id="steps" class="steps" aria-label="Progress"></ol>
+    <!-- Davet eden: ① kodu gönder → ② yanıtı bekle → ③ yanıtı yapıştır → ④ bağlanıyor -->
     <div id="pane-start">
-      <label for="mode" data-i18n="conn_type">Connection type</label>
-      <select id="mode">
-        <option value="chat" data-i18n="mode_chat">Text chat &amp; files</option>
-        <option value="audio" data-i18n="mode_audio">Audio call</option>
-        <option value="video" data-i18n="mode_video">Video call</option>
-      </select>
-      <div class="row"><button id="btn-offer" class="primary grow" data-i18n="btn_create_invite">1. Create Invite Code</button></div>
-      <div id="offer-box" class="hidden">
-        <div class="ready-banner">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-          <span data-i18n="invite_ready">Invite ready — send to your peer</span>
+      <div class="step" data-role="inviter" data-step="1">
+        <button class="step-head" type="button"><span class="n">1</span><span data-i18n="si_1">Send your code</span><span class="more" data-i18n="show_again">Show</span></button>
+        <div class="step-body">
+          <label for="mode" data-i18n="conn_type">Connection type</label>
+          <select id="mode">
+            <option value="chat" data-i18n="mode_chat">Text chat &amp; files</option>
+            <option value="audio" data-i18n="mode_audio">Audio call</option>
+            <option value="video" data-i18n="mode_video">Video call</option>
+          </select>
+          <div class="row"><button id="btn-offer" class="primary grow" data-i18n="btn_create_invite">Create Invite Code</button></div>
+          <div id="offer-loading" class="loading-line hidden"><span class="chain-loader" data-loader></span><span id="offer-loading-text"></span></div>
+          <div id="offer-box" class="hidden">
+            <div class="ready-banner">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              <span data-i18n="invite_ready">Invite ready — send to your peer</span>
+            </div>
+            <div class="row">
+              <button data-copy="offer-code" class="primary grow" data-i18n="copy_invite">Copy Invite</button>
+              <button data-share="offer-code" class="grow" data-i18n="share">Share</button>
+            </div>
+            <div id="offer-qr" class="qr"></div>
+            <details class="raw-box">
+              <summary data-i18n="show_raw">Show raw connection code</summary>
+              <textarea id="offer-code" readonly></textarea>
+            </details>
+            <div class="row"><button id="btn-sent-offer" class="primary grow" type="button" data-i18n="i_sent_it">I sent it — next</button></div>
+          </div>
         </div>
-        <div class="row">
-          <button data-copy="offer-code" class="primary grow" data-i18n="copy_invite">Copy Invite</button>
-          <button data-share="offer-code" class="grow" data-i18n="share">Share</button>
+      </div>
+      <div class="step" data-role="inviter" data-step="2">
+        <button class="step-head" type="button"><span class="n">2</span><span data-i18n="si_2">Wait for your friend's reply</span><span class="more" data-i18n="show_again">Show</span></button>
+        <div class="step-body">
+          <div class="wait"><span class="chain-loader" data-loader></span>
+            <div><strong data-i18n="wait_reply_t">Waiting for your friend's reply…</strong>
+              <p data-i18n="wait_reply_p">Your friend pastes your code into "Join with Invite" and sends you a reply code.</p>
+              <p class="keep" data-i18n="keep_open">Keep this page open.</p>
+              <p id="offer-expiry"></p></div></div>
         </div>
-        <div id="offer-qr" class="qr"></div>
-        <details class="raw-box">
-          <summary data-i18n="show_raw">Show raw connection code</summary>
-          <textarea id="offer-code" readonly></textarea>
-        </details>
-        <label data-i18n="step2_answer">2. Paste Peer's Answer Code</label>
-        <textarea id="answer-in"></textarea>
-        <div class="row">
-          <button data-paste="answer-in" data-i18n="paste">Paste</button>
-          <button data-scan="answer-in" class="scan-btn hidden" data-i18n="scan_qr">Scan QR</button>
-          <button id="btn-connect" class="primary grow" data-i18n="btn_connect">3. Verify &amp; Connect</button>
+      </div>
+      <div class="step" data-role="inviter" data-step="3">
+        <button class="step-head" type="button"><span class="n">3</span><span data-i18n="si_3">Paste the reply</span><span class="more" data-i18n="show_again">Show</span></button>
+        <div class="step-body">
+          <label for="answer-in" data-i18n="step2_answer">Paste your friend's reply code — connecting starts automatically</label>
+          <textarea id="answer-in"></textarea>
+          <div class="row">
+            <button data-paste="answer-in" class="primary" data-i18n="paste">Paste</button>
+            <button data-scan="answer-in" class="scan-btn hidden" data-i18n="scan_qr">Scan QR</button>
+            <button id="btn-connect" class="grow" data-i18n="btn_connect">Verify &amp; Connect</button>
+          </div>
         </div>
-        <div class="row">
-          <button data-again class="grow" data-i18n="reset_conn">Reset / New Code</button>
+      </div>
+      <div class="step" data-role="inviter" data-step="4">
+        <button class="step-head" type="button"><span class="n">4</span><span data-i18n="si_4">Connect</span><span class="more" data-i18n="show_again">Show</span></button>
+        <div class="step-body">
+          <div class="wait"><span class="chain-loader" data-loader></span>
+            <div><strong data-i18n="connecting_t">Connecting directly…</strong>
+              <p data-i18n="connecting_p">Both devices are looking for a direct route. This usually takes a few seconds.</p></div></div>
+          <div id="slow-hint" class="hint-box hidden">
+            <strong data-i18n="slow_t">Not connected yet?</strong>
+            <ul><li data-i18n="slow_1">Are you both online with this page open?</li>
+                <li data-i18n="slow_2">Try another network helper (STUN) option above — both sides should use one that works for their network.</li>
+                <li data-i18n="slow_3">Or generate a new code and try again.</li></ul>
+            <div class="row"><button id="btn-open-ice" type="button" data-i18n="change_stun">Change STUN</button></div>
+          </div>
         </div>
       </div>
       <div id="start-status" class="status"></div>
+      <div id="start-reset" class="row hidden">
+        <button data-again class="grow" data-i18n="reset_conn">Reset / New Code</button>
+      </div>
     </div>
+    <!-- Katılan: ① arkadaşın kodunu yapıştır → ② yanıtı geri gönder → ③ bekle -->
     <div id="pane-answer" class="hidden">
-      <label data-i18n="join_step1">1. Paste Peer's Invite Code</label>
-      <textarea id="offer-in"></textarea>
-      <div class="row">
-        <button data-paste="offer-in" data-i18n="paste">Paste</button>
-        <button data-scan="offer-in" class="scan-btn hidden" data-i18n="scan_qr">Scan QR</button>
-        <button id="btn-answer" class="primary grow" data-i18n="btn_answer">2. Verify &amp; Create Answer</button>
+      <div class="step" data-role="joiner" data-step="1">
+        <button class="step-head" type="button"><span class="n">1</span><span data-i18n="sj_1">Paste your friend's code</span><span class="more" data-i18n="show_again">Show</span></button>
+        <div class="step-body">
+          <label for="offer-in" data-i18n="join_step1">Paste your friend's invite code — it is checked immediately</label>
+          <textarea id="offer-in"></textarea>
+          <div class="row">
+            <button data-paste="offer-in" class="primary" data-i18n="paste">Paste</button>
+            <button data-scan="offer-in" class="scan-btn hidden" data-i18n="scan_qr">Scan QR</button>
+            <button id="btn-answer" class="grow" data-i18n="btn_answer">Verify &amp; Create Answer</button>
+          </div>
+          <div id="answer-loading" class="loading-line hidden"><span class="chain-loader" data-loader></span><span id="answer-loading-text"></span></div>
+        </div>
       </div>
       <div id="answer-ident" class="status"></div>
-      <div id="answer-box" class="hidden">
-        <div class="ready-banner">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-          <span data-i18n="answer_ready">Answer ready — send back and wait…</span>
+      <div class="step" data-role="joiner" data-step="2">
+        <button class="step-head" type="button"><span class="n">2</span><span data-i18n="sj_2">Send your reply back</span><span class="more" data-i18n="show_again">Show</span></button>
+        <div class="step-body">
+          <div id="answer-box" class="hidden">
+            <div class="ready-banner">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              <span data-i18n="answer_ready">Reply ready — send it back to your friend</span>
+            </div>
+            <div class="row">
+              <button data-copy="answer-code" class="primary grow" data-i18n="copy_answer">Copy Answer</button>
+              <button data-share="answer-code" class="grow" data-i18n="share">Share</button>
+            </div>
+            <div id="answer-qr" class="qr"></div>
+            <details class="raw-box">
+              <summary data-i18n="show_raw">Show raw connection code</summary>
+              <textarea id="answer-code" readonly></textarea>
+            </details>
+            <div class="row"><button id="btn-sent-answer" class="primary grow" type="button" data-i18n="i_sent_it">I sent it — next</button></div>
+          </div>
         </div>
-        <div class="row">
-          <button data-copy="answer-code" class="primary grow" data-i18n="copy_answer">Copy Answer</button>
-          <button data-share="answer-code" class="grow" data-i18n="share">Share</button>
-        </div>
-        <div id="answer-qr" class="qr"></div>
-        <details class="raw-box">
-          <summary data-i18n="show_raw">Show raw connection code</summary>
-          <textarea id="answer-code" readonly></textarea>
-        </details>
-        <div class="row">
-          <button data-again class="grow" data-i18n="reset_conn">Reset / New Code</button>
+      </div>
+      <div class="step" data-role="joiner" data-step="3">
+        <button class="step-head" type="button"><span class="n">3</span><span data-i18n="sj_3">Wait for the connection</span><span class="more" data-i18n="show_again">Show</span></button>
+        <div class="step-body">
+          <div class="wait"><span class="chain-loader" data-loader></span>
+            <div><strong data-i18n="wait_conn_t">Waiting for your friend to connect…</strong>
+              <p class="keep" data-i18n="dont_close">Do not close this page — your reply only works with this open session.</p>
+              <p data-i18n="wait_conn_p">Your friend pastes your reply; the connection opens by itself.</p></div></div>
         </div>
       </div>
       <div id="answer-status" class="status"></div>
+      <div id="answer-reset" class="row hidden">
+        <button data-again class="grow" data-i18n="reset_conn">Reset / New Code</button>
+      </div>
     </div>
+    <div id="scan-loading" class="loading-line hidden"><span class="chain-loader" data-loader></span><span data-i18n="scanning">Point the camera at the QR code…</span></div>
     <video id="scan-video" class="scan hidden" playsinline muted></video>
   </section>
 
@@ -301,6 +458,8 @@
     <div class="call-top">
       <strong id="call-peer"></strong> · <span id="call-timer">00:00</span>
       <div id="call-badge" class="badge"></div>
+      <div id="call-sn" class="call-sn"></div>
+      <div id="call-connecting" class="loading-line hidden" style="color:inherit"><span class="chain-loader sm" data-loader></span><span data-i18n="call_setup">Setting up the call…</span></div>
       <div id="call-status" class="status" style="color:#fff;margin-top:2px"></div>
       <div id="call-quality"></div>
     </div>
@@ -324,6 +483,32 @@
     <div id="call-end" class="hidden"><button class="primary" data-again style="width:100%" data-i18n="new_conn">Start new connection</button></div>
   </section>
 </main>
+
+<!-- ═════════════ Güvenlik kodu (kişi doğrulama) ═════════════ -->
+<dialog id="verify-dlg" class="dlg">
+  <h2 id="verify-title"></h2>
+  <p data-i18n="verify_p1">Compare this safety number with your friend: read it aloud on a voice call, or check it side by side. It is the same on both devices only if nobody is in between.</p>
+  <div id="sn-digits" class="sn" aria-live="polite"></div>
+  <p id="verify-state"></p>
+  <div class="row">
+    <button id="btn-mark-verified" class="primary grow" type="button" data-i18n="codes_match">Codes match, mark verified</button>
+    <button id="btn-mark-unverified" class="danger grow hidden" type="button" data-i18n="mark_unverified">Mark as unverified</button>
+    <button id="btn-verify-close" class="grow" type="button" data-i18n="cancel">Cancel</button>
+  </div>
+</dialog>
+
+<!-- Marka yükleyicisi: [data-loader] yer tutucularına kopyalanır (animasyon yalnızca CSS) -->
+<template id="tpl-chain-loader">
+  <svg viewBox="0 0 120 72" aria-hidden="true" focusable="false">
+    <circle class="cl-track" cx="44" cy="36" r="22"/>
+    <circle class="cl-track" cx="76" cy="36" r="22"/>
+    <circle class="cl-fill cl-l" cx="44" cy="36" r="22"/>
+    <circle class="cl-fill cl-r" cx="76" cy="36" r="22"/>
+    <circle class="cl-key" cx="60" cy="33.4" r="3.4"/>
+    <rect class="cl-key" x="58.6" y="34" width="2.8" height="6.6" rx=".6"/>
+    <circle class="cl-dot" r="3.2"/>
+  </svg>
+</template>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      Gömülü üçüncü taraf kod: qrcode-generator 1.4.4 (MIT). Değiştirilmedi.
@@ -2789,6 +2974,18 @@ var qrcode = function() {
   }
   const isBlocked = (id) => id.status === S.KEY_CHANGED || id.status === S.INVALID;
 
+  // ── sıkı mod: doğrulanmamış kişiyle neye izin verilmez ──
+  // kind: "text" | "audio" | "file" | "video". Yazı ve sesli arama her zaman serbest
+  // (güvenlik kodu sesli aramada okunarak doğrulanır); dosya ve görüntü yalnızca doğrulanmış kişiyle.
+  const STRICT_KINDS = ["file", "video"];
+  function strictBlocks(kind, peerVerified, strictOn) {
+    return !!strictOn && !peerVerified && STRICT_KINDS.includes(kind);
+  }
+  // Kişi yalnızca işaretlenmişse VE işaretlendiği anahtar bugünkü anahtarsa doğrulanmıştır
+  function contactVerified(contact, fp) {
+    return !!(contact && contact.verified && fp && contact.verifiedFp === fp && contact.fp === fp);
+  }
+
   // ── güvenlik kodu (kişi doğrulama) — masaüstü p2p_core.safety_number ile birebir ──
   const SAFETY_PREFIX = "hybridp2p-sn:v1:";
   async function safetyGroups(username, der) {
@@ -3016,6 +3213,7 @@ var qrcode = function() {
   G.P2PCore = { PREFIX_V2, MODES, S, CHUNK_SIZE, FID_BYTES, MAX_FILE_BYTES, MAX_WEB_FILE_BYTES, MAX_TEXT_CHARS, USERNAME_RE,
     b64, unb64, hex, randHex, sha256hex, derToPem, pemToDer, fingerprint, importPublic, importPrivatePkcs8,
     generateIdentity, sign, verify, makeEnvelope, parseCode, identifyPeer, isBlocked, safetyNumber,
+    strictBlocks, contactVerified, MAX_CODE_AGE_SEC,
     textFrame, ackFrame, parseFrame, chunkFrame, splitChunk, safeFilename, fmtSize,
     ICE_DEFAULT, ICE_PRESETS, IceConfigError, parseCustomIce, iceServersFor,
     QualityPolicy, classify, statsSample, applyLevel, qualityLabel, startQualityMonitor, WEB_LEVELS };
@@ -3033,16 +3231,30 @@ var qrcode = function() {
   // Android uygulamasında (android/) WebView'in yapamadıklarını yapan köprü; tarayıcıda yok
   const NATIVE = window.HybridP2PAndroid || null;
   const me = { username: "", priv: null, pubDer: null, fp: "", remember: false };
-  const contacts = new Map();                 // kullanıcı adı → { fp, pubDer }
+  const contacts = new Map();                 // kullanıcı adı → { fp, pubDer, verified, verifiedFp }
   const session = { pc: null, channel: null, offerSdp: "", ident: null, mode: "chat" };
-  const MODE_LABELS = { chat: "Text chat", audio: "Audio call", video: "Video call" };
   // Arama durumu (yalnızca audio/video): yerel akış, sayaç, ekranı açık tutma kilidi
   const call = { stream: null, open: false, ended: false, timer: null, started: 0, facing: "user", wakeLock: null,
                  stopQuality: null };
   const ice = { preset: C.ICE_DEFAULT, custom: "" };   // STUN/TURN seçimi (yalnızca "hatırla" ile saklanır)
+  const settings = { strict: false };                  // sıkı mod (yalnızca "hatırla" ile saklanır, yoksa oturumluk)
+  // Bağlantı adımları: davet eden (inviter) 4, katılan (joiner) 3 adım
+  const flow = { role: "inviter", stepOf: { inviter: 1, joiner: 1 }, open: new Set(), slowTimer: null, expiresAt: 0 };
+  const SLOW_CONNECT_MS = 20000;
 
   function setStatus(el, text, cls) { el.textContent = text || ""; el.className = "status " + (cls || ""); }
   function show(id, on = true) { $(id).classList.toggle("hidden", !on); }
+  // Marka yükleyicisi: <template> içindeki SVG kopyalanır; animasyon tamamen CSS'tedir
+  function fillLoader(el) {
+    if (!el.firstElementChild) el.append($("tpl-chain-loader").content.cloneNode(true));
+    el.setAttribute("aria-hidden", "true");
+    return el;
+  }
+  function makeLoader(size) {
+    const s = document.createElement("span"); s.className = "chain-loader" + (size ? " " + size : "");
+    return fillLoader(s);
+  }
+  document.querySelectorAll("[data-loader]").forEach(fillLoader);
 
   const I18N = {
     en: {
@@ -3052,12 +3264,20 @@ var qrcode = function() {
       nav_contacts: "Contacts",
       nav_identity: "Identity",
       username_label: "Your username (2-32 chars: a-z, 0-9, _)",
-      remember_device: "Remember on this device (saves identity and contacts)",
+      remember_device: "Remember on this device (saves identity, contacts and settings)",
       start_new_id: "Start Direct P2P",
       load_key: "Load .pem",
       setup_hint: "If not remembered, closing the page leaves no trace. Load your desktop/web .pem key to keep the same identity.",
+      gen_keys: "Generating RSA-4096 keys (may take a few seconds on mobile)…",
+      bad_username: "Username must be 2-32 chars: a-z, 0-9, _",
+      keygen_failed: "Key generation failed: {e}",
+      saved: "saved",
+      ephemeral: "ephemeral",
       copy_card: "Copy Contact Card",
       forget: "Forget",
+      settings: "Settings",
+      strict_mode: "Strict mode",
+      strict_hint: "With strict mode on, files and video calls work only with contacts you have verified with the safety number. Text chat and voice calls stay allowed (so you can read the number aloud).",
       conn_helper: "Network helper (STUN)",
       tab_start: "Start Invite",
       tab_join: "Join with Invite",
@@ -3065,26 +3285,103 @@ var qrcode = function() {
       mode_chat: "Text chat & files",
       mode_audio: "Audio call",
       mode_video: "Video call",
-      btn_create_invite: "1. Create Invite Code",
-      invite_ready: "Invite ready — send to your peer",
+      si_1: "Send your code",
+      si_2: "Wait for reply",
+      si_3: "Paste the reply",
+      si_4: "Connect",
+      sj_1: "Paste friend's code",
+      sj_2: "Send your reply",
+      sj_3: "Wait",
+      show_again: "Show",
+      btn_create_invite: "Create Invite Code",
+      invite_ready: "Invite ready — send it to your friend (copy, share or show the QR)",
       copy_invite: "Copy Invite",
       share: "Share",
       show_raw: "Show raw connection code",
-      step2_answer: "2. Paste Peer's Answer Code",
+      i_sent_it: "I sent it — next",
+      wait_reply_t: "Waiting for your friend's reply…",
+      wait_reply_p: "Your friend pastes your code into \"Join with Invite\" and sends you a reply code.",
+      keep_open: "Keep this page open.",
+      valid_until: "Your code is valid until {t}. Codes are rejected after 24 hours — then create a new one.",
+      step2_answer: "Paste your friend's reply code — connecting starts automatically",
       paste: "Paste",
       scan_qr: "Scan QR",
-      btn_connect: "3. Verify & Connect",
-      join_step1: "1. Paste Peer's Invite Code",
-      btn_answer: "2. Verify & Create Answer",
-      answer_ready: "Answer ready — send back and wait…",
+      scanning: "Point the camera at the QR code…",
+      btn_connect: "Verify & Connect",
+      connecting_t: "Connecting directly…",
+      connecting_p: "Both devices are looking for a direct route. This usually takes a few seconds.",
+      slow_t: "Not connected yet?",
+      slow_1: "Are you both online with this page open?",
+      slow_2: "Try another network helper (STUN) option — both sides should pick one that works on their network.",
+      slow_3: "Or generate a new code and try again.",
+      change_stun: "Change STUN",
+      join_step1: "Paste your friend's invite code — it is checked immediately",
+      btn_answer: "Verify & Create Answer",
+      answer_ready: "Reply ready — send it back to your friend",
       copy_answer: "Copy Answer",
+      wait_conn_t: "Waiting for your friend to connect…",
+      dont_close: "Do not close this page — your reply only works with this open session.",
+      wait_conn_p: "Your friend pastes your reply; the connection opens by itself.",
+      media_mic: "Requesting microphone access…",
+      media_cam: "Requesting camera and microphone access…",
+      gathering_offer: "Creating your code — gathering network addresses (2-6 s)…",
+      gathering_answer: "Creating your reply — gathering network addresses (2-6 s)…",
+      own_code: "⚠ You pasted your own invite code. Paste the reply code from your friend's device here.",
+      not_invite: "⚠ This is a reply (answer) code, not an invite. Paste it on the device that created the invite (\"Start Invite\").",
+      read_reply_fail: "Could not read the reply code: {e}",
+      error: "Error: {e}",
+      id_verified: "✓ {u} — matches your saved contact",
+      id_new: "? {u} — not in your contacts yet. After connecting, compare the safety number.",
+      id_legacy: "⛔ Legacy code format: the sender cannot be verified; rejected by this page.",
+      id_blocked: "⛔ {u}connection blocked: {d}",
+      legacy_reject: "legacy code: cannot verify identity",
+      wrong_mode: "the reply belongs to a different connection mode",
+      call_setup: "Setting up the call…",
+      call_interrupted: "Connection interrupted, waiting…",
+      call_failed: "Call could not be established ({r}). Use the button below for a new connection.",
+      call_ended: "Call ended ({r}){d}",
       add_contact_card: "Add contact card",
       add: "Add",
+      contacts_empty: "No contacts yet. Connect once and tap \"Add to contacts\", or import a contact card.",
+      card_conflict: "'{u}' is saved with a DIFFERENT key — the card may be forged.",
       close_conn: "Close",
       new_conn: "Start new connection",
       reset_conn: "Reset / New Code",
       ice_default: "default",
+      "ice_p_google+cloudflare": "Google + Cloudflare (default)",
+      ice_p_cloudflare: "Cloudflare only",
+      ice_p_google: "Google only",
+      ice_p_custom: "Custom server (your own STUN/TURN)",
+      ice_p_lan: "Local network only (no external server)",
+      "ice_h_google+cloudflare": "Google & Cloudflare STUN servers only see your IP address; media flows directly peer-to-peer.",
+      ice_h_cloudflare: "Only Cloudflare's STUN server sees your IP address.",
+      ice_h_google: "Only Google's STUN servers see your IP address.",
+      ice_h_custom: "One server per line:  stun:server:3478  or  turn:server:3478 username password",
+      ice_h_lan: "No requests to external servers; connects only to devices on the same network (or reachable IP).",
+      ice_count: "✓ {n} server(s)",
       send: "Send",
+      direct_conn: "Direct connection: {u}",
+      qr_note: "QR (if scanning fails, copy and send the code). Tap to enlarge.",
+      qr_enlarge: "Tap to enlarge",
+      v_verified: "✓ Verified",
+      v_unverified: "Unverified · Verify",
+      v_add: "Add to contacts",
+      v_verify: "Verify",
+      v_unverify: "Unverify",
+      v_title: "Verify {u}",
+      v_state_ok: "✓ You marked {u} as verified for this key.",
+      v_state_no: "{u} is not verified yet.",
+      v_sn_call: "Safety number — read it aloud and compare",
+      verify_p1: "Compare this safety number with your friend: read it aloud on a voice call, or check it side by side. It is the same on both devices only if nobody is in between.",
+      codes_match: "Codes match, mark verified",
+      mark_unverified: "Mark as unverified",
+      cancel: "Cancel",
+      strict_file_out: "Strict mode: sending files is blocked until you verify {u}. Tap \"Unverified · Verify\" at the top and compare the safety number.",
+      strict_file_in: "Strict mode: {u} tried to send \"{n}\" — rejected automatically because {u} is not verified.",
+      strict_video: "Strict mode: video calls only with verified contacts. Verify {u} first (text chat or a voice call, then compare the safety number), or turn strict mode off under Identity.",
+      file_wait: "Waiting for your friend's approval…",
+      file_sending: "Sending…",
+      file_receiving: "Receiving…",
     },
     tr: {
       server_mode: "Sunuculu Mod",
@@ -3093,12 +3390,20 @@ var qrcode = function() {
       nav_contacts: "Rehber",
       nav_identity: "Kimlik",
       username_label: "Kullanıcı adınız (2-32 karakter: a-z, 0-9, _)",
-      remember_device: "Bu cihazda hatırla (kimlik ve rehberi saklar)",
+      remember_device: "Bu cihazda hatırla (kimlik, rehber ve ayarları saklar)",
       start_new_id: "Doğrudan P2P Başlat",
       load_key: ".pem Yükle",
       setup_hint: "Hatırlanmazsa sayfa kapanınca iz kalmaz. Aynı kimlik için masaüstü/web .pem anahtarınızı yükleyin.",
+      gen_keys: "RSA-4096 anahtarları üretiliyor (telefonda birkaç saniye sürebilir)…",
+      bad_username: "Kullanıcı adı 2-32 karakter olmalı: a-z, 0-9, _",
+      keygen_failed: "Anahtar üretilemedi: {e}",
+      saved: "kayıtlı",
+      ephemeral: "geçici",
       copy_card: "Kişi Kartını Kopyala",
       forget: "Unut",
+      settings: "Ayarlar",
+      strict_mode: "Sıkı mod",
+      strict_hint: "Sıkı mod açıkken dosya ve görüntülü arama yalnızca güvenlik koduyla doğruladığınız kişilerle çalışır. Yazılı sohbet ve sesli arama serbesttir (kodu sesli okuyabilmeniz için).",
       conn_helper: "Ağ yardımcısı (STUN)",
       tab_start: "Davet Başlat",
       tab_join: "Davete Katıl",
@@ -3106,44 +3411,131 @@ var qrcode = function() {
       mode_chat: "Yazılı sohbet ve dosya",
       mode_audio: "Sesli arama",
       mode_video: "Görüntülü arama",
-      btn_create_invite: "1. Davet Kodu Oluştur",
-      invite_ready: "Davet hazır — karşı tarafa gönderin",
+      si_1: "Kodunu gönder",
+      si_2: "Yanıtı bekle",
+      si_3: "Yanıtı yapıştır",
+      si_4: "Bağlan",
+      sj_1: "Arkadaşının kodu",
+      sj_2: "Yanıtını gönder",
+      sj_3: "Bekle",
+      show_again: "Göster",
+      btn_create_invite: "Davet Kodu Oluştur",
+      invite_ready: "Davet hazır — arkadaşınıza gönderin (kopyala, paylaş ya da QR'ı gösterin)",
       copy_invite: "Daveti Kopyala",
       share: "Paylaş",
       show_raw: "Ham bağlantı kodunu göster",
-      step2_answer: "2. Karşı Tarafın Yanıt Kodunu Yapıştırın",
+      i_sent_it: "Gönderdim — devam",
+      wait_reply_t: "Arkadaşınızın yanıtı bekleniyor…",
+      wait_reply_p: "Arkadaşınız kodunuzu \"Davete Katıl\"a yapıştırır ve size bir yanıt kodu gönderir.",
+      keep_open: "Bu sayfayı açık tutun.",
+      valid_until: "Kodunuz {t} tarihine kadar geçerli. Kodlar 24 saat sonra reddedilir — o zaman yenisini oluşturun.",
+      step2_answer: "Arkadaşınızın yanıt kodunu yapıştırın — bağlantı kendiliğinden başlar",
       paste: "Yapıştır",
       scan_qr: "QR Okut",
-      btn_connect: "3. Doğrula ve Bağlan",
-      join_step1: "1. Karşı Tarafın Davet Kodunu Yapıştırın",
-      btn_answer: "2. Doğrula ve Yanıt Oluştur",
-      answer_ready: "Yanıt hazır — geri gönderin ve bekleyin…",
+      scanning: "Kamerayı QR koduna tutun…",
+      btn_connect: "Doğrula ve Bağlan",
+      connecting_t: "Doğrudan bağlanılıyor…",
+      connecting_p: "İki cihaz doğrudan bir yol arıyor. Genellikle birkaç saniye sürer.",
+      slow_t: "Hâlâ bağlanmadı mı?",
+      slow_1: "İkiniz de çevrimiçi ve bu sayfa açık mı?",
+      slow_2: "Başka bir ağ yardımcısı (STUN) seçeneği deneyin — iki taraf da kendi ağında çalışan birini seçmeli.",
+      slow_3: "Ya da yeni bir kod oluşturup tekrar deneyin.",
+      change_stun: "STUN'u değiştir",
+      join_step1: "Arkadaşınızın davet kodunu yapıştırın — hemen kontrol edilir",
+      btn_answer: "Doğrula ve Yanıt Oluştur",
+      answer_ready: "Yanıt hazır — arkadaşınıza geri gönderin",
       copy_answer: "Yanıtı Kopyala",
+      wait_conn_t: "Arkadaşınızın bağlanması bekleniyor…",
+      dont_close: "Bu sayfayı kapatmayın — yanıtınız yalnızca bu açık oturumla çalışır.",
+      wait_conn_p: "Arkadaşınız yanıtınızı yapıştırınca bağlantı kendiliğinden açılır.",
+      media_mic: "Mikrofon izni isteniyor…",
+      media_cam: "Kamera ve mikrofon izni isteniyor…",
+      gathering_offer: "Kodunuz oluşturuluyor — ağ adresleri toplanıyor (2-6 sn)…",
+      gathering_answer: "Yanıtınız oluşturuluyor — ağ adresleri toplanıyor (2-6 sn)…",
+      own_code: "⚠ Kendi davet kodunuzu yapıştırdınız. Buraya arkadaşınızın cihazındaki yanıt kodunu yapıştırın.",
+      not_invite: "⚠ Bu bir yanıt kodu, davet değil. Daveti oluşturan cihaza (\"Davet Başlat\") yapıştırın.",
+      read_reply_fail: "Yanıt kodu okunamadı: {e}",
+      error: "Hata: {e}",
+      id_verified: "✓ {u} — rehberinizdeki kişiyle eşleşiyor",
+      id_new: "? {u} — henüz rehberinizde değil. Bağlandıktan sonra güvenlik kodunu karşılaştırın.",
+      id_legacy: "⛔ Eski biçim kod: gönderen doğrulanamaz; bu sayfa kabul etmez.",
+      id_blocked: "⛔ {u}bağlantı engellendi: {d}",
+      legacy_reject: "eski biçim kod: kimlik doğrulanamaz",
+      wrong_mode: "yanıt farklı bir bağlantı türüne ait",
+      call_setup: "Arama kuruluyor…",
+      call_interrupted: "Bağlantı kesildi, bekleniyor…",
+      call_failed: "Arama kurulamadı ({r}). Yeni bağlantı için aşağıdaki düğmeyi kullanın.",
+      call_ended: "Arama bitti ({r}){d}",
       add_contact_card: "Kişi kartı ekle",
       add: "Ekle",
+      contacts_empty: "Henüz kişi yok. Bir kez bağlanıp \"Rehbere ekle\"ye dokunun ya da kişi kartı içe aktarın.",
+      card_conflict: "'{u}' rehberde FARKLI bir anahtarla kayıtlı — kart sahte olabilir.",
       close_conn: "Kapat",
       new_conn: "Yeni bağlantı başlat",
       reset_conn: "Sıfırla / Yeni Kod",
       ice_default: "varsayılan",
+      "ice_p_google+cloudflare": "Google + Cloudflare (varsayılan)",
+      ice_p_cloudflare: "Yalnızca Cloudflare",
+      ice_p_google: "Yalnızca Google",
+      ice_p_custom: "Özel sunucu (kendi STUN/TURN'ünüz)",
+      ice_p_lan: "Yalnızca yerel ağ (dış sunucu yok)",
+      "ice_h_google+cloudflare": "Google ve Cloudflare STUN sunucuları yalnızca IP adresinizi görür; ses/görüntü/veri doğrudan cihazlar arasında akar.",
+      ice_h_cloudflare: "IP adresinizi yalnızca Cloudflare'in STUN sunucusu görür.",
+      ice_h_google: "IP adresinizi yalnızca Google'ın STUN sunucuları görür.",
+      ice_h_custom: "Her satıra bir sunucu:  stun:sunucu:3478  ya da  turn:sunucu:3478 kullanıcı şifre",
+      ice_h_lan: "Dış sunuculara istek yok; yalnızca aynı ağdaki (ya da ulaşılabilir IP'deki) cihazlara bağlanır.",
+      ice_count: "✓ {n} sunucu",
       send: "Gönder",
+      direct_conn: "Doğrudan bağlantı: {u}",
+      qr_note: "QR (okutulamazsa kodu kopyalayıp gönderin). Büyütmek için dokunun.",
+      qr_enlarge: "Büyütmek için dokunun",
+      v_verified: "✓ Doğrulandı",
+      v_unverified: "Doğrulanmadı · Doğrula",
+      v_add: "Rehbere ekle",
+      v_verify: "Doğrula",
+      v_unverify: "Doğrulamayı kaldır",
+      v_title: "{u} kişisini doğrula",
+      v_state_ok: "✓ {u} bu anahtar için doğrulandı olarak işaretli.",
+      v_state_no: "{u} henüz doğrulanmadı.",
+      v_sn_call: "Güvenlik kodu — sesli okuyup karşılaştırın",
+      verify_p1: "Bu güvenlik kodunu arkadaşınızınkiyle karşılaştırın: sesli aramada yüksek sesle okuyun ya da yan yana bakın. Kod iki cihazda yalnızca araya kimse girmediyse aynıdır.",
+      codes_match: "Kodlar aynı, doğrulandı olarak işaretle",
+      mark_unverified: "Doğrulanmadı olarak işaretle",
+      cancel: "Vazgeç",
+      strict_file_out: "Sıkı mod: {u} doğrulanana kadar dosya gönderilemez. Üstteki \"Doğrulanmadı · Doğrula\"ya dokunup güvenlik kodunu karşılaştırın.",
+      strict_file_in: "Sıkı mod: {u} \"{n}\" dosyasını göndermek istedi — {u} doğrulanmadığı için otomatik reddedildi.",
+      strict_video: "Sıkı mod: görüntülü arama yalnızca doğrulanmış kişilerle. Önce {u} kişisini doğrulayın (yazılı sohbet ya da sesli aramada güvenlik kodunu karşılaştırın) ya da sıkı modu Kimlik bölümünden kapatın.",
+      file_wait: "Arkadaşınızın onayı bekleniyor…",
+      file_sending: "Gönderiliyor…",
+      file_receiving: "Alınıyor…",
     },
   };
-  let curLang = "en";
+  let curLang = "en", uiReady = false;
   try {
     const savedLang = localStorage.getItem("hybridp2p_serverless_lang");
     if (savedLang && savedLang in I18N) curLang = savedLang;
   } catch (e) {}
+  // Çeviri: {ad} yer tutucuları doldurulur; eksik anahtar İngilizceye düşer
+  function t(key, vars) {
+    let s = I18N[curLang][key] ?? I18N.en[key] ?? key;
+    if (vars) for (const [k, v] of Object.entries(vars)) s = s.split("{" + k + "}").join(String(v));
+    return s;
+  }
+  const modeLabel = (mode) => t("mode_" + mode);
   function applyI18n() {
+    document.documentElement.lang = curLang;
     document.querySelectorAll("[data-i18n]").forEach((el) => {
       const k = el.dataset.i18n;
       if (I18N[curLang][k]) el.textContent = I18N[curLang][k];
     });
     $("btn-lang").textContent = curLang.toUpperCase();
     refreshIceLabels();
+    // Dinamik metinler (adımlar, ipuçları, rozetler, rehber) da dile göre yeniden çizilir
+    if (uiReady) renderDynamic();
   }
-  // ICE_PRESETS metinleri sabit (testler masaüstüyle karşılaştırır); "(default)" yalnızca gösterimde çevrilir
+  // ICE_PRESETS metinleri sabit (testler masaüstüyle karşılaştırır); çeviri yalnızca gösterimde
   function iceLabel(k) {
-    return C.ICE_PRESETS[k].replace("(default)", "(" + I18N[curLang].ice_default + ")");
+    return I18N[curLang]["ice_p_" + k] || C.ICE_PRESETS[k];
   }
   function refreshIceLabels() {
     const sel = $("ice-preset");
@@ -3194,8 +3586,11 @@ var qrcode = function() {
     if (!me.remember) return;
     const pkcs8 = C.b64(await crypto.subtle.exportKey("pkcs8", me.priv));
     await kv("put", "identity", { username: me.username, pkcs8 });
-    await kv("put", "contacts", [...contacts].map(([u, c]) => ({ username: u, fp: c.fp, der: C.b64(c.pubDer) })));
+    // verified/verifiedFp eski kayıtlarda yok: yüklerken "doğrulanmamış" sayılır
+    await kv("put", "contacts", [...contacts].map(([u, c]) => ({ username: u, fp: c.fp, der: C.b64(c.pubDer),
+                                                               verified: !!c.verified, verifiedFp: c.verifiedFp || "" })));
     await kv("put", "ice", { preset: ice.preset, custom: ice.custom });
+    await kv("put", "settings", { strict: !!settings.strict });
   }
   async function forget() {
     try { indexedDB.deleteDatabase(DB_NAME); } catch (e) {}
@@ -3209,22 +3604,23 @@ var qrcode = function() {
     me.remember = $("remember").checked || me.remember;
     await persist();
     show("setup", false); show("mobile-nav"); selectNav("connect");
-    $("me-name").textContent = `${username}` + (me.remember ? " (saved)" : " (ephemeral)");
+    $("me-name").textContent = `${username} (${t(me.remember ? "saved" : "ephemeral")})`;
     $("me-fp").textContent = me.fp;
     show("btn-forget", me.remember);
     renderContacts();
   }
   function readUsername() {
     const u = $("username").value.trim().toLowerCase();
-    if (!C.USERNAME_RE.test(u)) { setStatus($("setup-status"), "Username must be 2-32 chars: a-z, 0-9, _", "bad"); return null; }
+    if (!C.USERNAME_RE.test(u)) { setStatus($("setup-status"), t("bad_username"), "bad"); return null; }
     return u;
   }
   $("btn-new-id").onclick = async () => {
     const u = readUsername(); if (!u) return;
     $("btn-new-id").disabled = true;
-    setStatus($("setup-status"), "Generating RSA-4096 keys (may take a few seconds on mobile)…", "info");
+    setStatus($("setup-status"), "", ""); show("setup-loading");
     try { await startWith(await C.generateIdentity(), u); }
-    catch (e) { setStatus($("setup-status"), "Key generation failed: " + e.message, "bad"); $("btn-new-id").disabled = false; }
+    catch (e) { setStatus($("setup-status"), t("keygen_failed", { e: e.message }), "bad"); $("btn-new-id").disabled = false; }
+    finally { show("setup-loading", false); }
   };
   $("btn-load-key").onclick = () => $("key-file").click();
   $("key-file").onchange = async () => {
@@ -3240,20 +3636,38 @@ var qrcode = function() {
   // ── contacts ──
   function renderContacts() {
     const box = $("contact-list"); box.textContent = "";
-    if (!contacts.size) { box.textContent = "Contacts list is empty. Compare fingerprints on first connection or import a contact card."; return; }
+    if (!contacts.size) { box.textContent = t("contacts_empty"); return; }
     for (const [u, c] of contacts) {
-      const d = document.createElement("div"); d.style.marginBottom = "6px";
+      const ok = C.contactVerified(c, c.fp);
+      const target = { username: u, pubDer: c.pubDer, fingerprint: c.fp };
+      const d = document.createElement("div"); d.style.marginBottom = "10px";
+      const row = document.createElement("div"); row.className = "contact-row";
       const b = document.createElement("strong"); b.textContent = u;
+      const chip = document.createElement("button"); chip.type = "button";
+      chip.className = "vchip " + (ok ? "ok" : "warn"); chip.textContent = ok ? t("v_verified") : t("v_unverified");
+      chip.onclick = () => openVerify(target);
+      row.append(b, chip);
+      if (ok) row.append(button(t("v_unverify"), () => setVerified(u, false).catch((e) => alert(e.message)), "small danger"));
       const f = document.createElement("div"); f.className = "fp"; f.textContent = c.fp;
-      d.append(b, f); box.append(d);
+      d.append(row, f); box.append(d);
     }
   }
-  async function addContact(username, pubDer) {
+  // Rehbere ekleme her zaman "doğrulanmamış"tır; doğrulama yalnızca güvenlik kodu karşılaştırılarak yapılır
+  async function addContact(username, pubDer, verified = false) {
     const fp = await C.fingerprint(pubDer);
     const old = contacts.get(username);
-    if (old && old.fp !== fp) throw new Error(`'${username}' is saved with a DIFFERENT key — card may be forged.`);
-    contacts.set(username, { fp, pubDer }); await persist(); renderContacts();
+    if (old && old.fp !== fp) throw new Error(t("card_conflict", { u: username }));
+    const keep = verified || C.contactVerified(old, fp);
+    contacts.set(username, { fp, pubDer, verified: keep, verifiedFp: keep ? fp : "" });
+    await persist(); renderContacts();
   }
+  async function setVerified(username, on) {
+    const c = contacts.get(username); if (!c) return;
+    c.verified = !!on; c.verifiedFp = on ? c.fp : "";
+    await persist(); renderContacts(); refreshVerifyUi();
+  }
+  // Oturumdaki karşı taraf (ya da herhangi bir kimlik) şu anki anahtarıyla doğrulanmış mı?
+  const isVerifiedPeer = (id) => !!(id && id.username && C.contactVerified(contacts.get(id.username), id.fingerprint));
   $("btn-import-card").onclick = () => show("import-box", $("import-box").classList.contains("hidden"));
   $("btn-import-save").onclick = async () => {
     try {
@@ -3280,19 +3694,21 @@ var qrcode = function() {
   }
   function toast(text) { setStatus($("start-status"), text, "info"); setStatus($("answer-status"), text, "info"); }
   document.addEventListener("click", async (ev) => {
-    const t = ev.target.closest("button"); if (!t) return;
-    if (t.dataset.copy) copyText($(t.dataset.copy).value);
-    if (t.dataset.share) {
-      const text = $(t.dataset.share).value;
+    const btn = ev.target.closest("button"); if (!btn) return;
+    if (btn.dataset.copy) copyText($(btn.dataset.copy).value);
+    if (btn.dataset.share) {
+      const text = $(btn.dataset.share).value;
       if (NATIVE) NATIVE.share(text);
       else if (navigator.share) { try { await navigator.share({ text }); } catch (e) {} }
       else copyText(text, "Sharing not supported; code copied to clipboard.");
     }
-    if (t.dataset.paste) {
-      try { $(t.dataset.paste).value = (NATIVE ? NATIVE.paste() : await navigator.clipboard.readText()).trim(); }
+    if (btn.dataset.paste) {
+      let ok = false;
+      try { $(btn.dataset.paste).value = (NATIVE ? NATIVE.paste() : await navigator.clipboard.readText()).trim(); ok = true; }
       catch (e) { toast("Could not read clipboard; long-press the field and paste manually."); }
+      if (ok) autoGo(btn.dataset.paste);
     }
-    if (t.dataset.scan) scanInto($(t.dataset.scan));
+    if (btn.dataset.scan) scanInto($(btn.dataset.scan));
   });
   function renderQr(boxId, code) {
     const box = $(boxId); box.textContent = "";
@@ -3300,14 +3716,14 @@ var qrcode = function() {
       const qr = qrcode(0, "L"); qr.addData(code, "Byte"); qr.make();
       const img = document.createElement("img");
       img.src = qr.createDataURL(4, 4); img.alt = "Connection code QR";
-      img.title = "Tap to enlarge";
+      img.title = t("qr_enlarge");
       img.onclick = () => {
         const full = document.createElement("div"); full.className = "qr-full";
         const big = img.cloneNode(); full.append(big); full.onclick = () => full.remove();
         document.body.append(full);
       };
       const note = document.createElement("div"); note.className = "sub";
-      note.textContent = "QR (if scan fails, copy & send code). Tap to enlarge.";
+      note.textContent = t("qr_note");
       box.append(note, img);
     } catch (e) {
       const note = document.createElement("div"); note.className = "sub";
@@ -3321,33 +3737,29 @@ var qrcode = function() {
   document.querySelectorAll(".scan-btn").forEach((b) => b.classList.toggle("hidden", !canScan));
   async function scanInto(target) {
     if (NATIVE) {
+      show("scan-loading");
       const text = await new Promise((res) => { window.__hp2pScanResult = res; NATIVE.scanQr(); });
-      window.__hp2pScanResult = null;
-      if (text) target.value = text.trim(); else toast("QR not scanned.");
+      window.__hp2pScanResult = null; show("scan-loading", false);
+      if (text) { target.value = text.trim(); autoGo(target.id); } else toast("QR not scanned.");
       return;
     }
-    const video = $("scan-video"); let stream;
+    const video = $("scan-video"); let stream, found = false;
+    show("scan-loading");
     try {
       const det = new BarcodeDetector({ formats: ["qr_code"] });
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       video.srcObject = stream; show("scan-video"); await video.play();
       for (let i = 0; i < 300; i++) {                       // ~60 sn
         const codes = await det.detect(video).catch(() => []);
-        if (codes.length) { target.value = codes[0].rawValue.trim(); break; }
+        if (codes.length) { target.value = codes[0].rawValue.trim(); found = true; break; }
         await new Promise((r) => setTimeout(r, 200));
       }
     } catch (e) { toast("QR scan failed: " + e.message); }
-    finally { if (stream) stream.getTracks().forEach((t) => t.stop()); show("scan-video", false); }
+    finally { if (stream) stream.getTracks().forEach((tr) => tr.stop()); show("scan-video", false); show("scan-loading", false); }
+    if (found) autoGo(target.id);
   }
 
   // ── connection helper (STUN/TURN) ──
-  const ICE_HINTS = {
-    "google+cloudflare": "Google & Cloudflare STUN servers only see your IP address; media flows directly peer-to-peer.",
-    "cloudflare": "Only Cloudflare's STUN server sees your IP address.",
-    "google": "Only Google's STUN servers see your IP address.",
-    "custom": "One server per line:  stun:server:3478  or  turn:server:3478 username password",
-    "lan": "No requests to external servers; connects only to devices on the same network (or reachable IP).",
-  };
   for (const [k, v] of Object.entries(C.ICE_PRESETS)) {
     const o = document.createElement("option"); o.value = k; o.textContent = iceLabel(k); $("ice-preset").append(o);
   }
@@ -3356,10 +3768,10 @@ var qrcode = function() {
     $("ice-preset").value = ice.preset; $("ice-custom").value = ice.custom;
     $("ice-current").textContent = iceLabel(ice.preset);
     show("ice-custom", ice.preset === "custom");
-    let hint = ICE_HINTS[ice.preset], cls = "sub";
+    let hint = t("ice_h_" + ice.preset), cls = "sub";
     if (ice.preset === "custom") {
-      try { hint += `\n✓ ${C.iceServersFor("custom", ice.custom).length} server(s)`; }
-      catch (e) { hint = "Error: " + e.message; cls = "sub bad"; }
+      try { hint += "\n" + t("ice_count", { n: C.iceServersFor("custom", ice.custom).length }); }
+      catch (e) { hint = t("error", { e: e.message }); cls = "sub bad"; }
     }
     $("ice-hint").textContent = hint; $("ice-hint").className = cls; $("ice-hint").style.whiteSpace = "pre-wrap";
   }
@@ -3372,8 +3784,64 @@ var qrcode = function() {
   renderIce();
 
   // ── sekmeler ──
-  $("tab-start").onclick = () => { $("tab-start").classList.add("active"); $("tab-answer").classList.remove("active"); show("pane-start"); show("pane-answer", false); };
-  $("tab-answer").onclick = () => { $("tab-answer").classList.add("active"); $("tab-start").classList.remove("active"); show("pane-answer"); show("pane-start", false); };
+  $("tab-start").onclick = () => { $("tab-start").classList.add("active"); $("tab-answer").classList.remove("active"); show("pane-start"); show("pane-answer", false); flow.role = "inviter"; renderFlow(); };
+  $("tab-answer").onclick = () => { $("tab-answer").classList.add("active"); $("tab-start").classList.remove("active"); show("pane-answer"); show("pane-start", false); flow.role = "joiner"; renderFlow(); };
+
+  // ── bağlantı adımları (davet eden: 4, katılan: 3) ──
+  function setStep(role, step) {
+    flow.stepOf[role] = step; flow.open.clear();
+    if (role === "inviter" && step !== 4) { clearTimeout(flow.slowTimer); show("slow-hint", false); }
+    renderFlow();
+  }
+  function renderFlow() {
+    const role = flow.role, cur = flow.stepOf[role];
+    const keys = role === "inviter" ? ["si_1", "si_2", "si_3", "si_4"] : ["sj_1", "sj_2", "sj_3"];
+    const ol = $("steps"); ol.textContent = "";
+    keys.forEach((k, i) => {
+      const n = i + 1, li = document.createElement("li");
+      li.className = n < cur ? "done" : n === cur ? "cur" : "todo";
+      if (n === cur) li.setAttribute("aria-current", "step");
+      const num = document.createElement("span"); num.className = "n"; num.textContent = n < cur ? "✓" : String(n);
+      const tx = document.createElement("span"); tx.className = "t"; tx.textContent = t(k);
+      li.title = t(k); li.append(num, tx); ol.append(li);
+    });
+    document.querySelectorAll(".step[data-role]").forEach((el) => {
+      if (el.dataset.role !== role) return;
+      const n = Number(el.dataset.step);
+      // Yanıt beklenirken yapıştırma kutusu da açık: yanıt başka bir uygulamadan gelir
+      const live = n === cur || (role === "inviter" && cur === 2 && n === 3);
+      el.classList.toggle("cur", n === cur);
+      el.classList.toggle("done", n < cur);
+      el.classList.toggle("hidden", n > cur && !live);
+      el.classList.toggle("open", flow.open.has(n));
+      el.querySelector(".step-head .n").textContent = n < cur ? "✓" : String(n);
+    });
+    show("start-reset", !$("offer-box").classList.contains("hidden"));
+    show("answer-reset", !$("answer-box").classList.contains("hidden"));
+    renderExpiry();
+  }
+  function renderExpiry() {
+    $("offer-expiry").textContent = flow.expiresAt ? t("valid_until", {
+      t: new Date(flow.expiresAt).toLocaleString(curLang === "tr" ? "tr-TR" : "en-GB", { dateStyle: "medium", timeStyle: "short" }) }) : "";
+  }
+  document.querySelectorAll(".step-head").forEach((h) => {
+    h.onclick = () => {                                      // tamamlanan adım: dokununca yeniden açılır
+      const st = h.closest(".step"); if (!st.classList.contains("done")) return;
+      const n = Number(st.dataset.step);
+      if (flow.open.has(n)) flow.open.delete(n); else flow.open.add(n);
+      renderFlow();
+    };
+  });
+  $("btn-sent-offer").onclick = () => setStep("inviter", 2);
+  $("btn-sent-answer").onclick = () => setStep("joiner", 3);
+  $("btn-open-ice").onclick = () => { $("ice-box").open = true; $("ice-box").scrollIntoView({ behavior: "smooth", block: "center" }); };
+  // Yapıştırma / QR okuma: kod geldiyse doğrulama ve bağlanma kendiliğinden başlar
+  function autoGo(id) {
+    if (!$(id).value.trim()) return;
+    if (id === "answer-in") $("btn-connect").click();
+    else if (id === "offer-in") $("btn-answer").click();
+  }
+  ["answer-in", "offer-in"].forEach((id) => $(id).addEventListener("paste", () => setTimeout(() => autoGo(id), 0)));
 
   // ── WebRTC ──
   function newPc() {
@@ -3392,11 +3860,15 @@ var qrcode = function() {
   }
   function identText(id) {
     switch (id.status) {
-      case C.S.VERIFIED: return [`✓ ${id.username} — identity verified (matches saved key)`, "ok"];
-      case C.S.NEW: return [`? ${id.username} — not in your contacts. Verify fingerprint out-of-band:\n${id.fingerprint}`, "info"];
-      case C.S.LEGACY: return ["⛔ Legacy code format: sender identity cannot be verified; rejected by this page.", "bad"];
-      default: return [`⛔ ${id.username ? "'" + id.username + "' " : ""}connection blocked: ${id.detail}`, "bad"];
+      case C.S.VERIFIED: return [t("id_verified", { u: id.username }) + (isVerifiedPeer(id) ? " · " + t("v_verified") : ""), "ok"];
+      case C.S.NEW: return [t("id_new", { u: id.username }), "info"];
+      case C.S.LEGACY: return [t("id_legacy"), "bad"];
+      default: return [t("id_blocked", { u: id.username ? "'" + id.username + "' " : "", d: id.detail }), "bad"];
     }
+  }
+  // Sıkı mod: doğrulanmamış kişiyle görüntülü arama — kod çözülünce karşı taraf bilindiğinden burada reddedilir
+  function strictVideoRefused(id, mode) {
+    return mode === "video" && C.strictBlocks("video", isVerifiedPeer(id), settings.strict);
   }
 
   // ── local media (mic/camera) ──
@@ -3444,27 +3916,37 @@ var qrcode = function() {
   function watchCall(pc, identGetter) {
     pc.onconnectionstatechange = () => {
       const st = pc.connectionState;
-      if (st === "connected") { setStatus($("call-status"), "", ""); openCall(identGetter()); }
+      if (st === "connected") { setStatus($("call-status"), "", ""); show("call-connecting", false); openCall(identGetter()); }
       else if (st === "failed" || st === "closed") endCall(st === "failed" ? "connection failed/dropped" : "closed");
       else if (st === "disconnected") {
-        setStatus($("call-status"), "Connection interrupted, waiting…", "");
+        setStatus($("call-status"), t("call_interrupted"), ""); show("call-connecting");
         setTimeout(() => { if (pc === session.pc && pc.connectionState === "disconnected") endCall("disconnected"); }, 8000);
       }
     };
   }
+  // Kod üretilirken (izin isteme + ağ adresi toplama) yükleyici gösterilir
+  function codeLoading(which, key) {
+    show(which + "-loading", !!key);
+    const el = $(which + "-loading-text");
+    el.dataset.key = key || ""; el.textContent = key ? t(key) : "";
+  }
 
   $("offer-in").oninput = () => { $("btn-answer").disabled = false; };
-  $("answer-in").oninput = () => { $("btn-connect").disabled = false; };
+  $("answer-in").oninput = () => {
+    $("btn-connect").disabled = false;
+    if ($("answer-in").value.trim() && flow.stepOf.inviter < 3) setStep("inviter", 3);
+  };
 
   $("btn-offer").onclick = async () => {
     const mode = $("mode").value;
     $("btn-offer").disabled = true; $("mode").disabled = true;
+    setStep("inviter", 1); show("offer-box", false); flow.expiresAt = 0; setStatus($("start-status"), "", "");
     try {
       if (mode !== "chat") {
-        setStatus($("start-status"), `${MODE_LABELS[mode]}: requesting ${mode === "video" ? "camera and microphone" : "microphone"} access…`, "info");
+        codeLoading("offer", mode === "video" ? "media_cam" : "media_mic");
         await startLocalMedia(mode);                         // izin teklif üretilmeden önce istenir
       } else stopLocalMedia();                               // önceki denemenin kamerası/mikrofonu açık kalmasın
-      setStatus($("start-status"), "Gathering network addresses (2-6s)…", "info");
+      codeLoading("offer", "gathering_offer");
       const pc = newPc();
       session.mode = mode;
       if (mode === "chat") {
@@ -3476,22 +3958,27 @@ var qrcode = function() {
       session.offerSdp = pc.localDescription.sdp;
       const code = await C.makeEnvelope({ type: "offer", mode, sdp: session.offerSdp,
                                           username: me.username, priv: me.priv, pubDer: me.pubDer });
+      // Geçerlilik: zarfın imzalı zaman damgası + 24 saat (sonra karşı taraf kodu reddeder)
+      flow.expiresAt = ((await C.parseCode(code)).ts + C.MAX_CODE_AGE_SEC) * 1000;
       $("offer-code").value = code; show("offer-box"); renderQr("offer-qr", code);
       $("btn-offer").disabled = false; $("mode").disabled = false;
-      setStatus($("start-status"), `${MODE_LABELS[mode]} offer ready. Send to your peer and paste their answer.`, "info");
+      renderFlow();
     } catch (e) {
-      setStatus($("start-status"), "Error: " + e.message, "bad");
+      setStatus($("start-status"), t("error", { e: e.message }), "bad");
       $("btn-offer").disabled = false; $("mode").disabled = false; stopLocalMedia();
-    }
+    } finally { codeLoading("offer", null); }
   };
 
+  let connectBusy = false, answerBusy = false;            // yapıştırma + düğme aynı anda tetiklemesin
   $("btn-connect").onclick = async () => {
+    if (connectBusy) return;
+    connectBusy = true;
     try {
       const rawCode = $("answer-in").value.trim();
       const env = await C.parseCode(rawCode);
       if (env.type === "offer") {
         if (session.offerSdp && env.sdp === session.offerSdp) {
-          setStatus($("start-status"), "⚠ You pasted your own Invite (Offer) code here. Copy the Answer code from your peer device and paste it into Step 2.", "bad");
+          setStatus($("start-status"), t("own_code"), "bad");
           return;
         }
         $("offer-in").value = rawCode;
@@ -3499,18 +3986,29 @@ var qrcode = function() {
         $("btn-answer").click();
         return;
       }
+      if (flow.stepOf.inviter < 3) setStep("inviter", 3);
       let id = await C.identifyPeer(env, lookup, "answer", session.offerSdp);
-      if (id.status === C.S.LEGACY) id = { status: C.S.INVALID, detail: "legacy code: cannot verify identity" };
-      else if (env.mode !== session.mode) id = { status: C.S.INVALID, username: id.username, detail: "answer belongs to a different connection mode" };
+      if (id.status === C.S.LEGACY) id = { status: C.S.INVALID, detail: t("legacy_reject") };
+      else if (env.mode !== session.mode) id = { status: C.S.INVALID, username: id.username, detail: t("wrong_mode") };
       const [text, cls] = identText(id); setStatus($("start-status"), text, cls);
       if (C.isBlocked(id)) return;
+      if (strictVideoRefused(id, session.mode)) {
+        stopLocalMedia();
+        setStatus($("start-status"), text + "\n⛔ " + t("strict_video", { u: id.username }), "bad");
+        return;
+      }
       session.ident = id;
       await session.pc.setRemoteDescription({ type: "answer", sdp: env.sdp });
-      setStatus($("start-status"), text + "\nConnecting…", cls);
-    } catch (e) { setStatus($("start-status"), "Could not read answer code: " + e.message, "bad"); }
+      setStep("inviter", 4);
+      clearTimeout(flow.slowTimer);
+      flow.slowTimer = setTimeout(() => { if (flow.stepOf.inviter === 4) show("slow-hint"); }, SLOW_CONNECT_MS);
+    } catch (e) { setStatus($("start-status"), t("read_reply_fail", { e: e.message }), "bad"); }
+    finally { connectBusy = false; }
   };
 
   $("btn-answer").onclick = async () => {
+    if (answerBusy) return;
+    answerBusy = true;
     try {
       const rawCode = $("offer-in").value.trim();
       const env = await C.parseCode(rawCode);
@@ -3521,19 +4019,24 @@ var qrcode = function() {
           $("btn-connect").click();
           return;
         }
-        setStatus($("answer-ident"), "⚠ This is an Answer code, not an Invite (Offer). Paste this Answer code into Step 2 on the device where you started the Invite ('Start Invite' tab).", "bad");
+        setStatus($("answer-ident"), t("not_invite"), "bad");
         return;
       }
+      setStep("joiner", 1); show("answer-box", false); renderFlow();
       const id = await C.identifyPeer(env, lookup, "offer");
       const [text, cls] = identText(id); setStatus($("answer-ident"), text, cls);
       if (C.isBlocked(id) || id.status === C.S.LEGACY) return;
       const mode = env.mode;
+      if (strictVideoRefused(id, mode)) {
+        setStatus($("answer-ident"), text + "\n⛔ " + t("strict_video", { u: id.username }), "bad");
+        return;
+      }
       $("btn-answer").disabled = true;
       if (mode !== "chat") {
-        setStatus($("answer-status"), `${MODE_LABELS[mode]}: requesting ${mode === "video" ? "camera and microphone" : "microphone"} access…`, "info");
+        codeLoading("answer", mode === "video" ? "media_cam" : "media_mic");
         await startLocalMedia(mode);
       } else stopLocalMedia();
-      setStatus($("answer-status"), `Preparing answer for ${MODE_LABELS[mode]} (2-6s)…`, "info");
+      codeLoading("answer", "gathering_answer");
       const pc = newPc();
       session.ident = id; session.mode = mode;
       if (mode === "chat")
@@ -3547,7 +4050,9 @@ var qrcode = function() {
       $("answer-code").value = code; show("answer-box"); renderQr("answer-qr", code);
       $("btn-answer").disabled = false;
       setStatus($("answer-status"), "", "");
-    } catch (e) { setStatus($("answer-status"), "Error: " + e.message, "bad"); $("btn-answer").disabled = false; stopLocalMedia(); }
+      setStep("joiner", 2);
+    } catch (e) { setStatus($("answer-status"), t("error", { e: e.message }), "bad"); $("btn-answer").disabled = false; stopLocalMedia(); }
+    finally { codeLoading("answer", null); answerBusy = false; }
   };
 
   // ── call screen ──
@@ -3559,10 +4064,11 @@ var qrcode = function() {
   async function openCall(id) {
     if (call.open) return;
     call.open = true; call.ended = false;
-    hidePageForSession(); show("call"); show("call-end", false); show("call-controls");
+    clearTimeout(flow.slowTimer);
+    hidePageForSession(); show("call"); show("call-end", false); show("call-controls"); show("call-connecting", false);
     const who = id.username || "peer";
-    $("call-peer").textContent = `${MODE_LABELS[session.mode]}: ${who}`;
-    renderBadge(id, $("call-badge"));
+    $("call-peer").textContent = `${modeLabel(session.mode)}: ${who}`;
+    refreshVerifyUi();
     const isVideo = session.mode === "video";
     show("call-voice", !isVideo); $("call-voice-name").textContent = who;
     show("remote-video", isVideo); show("local-video", isVideo); show("btn-cam", isVideo); show("btn-flip", false);
@@ -3598,11 +4104,13 @@ var qrcode = function() {
     const dur = call.started ? " · duration " + fmtDuration(Date.now() - call.started) : "";
     if (!call.open) {                                       // bağlanmadan bitti: kod ekranında bildir
       const target = $("offer-box").classList.contains("hidden") ? $("answer-status") : $("start-status");
-      setStatus(target, `Call could not be established (${reason}). Use the button below for a new connection.`, "bad");
+      setStatus(target, t("call_failed", { r: reason }), "bad");
+      if (flow.stepOf.inviter === 4) show("slow-hint");
       return;
     }
     $("remote-video").srcObject = null; $("local-video").srcObject = null; show("local-video", false);
-    setStatus($("call-status"), `Call ended (${reason})${dur}`, "");
+    show("call-connecting", false);
+    setStatus($("call-status"), t("call_ended", { r: reason, d: dur }), "");
     show("call-controls", false); show("call-end");
   }
   let micOn = true, camOn = true;
@@ -3656,6 +4164,9 @@ var qrcode = function() {
     ["offer-qr", "answer-qr"].forEach((i) => $(i).textContent = "");
     ["start-status", "answer-status", "answer-ident", "call-status", "call-quality"].forEach((i) => setStatus($(i), "", ""));
     show("offer-box", false); show("answer-box", false); show("chat-again", false);
+    clearTimeout(flow.slowTimer); flow.expiresAt = 0; flow.stepOf.inviter = 1; flow.stepOf.joiner = 1; flow.open.clear();
+    ["slow-hint", "offer-loading", "answer-loading", "scan-loading", "call-connecting"].forEach((i) => show(i, false));
+    $("call-sn").textContent = ""; renderFlow();
     $("btn-offer").disabled = false; $("btn-answer").disabled = false; $("mode").disabled = false;
     $("remote-video").srcObject = null; $("local-video").srcObject = null;
     show("chat", false); show("call", false);
@@ -3679,25 +4190,87 @@ var qrcode = function() {
     ch.onmessage = (ev) => onFrame(ev.data);
   }
   function openChat(id) {
+    clearTimeout(flow.slowTimer);
     hidePageForSession(); show("chat");
-    $("peer-name").textContent = `Direct connection: ${id.username || "peer"}`;
-    renderBadge(id, $("peer-badge"));
+    $("peer-name").textContent = t("direct_conn", { u: id.username || "peer" });
+    refreshVerifyUi();
     session.pc.onconnectionstatechange = () => {
       if (["failed", "closed", "disconnected"].includes(session.pc.connectionState)) closedChat(session.pc.connectionState);
     };
     // Dokunmatik cihazda otomatik odak klavyeyi açıp ekranı kaydırır; yalnızca fare/klavye ile odakla
     if (!matchMedia("(pointer: coarse)").matches) $("msg-input").focus();
   }
+  // Rozet: "✓ Doğrulandı" (yeşil) ya da "Doğrulanmadı · Doğrula" (amber); ikisi de güvenlik kodu penceresini açar
   function renderBadge(id, b) {
-    b.textContent = "";
-    if (id.status === C.S.VERIFIED) { b.className = "badge ok"; b.textContent = "✓ Identity verified"; return; }
-    b.className = "badge info";
-    b.append(`? New contact — compare fingerprint: ${id.fingerprint}`);
-    if (id.status === C.S.NEW) {
-      const btn = document.createElement("button"); btn.textContent = "Add to contacts"; btn.style.marginLeft = "8px";
-      btn.onclick = async () => { try { await addContact(id.username, id.pubDer); id.status = C.S.VERIFIED; renderBadge(id, b); } catch (e) { alert(e.message); } };
-      b.append(btn);
+    b.textContent = ""; b.className = "badge vbadge";
+    if (!id || !id.username) return;
+    const ok = isVerifiedPeer(id);
+    const chip = document.createElement("button"); chip.type = "button";
+    chip.className = "vchip " + (ok ? "ok" : "warn");
+    chip.textContent = ok ? t("v_verified") : t("v_unverified");
+    chip.onclick = () => openVerify(id);
+    b.append(chip);
+    if (!contacts.has(id.username)) {               // rehbere ekleme doğrulama DEĞİLDİR (doğrulanmamış eklenir)
+      b.append(button(t("v_add"), async () => {
+        try { await addContact(id.username, id.pubDer); id.status = C.S.VERIFIED; refreshVerifyUi(); } catch (e) { alert(e.message); }
+      }, "small"));
     }
+  }
+  async function renderCallSn() {
+    const box = $("call-sn"), id = session.ident; box.textContent = "";
+    if (!id || !id.username || !call.open) return;
+    try {
+      const sn = await C.safetyNumber(me.username, me.pubDer, id.username, id.pubDer);
+      const lbl = document.createElement("small"); lbl.textContent = t("v_sn_call");
+      box.replaceChildren(lbl, sn);
+    } catch (e) { box.textContent = ""; }
+  }
+  function refreshVerifyUi() {
+    const id = session.ident; if (!id) return;
+    renderBadge(id, $("peer-badge")); renderBadge(id, $("call-badge")); renderCallSn();
+  }
+
+  // ── güvenlik kodu penceresi ──
+  let verifyTarget = null;                          // { username, pubDer, fingerprint }
+  async function openVerify(target) {
+    verifyTarget = target;
+    $("verify-title").textContent = t("v_title", { u: target.username });
+    const box = $("sn-digits"); box.textContent = "";
+    try {
+      const sn = await C.safetyNumber(me.username, me.pubDer, target.username, target.pubDer);
+      for (const g of sn.split(" ")) { const sp = document.createElement("span"); sp.textContent = g; box.append(sp); }
+    } catch (e) { box.textContent = e.message; }
+    renderVerifyState();
+    if (!$("verify-dlg").open) $("verify-dlg").showModal();
+  }
+  function renderVerifyState() {
+    if (!verifyTarget) return;
+    const u = verifyTarget.username, ok = isVerifiedPeer(verifyTarget);
+    setStatus($("verify-state"), t(ok ? "v_state_ok" : "v_state_no", { u }), ok ? "ok" : "");
+    show("btn-mark-verified", !ok); show("btn-mark-unverified", ok);
+  }
+  $("btn-mark-verified").onclick = async () => {
+    const tg = verifyTarget; if (!tg) return;
+    try {
+      if (!contacts.has(tg.username)) await addContact(tg.username, tg.pubDer, true);
+      else if (contacts.get(tg.username).fp !== tg.fingerprint) throw new Error(t("card_conflict", { u: tg.username }));
+      else await setVerified(tg.username, true);
+      if (session.ident && session.ident.username === tg.username) session.ident.status = C.S.VERIFIED;
+      refreshVerifyUi(); renderVerifyState(); $("verify-dlg").close();
+    } catch (e) { setStatus($("verify-state"), e.message, "bad"); }
+  };
+  $("btn-mark-unverified").onclick = async () => {
+    if (!verifyTarget) return;
+    await setVerified(verifyTarget.username, false).catch((e) => alert(e.message));
+    renderVerifyState();
+  };
+  $("btn-verify-close").onclick = () => $("verify-dlg").close();
+
+  // ── sıkı mod ──
+  $("strict-mode").onchange = () => { settings.strict = $("strict-mode").checked; persist().catch(() => {}); };
+  function sysNote(text) {
+    const d = document.createElement("div"); d.className = "sys-note"; d.textContent = text;
+    $("messages").append(d); $("messages").scrollTop = 1e9;
   }
   function closedChat(reason) {
     if ($("msg-input").disabled) return;
@@ -3731,11 +4304,15 @@ var qrcode = function() {
     const d = document.createElement("div"); d.className = "msg file" + (mine ? " me" : "");
     const title = document.createElement("div"); title.textContent = `📄 ${name}`; title.style.fontWeight = "600";
     const sub = document.createElement("div"); sub.className = "meta"; sub.style.textAlign = "left"; sub.textContent = C.fmtSize(size);
-    const bar = document.createElement("progress"); bar.max = 1; bar.value = 0; bar.classList.add("hidden");
+    // Bekleme/aktarım: marka yükleyicisi + metin (yüzde); bitince gizlenir
+    const bar = document.createElement("div"); bar.className = "loading-line hidden"; bar.style.color = "inherit";
+    const barText = document.createElement("span"); bar.append(makeLoader("sm"), barText);
     const state = document.createElement("div"); state.style.fontSize = "12px";
     const actions = document.createElement("div"); actions.className = "row";
     d.append(title, sub, bar, state, actions); $("messages").append(d); $("messages").scrollTop = 1e9;
-    return { bar, state, actions, progress(v) { bar.classList.remove("hidden"); bar.value = v; state.textContent = `${Math.floor(v * 100)}%`; },
+    return { bar, state, actions,
+             progress(v) { bar.classList.remove("hidden"); barText.textContent = `${Math.floor(v * 100)}%`; state.textContent = ""; },
+             wait(text, btns = []) { bar.classList.remove("hidden"); barText.textContent = text; state.textContent = ""; actions.replaceChildren(...btns); },
              done(text, cls, btns = []) { bar.classList.add("hidden"); state.textContent = text; state.className = cls || ""; actions.replaceChildren(...btns); } };
   }
   function button(label, onclick, cls) { const b = document.createElement("button"); b.textContent = label; b.onclick = onclick; if (cls) b.className = cls; return b; }
@@ -3749,22 +4326,28 @@ var qrcode = function() {
   }
 
   // send
-  $("btn-attach").onclick = () => $("file-input").click();
+  // Sıkı mod: doğrulanmamış kişiye dosya gönderilmez (nedeni sohbette yazılır)
+  function strictFileBlocked() {
+    if (!C.strictBlocks("file", isVerifiedPeer(session.ident), settings.strict)) return false;
+    sysNote(t("strict_file_out", { u: (session.ident && session.ident.username) || "peer" }));
+    return true;
+  }
+  $("btn-attach").onclick = () => { if (!strictFileBlocked()) $("file-input").click(); };
   $("file-input").onchange = async () => {
     const file = $("file-input").files[0]; $("file-input").value = "";
-    if (!file) return;
+    if (!file || strictFileBlocked()) return;
     if (!file.size) return alert("Cannot send an empty file.");
     if (file.size > C.MAX_WEB_FILE_BYTES) return alert(`Browser limit is ${C.fmtSize(C.MAX_WEB_FILE_BYTES)} max.`);
     const sha256 = await C.sha256hex(await file.arrayBuffer());
     const offer = { t: "file_offer", fid: C.randHex(16), name: C.safeFilename(file.name), size: file.size, sha256 };
     const card = fileCard(offer.fid, offer.name, offer.size, true);
-    card.done("Waiting for peer's approval…", "", [cancelBtn(offer.fid)]);
+    card.wait(t("file_wait"), [cancelBtn(offer.fid)]);
     outgoing.set(offer.fid, { file, offer, cancelled: false, card });
     session.channel.send(JSON.stringify(offer));
   };
   async function upload(fid) {
     const o = outgoing.get(fid); const ch = session.channel;
-    o.card.done("Sending…", "", [cancelBtn(fid)]);
+    o.card.wait(t("file_sending"), [cancelBtn(fid)]);
     const buf = new Uint8Array(await o.file.arrayBuffer());
     for (let off = 0; off < buf.length; off += C.CHUNK_SIZE) {
       if (o.cancelled || ch.readyState !== "open") return o.card.done("Transfer stopped.", "bad");
@@ -3804,6 +4387,10 @@ var qrcode = function() {
   function onFileOffer(f) {
     const name = C.safeFilename(f.name);
     const card = fileCard(f.fid, name, f.size, false);
+    if (C.strictBlocks("file", isVerifiedPeer(session.ident), settings.strict)) {   // sıkı mod: otomatik ret
+      session.channel.send(JSON.stringify({ t: "file_reject", fid: f.fid }));
+      return card.done("⛔ " + t("strict_file_in", { u: (session.ident && session.ident.username) || "peer", n: name }), "bad");
+    }
     if (incoming.size >= 3 || !(f.size > 0 && f.size <= C.MAX_WEB_FILE_BYTES)) {
       session.channel.send(JSON.stringify({ t: "file_reject", fid: f.fid }));
       return card.done(f.size > C.MAX_WEB_FILE_BYTES ? `Too large for browser (limit ${C.fmtSize(C.MAX_WEB_FILE_BYTES)}) — rejected.` : "Rejected.", "bad");
@@ -3813,7 +4400,7 @@ var qrcode = function() {
       button("Accept", () => {
         const inc = incoming.get(f.fid); if (!inc) return;
         inc.accepted = true; session.channel.send(JSON.stringify({ t: "file_accept", fid: f.fid }));
-        card.done("Receiving…", "", [cancelBtn(f.fid)]);
+        card.wait(t("file_receiving"), [cancelBtn(f.fid)]);
       }, "primary"),
       button("Reject", () => { incoming.delete(f.fid); session.channel.send(JSON.stringify({ t: "file_reject", fid: f.fid })); card.done("Rejected.", ""); }, "danger"),
     ]);
@@ -3849,15 +4436,31 @@ var qrcode = function() {
     return NATIVE.saveEnd(id);
   }
 
+  // Dil değişince JS ile üretilen metinler de yeniden çizilir
+  function renderDynamic() {
+    renderFlow(); renderContacts(); renderIce();
+    if (me.username) $("me-name").textContent = `${me.username} (${t(me.remember ? "saved" : "ephemeral")})`;
+    if (session.ident) { refreshVerifyUi(); if (!$("chat").classList.contains("hidden")) $("peer-name").textContent = t("direct_conn", { u: session.ident.username || "peer" }); }
+    if (verifyTarget && $("verify-dlg").open) { $("verify-title").textContent = t("v_title", { u: verifyTarget.username }); renderVerifyState(); }
+    ["offer", "answer"].forEach((w) => { const el = $(w + "-loading-text"); if (el.dataset.key) el.textContent = t(el.dataset.key); });
+  }
+  uiReady = true; renderFlow();
+
   // ── açılış: hatırlanan kimlik varsa yükle ──
   (async () => {
     try {
       const saved = await kv("get", "identity");
       if (!saved) return;
       me.remember = true; $("remember").checked = true;
-      for (const c of (await kv("get", "contacts")) || []) contacts.set(c.username, { fp: c.fp, pubDer: C.unb64(c.der) });
+      // Eski kayıtlarda verified/verifiedFp yok → doğrulanmamış sayılır (geriye uyumlu)
+      for (const c of (await kv("get", "contacts")) || []) {
+        contacts.set(c.username, { fp: c.fp, pubDer: C.unb64(c.der), verified: c.verified === true,
+                                   verifiedFp: typeof c.verifiedFp === "string" ? c.verifiedFp : "" });
+      }
       const savedIce = await kv("get", "ice");
       if (savedIce) { ice.preset = String(savedIce.preset || C.ICE_DEFAULT); ice.custom = String(savedIce.custom || ""); renderIce(); }
+      const savedSettings = await kv("get", "settings");
+      settings.strict = !!(savedSettings && savedSettings.strict === true); $("strict-mode").checked = settings.strict;
       await startWith(await C.importPrivatePkcs8(C.unb64(saved.pkcs8)), saved.username);
     } catch (e) { console.warn("hatırlanan kimlik yüklenemedi:", e); }
   })();

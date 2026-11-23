@@ -341,3 +341,33 @@ Her 2 sn'de kayıp ve RTT okunur (`desktop/call_quality.py`, `static/js/quality.
 - **Web (`static/index.html`, `static/css/styles.css`, `static/js/`):** Mobil responsive görünüm (`@media (max-width: 768px)`, `.mobile-chat-open` + `#mobile-back-btn`), sadeleştirilmiş sol üst bar + `#settings-modal`, girişte mod seçici ve SVG ikonlar eklendi.
 - **Mobil / Sunucusuz (`static/serverless.html`):** Alt/üst sekmeli mobil gezinme (`Connect` | `Contacts` | `Identity`), daraltılabilir ham SDP kod kutuları, SVG arama kontrolleri ve anlık `EN / TR` dil geçişi eklendi; tüm `test_serverless_html.py` ve `test_android.py` güvenlik/protokol sözleşmeleri korundu.
 
+---
+
+## 14. Kişi doğrulama, sıkı mod, adım akışı ve yükleyici (2026-11-23)
+
+Commit'ler: `257de96`, `b10dc87` (P1), `7dddc5c`, `a53bdd8` (L1), `57b964c` (P3), `24f2d67` (L2), `4d6e73c`, `425943e` (P2).
+
+### 14.1 — Ne eklendi
+- **Güvenlik kodu:** `desktop/p2p_core.safety_number` ve sayfadaki `P2PCore.safetyNumber` ("hybridp2p-sn:v1"): kullanıcı adı + SPKI DER üzerinden SHA-256, kişi başına 2×5 hane, kullanıcı adına göre sıralı → 4×5 hane. Yalnızca yerelde hesaplanır; protokol değişmedi. Masaüstü ve sayfa aynı çıktıyı üretir (testle karşılaştırılır).
+- **Doğrulama durumu:** `message_store` kişi satırında `verified` / `verified_fp` / `verified_at`. Anahtar (parmak izi) değişirse doğrulama sıfırlanır.
+- **Sıkı mod:** masaüstünde `settings_store` anahtarı `p2p_strict`, sayfada ayar anahtarı. `strict_blocks` kuralı: sıkı mod AÇIK ve kişi doğrulanmamışsa dosya gönderme yok, gelen dosya teklifleri otomatik reddedilir, görüntülü arama yok. Yazı ve sesli arama serbest (sayı sesli okunarak doğrulanır). Kural masaüstü ve sayfada birebir aynı.
+- **Adım akışı:** masaüstü P2P sihirbazı ve `serverless.html` kodu üret, gönder, yanıtı bekle, yapıştır/bağlan adımlarıyla ilerler; aramada güvenlik kodu gösterilir.
+- **Yükleyici:** masaüstünde `desktop/brand_loader.py` (`ChainLoader`, `BusyOverlay`); sayfada ve web istemcisinde SVG + CSS (`prefers-reduced-motion` desteği).
+- **Hızlı ilk kare:** `client.py` ince giriş noktası; `MessengerApp` `desktop/app.py`'de, ağır içe aktarımlar `prefetch()` ile pencere açılırken arka planda yüklenir.
+- **Marka varlıkları:** `assets/brand/make_icons.py`, kobalt renk dönüşümü; `python assets/brand/make_icons.py all splash`.
+
+### 14.2 — Neyi korur, neyi korumaz
+- **Korur:** kod taşıyan kanaldaki (sohbet uygulaması, e-posta, herkese açık QR) ilk temasta ortadaki adam (MITM) anahtar değişimini, YALNIZCA kullanıcılar sayıyı gerçekten karşılaştırırsa.
+- **Korumaz / eksik:**
+  - Doğrulama isteğe bağlıdır; hiçbir şey kullanıcıyı karşılaştırmaya zorlamaz (sıkı mod yalnızca dosya ve görüntüyü kısıtlar).
+  - Doğrulama cihaz başınadır; başka cihaza taşınmaz.
+  - Sunuculu mod kişileri bu mekanizmayı henüz kullanmıyor.
+  - QR ile yüz yüze doğrulama yok.
+
+### 14.3 — Doğrulanmamış / bilinen sınırlar
+- Yavaş bağlantı ipucu (20 sn) testlerde hiç tetiklenmedi.
+- Aramada görüntülü reddi ve gelen dosya tekliflerinin otomatik reddi masaüstünde yalnızca birim testleriyle kapsanıyor; gerçek pencerede denenmedi.
+- Açık tema kısmen kontrol edildi.
+- Gerçek telefonda test yapılmadı.
+- RSA anahtar üretimi sırasında (GIL) yükleyici animasyonu yaklaşık 0,3-1 sn donuyor.
+- Masaüstü giriş ekranındaki "sunucuya ulaşılamadı" hatası (`fix` commit'i) yalnızca birim testleriyle doğrulandı; pencerede görsel kontrol yapılamadı.

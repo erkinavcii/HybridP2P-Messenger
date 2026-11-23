@@ -56,6 +56,7 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 - [x] **Otomatik Testler:** `tests/` altında pytest paketi (sunucu yolları, imzalar, TLS sabitleme, deployment, PWA önbellek listesi …).
 - [x] **Güvenlik Düzeltmeleri (K1–K4, 2026-11-13):** giriş challenge'ı yalnızca UUIDv4 ise imzalanır; grup anahtarı dağıtımı imzalı ve üyelik kontrollü; masaüstü gelen dosyayı temizlenmiş adla `Downloads/HybridP2P`'ye yazar; web istemcisinde XSS yolları kapatıldı. Kalan işler ve açık kararlar: KNOWN_ISSUES §12, ayrıntı: `fable.md`.
 - [x] **Signal-Tarzı UI/UX Modernizasyonu, EN/TR Lokalizasyon & Bug Düzeltmeleri (2026-11-22):** Masaüstü (`desktop/theme.py`, `client.py`, `desktop/*.py`), Web (`static/index.html`, `styles.css`, `static/js/`) ve Mobil/Sunucusuz (`static/serverless.html`) arayüzleri Kobalt-İndigo + Arduvaz paletine geçirildi; giriş ekranı mod seçicisi ve daraltılabilir gelişmiş ayarlarla sadeleştirildi; adım adım P2P bağlantı sihirbazı, mobil responsive sohbet görünümü, doğal baloncuk genişlikleri, ARB tarzı `en`/`tr` dil desteği ve `M1`/`M4`/`S2` düzeltmeleri tamamlandı (KNOWN_ISSUES §13).
+- [x] **Kişi Doğrulama, Sıkı Mod, Adım Akışı & Yükleyici (2026-11-23):** Güvenlik kodu (`p2p_core.safety_number` / `P2PCore.safetyNumber`, `hybridp2p-sn:v1`, 4×5 hane, yalnızca yerel, protokol değişmedi), kişi başına doğrulama durumu (`message_store`; anahtar değişince sıfırlanır), sıkı mod (`p2p_strict`; doğrulanmamış kişiyle dosya/görüntülü arama yok, yazı ve ses serbest), masaüstü sihirbazı ve `serverless.html` adım akışı, animasyonlu zincir yükleyici (`desktop/brand_loader.py`, SVG+CSS), ince `client.py` + `desktop/app.py` ile hızlı ilk kare, `assets/brand/make_icons.py` marka hattı. Ayrıntı ve sınırlar: KNOWN_ISSUES §14.
 
 ---
 
@@ -79,6 +80,9 @@ Uygulamanın E2EE ve Zero-Knowledge mimarisini korumak için aşağıdaki kurall
 - [x] **Dinamik Kalite Adaptasyonu (VoIP Polish):** `getStats()` kaybı/RTT'si ile görüntü basamak basamak düşer/çıkar (geri çekilmeli), ses öncelikli. Aynı kural `desktop/call_quality.py`, `static/js/quality.js` ve `serverless.html`'de; testlerle karşılaştırılıyor. Bu iş sırasında masaüstü arama medyasındaki eski hatalar da düzeltildi (KNOWN_ISSUES §10).
 
 ### 5.4. Eksik UX & Güvenlik Özellikleri
+- [ ] **Sunuculu mod kişileri için doğrulama:** güvenlik kodu/doğrulama durumu şu an yalnızca sunucusuz (P2P) kişilerde var.
+- [ ] **QR ile yüz yüze doğrulama:** güvenlik kodunu sesli okumak yerine QR ile karşılaştırma.
+- [ ] **Grup anahtarında kalan tekrar (replay) riski:** KNOWN_ISSUES §12.
 - [ ] **Özel Anahtar Şifreleme (Private Key Encryption):** Yerel cihazdaki private key'lerin kullanıcı şifresiyle şifrelenip PEM olarak diske yazılması. *(Geliştirme sürecinde anahtara kolay erişim için bilinçli olarak ertelendi; yayın öncesi ele alınacak.)*
 - [x] **Mesaj İmzalama (Digital Signature):** Birebir mesajlar masaüstü ve web'de RSA-PSS ile imzalanıyor, alıcı doğruluyor (ilk imzada güven + downgrade koruması). *(Açık karar: imzasız mesajı tamamen reddetmek — KNOWN_ISSUES §5.)*
 

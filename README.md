@@ -30,6 +30,9 @@ A secure, private, and lightweight hybrid peer-to-peer messaging application des
 * **Zero-Knowledge Multi-User Groups:** Employs a Shared Group Symmetric Key architecture with cryptographic rekeying upon member additions/removals (a removed member cannot read new messages), keeping upload bandwidth constant at $O(1)$. *(Per-message forward secrecy à la Signal's Double Ratchet is not implemented.)*
 * **Serverless "Walkie-Talkie" Mode:** When both people are online, they can connect directly device-to-device with no server at all by exchanging one-time connection codes (copy-paste or QR). Codes are signed with the sender's identity key and bound to the WebRTC/DTLS session, so a tampered or impersonated code is detected against your contact list. Text chat and file transfer (accept/reject, SHA-256 verified, up to 1 GB) work today, and the mode starts without contacting any server: use **"Sunucusuz başlat"** on the login screen or run `python serverless_client.py`. On phones (or any browser) use **`serverless.html`**: a single self-contained file that can be opened from the relay (`/serverless.html`), any static host, or shared as a file; it talks to the desktop with the same signed codes: chat, file transfer and voice/video calls (front/back camera, mute, camera off), and its CSP forbids every network request except WebRTC. You choose who helps the two devices find each other ("Bağlantı yardımcısı"): Google + Cloudflare STUN (default), only one of them, your own STUN/TURN server, or LAN-only with no outside request at all. An **Android app** (`android/`, package `com.erkin.hybridp2p`) wraps the same page so it runs without a browser or any network fetch: it adds saving received files to Downloads, the share sheet, clipboard, QR scanning (ZXing, no Google services) and keeping the screen on during calls.
 * **Secure Passwordless Authentication:** Connections and modifying API requests are authenticated using cryptographic challenges and RSA-PSS signatures.
+* **Step-by-step Connection Flow:** The serverless connection wizard (desktop) and `serverless.html` guide you one step at a time: create the code, send it, wait for the reply, paste it and connect. The current step is highlighted and finished steps collapse. A slow connection shows a hint with things to try.
+* **Animated Chain Loader:** Startup, key generation and waiting states show a brand animation of two interlocking rings (desktop `ChainLoader` / `BusyOverlay`; SVG + CSS in the page and the web client, which respects `prefers-reduced-motion`). The desktop window shows the first frame quickly because `client.py` is a thin entry point that loads the heavy modules in the background.
+* **Contact Verification & Strict Mode:** Compare a safety number to confirm a serverless contact; optionally block files and video for unverified contacts (see section 6 of the authentication chapter).
 
 ---
 
@@ -139,6 +142,14 @@ Users can share their **Contact Cards** (containing username, public key PEM, an
 * **MITM warning popup**: If a recipient's public key changes on the server, the client detects the difference against the local contacts store, blocks connection, and warns the user with a dialog.
 
 ---
+
+### 6. Contact Verification (Safety Number) & Strict Mode — Serverless Mode
+The signed one-time codes are the only thing that carries a peer's public key in serverless mode, so a man in the middle on the channel you used to send the code (chat app, e-mail, a public QR) could in principle swap it at first contact. To rule that out, both sides can compare a **safety number**:
+
+* **Safety number:** 20 digits shown as 4 groups of 5 (`hybridp2p-sn:v1`): SHA-256 over each person's username and public key, two groups per person, ordered by username so both sides see the same number. It is computed locally; nothing is sent and the connection protocol is unchanged. Read it aloud on a voice call or compare it in person. It is available in the desktop contact dialog and on the call screen, and in `serverless.html`.
+* **Verified state:** when the numbers match, mark the contact as verified. The mark is stored per device and is reset automatically if the contact's key ever changes.
+* **Strict mode (optional, off by default):** with strict mode on and an unverified peer, file sending is blocked, incoming file offers are rejected automatically and video calls are refused. Text chat and voice calls stay allowed, because the number is compared by voice. Desktop: setting `p2p_strict`; the page has the same switch.
+* Verification is voluntary and per device. It is not available for server-mode contacts yet, and there is no QR-based verification yet (see `KNOWN_ISSUES.md` section 14).
 
 ## 👥 Group Chat Architecture & Rekeying Protocol
 
@@ -267,9 +278,12 @@ HybridP2P-Messenger/
 │   ├── auth.py             # X-Signature request verification
 │   ├── websocket_manager.py # ConnectionManager, online-user tracking
 │   └── routes/            # APIRouters: users, messages, groups, voip
-├── client.py              # Thin entry point — MessengerApp wiring only
+├── client.py              # Thin entry point: shows the loader at once, imports desktop/app.py in the background
 ├── serverless_client.py   # Starts straight into serverless mode (no server contact at all)
 ├── desktop/                # Flet desktop client package (mixins on MessengerApp)
+│   ├── app.py              # MessengerApp: combines all mixins, builds the shared controls
+│   ├── brand_loader.py     # Animated chain loader (ChainLoader, BusyOverlay, startup splash)
+│   ├── p2p_verify.py       # Safety-number view, verification badge/dialog, strict-mode helpers
 │   ├── net_config.py       # Server URL (http/https, ws/wss) state, file-type helpers
 │   ├── tls_pin.py          # Certificate pinning for self-signed (IP-only) servers
 │   ├── theme.py            # Dark/light palette — the ONLY place hex colors live (C.accent, C.text …)
@@ -299,6 +313,7 @@ HybridP2P-Messenger/
 │   ├── js/                # ES modules: app, ui, ws, crypto, db, avatar, voice, linkpreview, prefs, voip, state, safe (escaping helpers, image MIME allowlist)
 │   ├── manifest.webmanifest, icons/  # PWA (installable app)
 │   └── sw.js              # Network-first service worker (offline app shell)
+├── assets/brand/          # Brand sources and make_icons.py (icons, .ico, Android, splash): python assets/brand/make_icons.py all splash
 ├── crypto_utils.py        # RSA/AES key pair generation, E2EE encryption/decryption
 ├── message_store.py       # Client-side SQLite for message logs and keys
 ├── Dockerfile             # Relay server image (server-only dependencies, non-root)

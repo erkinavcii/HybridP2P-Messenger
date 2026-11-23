@@ -846,3 +846,7 @@ Kullanıcıların fiziki olarak kod taşımak istemediği durumlarda, merkeziyet
 - [x] **Telefon sayfasında arama (S3b, 2026-10-09):** `serverless.html` sesli/görüntülü arama yapar ve masaüstünün sunucusuz aramalarıyla birlikte çalışır (aynı imzalı kodlar). Ön/arka kamera, mikrofon/kamera kapatma; görüşme bitince sayfa yenilenmeden yeni bağlantı kurulur.
 
 
+- [x] **Kişi doğrulama (2026-11-23):** güvenlik kodu (`hybridp2p-sn:v1`, 4×5 hane), kişi başına doğrulama durumu ve isteğe bağlı sıkı mod (masaüstü + `serverless.html`); adım adım bağlantı akışı ve animasyonlu zincir yükleyici. Ayrıntı: KNOWN_ISSUES §14.
+- [ ] **Sunuculu mod kişileri için doğrulama:** aynı güvenlik kodu ve doğrulama durumu sunucu üzerinden eklenen kişilere de uygulanmalı.
+- [ ] **QR ile yüz yüze doğrulama:** güvenlik kodunu okumak yerine QR kodla karşılaştırma.
+- [ ] **Grup anahtarında kalan tekrar (replay) riski:** KNOWN_ISSUES §12'de açıklanan durum.

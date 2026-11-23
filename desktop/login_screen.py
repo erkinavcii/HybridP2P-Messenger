@@ -13,6 +13,7 @@ from desktop.theme import C, t
 
 from message_store import MessageStore
 from desktop import net_config, tls_pin
+from desktop.rest_client import ServerUnreachable, login_error_text
 
 USERNAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 
@@ -67,6 +68,8 @@ class LoginScreenMixin:
             self.page.update()
             return
         self.username_field.error_text = None
+        self.login_error.visible = False
+        self.login_error.value = ""
 
         server_addr = self.server_address_field.value.strip()
         pin = (self.tls_pin_field.value or "").strip()
@@ -167,7 +170,10 @@ class LoginScreenMixin:
                         self.tls_pin_field.error_text = t("err_pin_mismatch")
                         self._show_pin_mismatch_dialog(ex)
                     else:
-                        self.username_field.error_text = t("error_msg", err=ex)
+                        self.login_error.value = login_error_text(ex, server_addr)
+                        self.login_error.visible = True
+                        if isinstance(ex, ServerUnreachable):
+                            self.server_address_field.error_text = t("err_server_unreachable_short")
                     self.log_status(t("login_failed", err=ex))
                     self.page.update()
                 self.page.run_task(login_failed_ui)

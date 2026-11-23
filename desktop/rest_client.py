@@ -26,6 +26,20 @@ from desktop import net_config
 from desktop.theme import t
 
 
+class ServerUnreachable(Exception):
+    """Sunucuya hiç ulaşılamadı (bağlantı reddedildi / zaman aşımı / ağ yok).
+
+    Sunucunun verdiği reddedilme (4xx/5xx) veya TLS hatasından ayrı tutulur:
+    giriş ekranı bunu "adresi/sunucuyu kontrol edin" olarak gösterir."""
+
+
+def login_error_text(ex: Exception, address: str) -> str:
+    """Giriş hatasını kullanıcıya gösterilecek yerelleştirilmiş metne çevirir."""
+    if isinstance(ex, ServerUnreachable):
+        return t("err_server_unreachable", addr=address or net_config.BASE_URL)
+    return t("error_msg", err=ex)
+
+
 class RestClientMixin:
 
     def initialize_keys(self, username: str):
@@ -128,10 +142,10 @@ class RestClientMixin:
                 "Sunucunun TLS sertifikası doğrulanamadı. Sunucu kendinden imzalı sertifika "
                 "kullanıyorsa (yalnızca IP modu) yöneticisinden aldığınız parmak izini "
                 f"'Sertifika parmak izi' alanına girin. Ayrıntı: {ssl_err}")
-        except requests.exceptions.Timeout:
-            raise Exception("Server request timed out after 5 seconds.")
+        except requests.exceptions.Timeout as to_err:
+            raise ServerUnreachable(f"Server request timed out after 5 seconds: {to_err}")
         except requests.exceptions.ConnectionError as conn_err:
-            raise Exception(f"Server did not respond (offline or connection refused): {conn_err}")
+            raise ServerUnreachable(f"Server did not respond (offline or connection refused): {conn_err}")
         except Exception as ex:
             raise Exception(f"Network error: {ex}")
 

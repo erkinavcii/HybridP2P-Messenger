@@ -281,6 +281,12 @@ class MessengerApp(
             bgcolor=C.surface_deep,
         )
 
+        # Giriş hatası (sunucuya ulaşılamadı vb.): form dolu kalır, hata düğmenin üstünde görünür
+        self.login_error = ft.Text(
+            "", size=12, color=C.danger, visible=False, selectable=True,
+            text_align=ft.TextAlign.CENTER,
+        )
+
         self.login_btn = ft.Button(
             content=ft.Row(
                 controls=[
@@ -486,6 +492,7 @@ class MessengerApp(
                     adv_toggle,
                     adv_body,
                     ft.Container(height=4),
+                    self.login_error,
                     self.login_btn,
                     self.serverless_btn,
                 ],

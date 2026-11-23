@@ -55,6 +55,22 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
     });
 }
 
+// ── Marka yükleyicisi (L2) ──
+// Bekleme göstergesi: #tpl-chain-loader SVG'si yer tutucuya kopyalanır; animasyon yalnızca CSS'te
+// (styles.css .chain-loader; prefers-reduced-motion → yalnızca yavaş opaklık nabzı).
+function fillChainLoader(el) {
+    const tpl = document.getElementById("tpl-chain-loader");
+    if (tpl && !el.firstElementChild) el.append(tpl.content.cloneNode(true));
+    el.setAttribute("aria-hidden", "true");
+    return el;
+}
+function chainLoader(size) {
+    const s = document.createElement("span");
+    s.className = "chain-loader" + (size ? " " + size : "");
+    return fillChainLoader(s);
+}
+document.querySelectorAll("[data-loader]").forEach(fillChainLoader);
+
 // ── UI Interactions & Event Binding ──
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
@@ -769,7 +785,7 @@ if (loginBtn) {
         }
         
         loginBtn.disabled = true;
-        loginBtn.innerHTML = `<div class="spinner"></div> Signing In...`;
+        loginBtn.replaceChildren(chainLoader("sm"), document.createTextNode(" Signing In..."));
         
         try {
             if (importKeyCheckbox.checked) {

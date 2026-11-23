@@ -53,9 +53,9 @@
                 <p id="login-mode-hint" class="mode-hint" data-i18n="mode_server_hint">Connect to this relay server for inbox, groups, and offline delivery.</p>
 
                 <div id="loading-keys-section" class="hidden" style="margin-bottom: 20px;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--accent-hover);">
-                        <div class="spinner"></div>
-                        <span id="key-gen-status-text" style="font-size: 13px;" data-i18n="generating_keys">Generating 4096-bit RSA keys...</span>
+                    <div class="loading-line center">
+                        <span class="chain-loader" data-loader></span>
+                        <span id="key-gen-status-text" data-i18n="generating_keys">Generating 4096-bit RSA keys...</span>
                     </div>
                 </div>
 
@@ -457,8 +457,8 @@
                 </div>
                 <button id="p2p-gen-offer-btn" class="btn" style="margin-bottom: 8px;" data-i18n="p2p_step1">1. Create Invite Code</button>
 
-                <div id="p2p-caller-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--accent-hover);">
-                    <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <div id="p2p-caller-loading" class="loading-line hidden">
+                    <span class="chain-loader sm" data-loader></span>
                     <span style="font-size: 12px;">Preparing direct route (2–5s)...</span>
                 </div>
 
@@ -485,8 +485,8 @@
                 </div>
                 <button id="p2p-gen-answer-btn" class="btn" style="margin-bottom: 8px;" data-i18n="p2p_join_step2">2. Accept &amp; Generate Answer</button>
 
-                <div id="p2p-callee-loading" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--accent-hover);">
-                    <div class="spinner" style="width: 16px; height: 16px; border: 2px solid transparent; border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <div id="p2p-callee-loading" class="loading-line hidden">
+                    <span class="chain-loader sm" data-loader></span>
                     <span style="font-size: 12px;">Preparing direct route (2–5s)...</span>
                 </div>
 
@@ -600,6 +600,18 @@
         </div>
     </div>
 
+    <!-- Marka yükleyicisi (L2): app.js bu şablonu [data-loader] yer tutucularına kopyalar; animasyon yalnızca CSS -->
+    <template id="tpl-chain-loader">
+        <svg viewBox="0 0 120 72" aria-hidden="true" focusable="false">
+            <circle class="cl-track" cx="44" cy="36" r="22"/>
+            <circle class="cl-track" cx="76" cy="36" r="22"/>
+            <circle class="cl-fill cl-l" cx="44" cy="36" r="22"/>
+            <circle class="cl-fill cl-r" cx="76" cy="36" r="22"/>
+            <circle class="cl-key" cx="60" cy="33.4" r="3.4"/>
+            <rect class="cl-key" x="58.6" y="34" width="2.8" height="6.6" rx=".6"/>
+            <circle class="cl-dot" r="3.2"/>
+        </svg>
+    </template>
     <script type="module" src="./js/app.js"></script>
 </body>
 </html>

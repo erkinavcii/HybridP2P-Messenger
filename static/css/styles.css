@@ -1468,3 +1468,32 @@ body {
         padding: 10px 12px;
     }
 }
+
+/* ── Marka yükleyicisi (L2): iç içe iki halka + anahtar deliği; yalnızca SVG + CSS ──
+   Bütün bekleme durumlarında (anahtar üretimi, giriş/bağlanma, P2P kodu hazırlama) kullanılır.
+   İşaretleme: <span class="chain-loader" data-loader></span> → app.js #tpl-chain-loader'ı kopyalar. */
+.chain-loader { display: inline-block; flex: none; width: 56px; height: 34px; color: var(--accent-color); vertical-align: middle; }
+.chain-loader.sm { width: 30px; height: 18px; }
+.btn .chain-loader { color: inherit; }
+.chain-loader svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.cl-track { fill: none; stroke: currentColor; stroke-width: 6; opacity: .2; }
+.cl-fill { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round;
+           stroke-dasharray: 138.3; stroke-dashoffset: 138.3; transform-box: fill-box; transform-origin: center;
+           animation: cl-fill 2.8s ease-in-out infinite, cl-turn 9s linear infinite; }
+.cl-r { animation-delay: .7s, 0s; }
+.cl-key { fill: currentColor; }
+.cl-dot { fill: var(--accent-hover); filter: drop-shadow(0 0 3px var(--accent-hover));
+          offset-path: path("M22 36A22 22 0 0 1 60 20.9A22 22 0 0 1 98 36"); offset-rotate: 0deg;
+          animation: cl-dot 2.8s ease-in-out infinite; }
+@keyframes cl-fill { 0% { stroke-dashoffset: 138.3; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -138.3; } }
+@keyframes cl-turn { to { transform: rotate(360deg); } }
+@keyframes cl-dot { 0% { offset-distance: 0%; opacity: 0; } 15%, 85% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
+@keyframes cl-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+    .chain-loader { animation: cl-pulse 3s ease-in-out infinite; }
+    .chain-loader * { animation: none !important; }
+    .cl-fill { stroke-dashoffset: 0; }
+    .cl-dot { display: none; }
+}
+.loading-line { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: var(--accent-hover); font-size: 12px; }
+.loading-line.center { justify-content: center; font-size: 13px; }

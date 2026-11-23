@@ -13,6 +13,8 @@ import threading
 import flet as ft
 
 from crypto_utils import get_public_key_fingerprint, pem_string_to_public_key, public_key_to_pem_string
+from desktop import p2p_verify as pv
+from desktop import settings_store
 from desktop.theme import C, t
 
 USERNAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
@@ -110,6 +112,29 @@ class ServerlessScreenMixin:
         fp = _format_fp(get_public_key_fingerprint(self.state["public_key"]))
         contacts_col = ft.Column(spacing=6)
 
+        def verify_actions(c):
+            """Kişi satırı: doğrulama rozeti (tıklanınca güvenlik kodu) + doğrulamayı kaldır."""
+            ok = bool(c.get("is_verified"))
+            user, pem, cfp = c["username"], c.get("public_key") or "", c.get("fingerprint") or ""
+
+            def open_verify(e):
+                pv.open_verify_dialog(self, user, pem, cfp, on_change=render_contacts)
+
+            def unverify(e):
+                store.unmark_contact_verified(user)
+                self.log_status(t("v_unmarked", u=user))
+                render_contacts()
+
+            chip = pv.verify_chip(ok, on_click=open_verify if pem else None)
+            if not ok:
+                chip.content.controls[1].value = t("v_unverified_short")
+                chip.tooltip = t("v_verify")
+            controls = [chip]
+            if ok:
+                controls.append(ft.IconButton(icon=ft.Icons.REMOVE_MODERATOR_OUTLINED, icon_size=18,
+                                              icon_color=C.text_muted, tooltip=t("v_unverify"), on_click=unverify))
+            return controls
+
         def render_contacts():
             contacts_col.controls.clear()
             people = [c for c in (store.get_all_contacts() or []) if c.get("username") != me]
@@ -144,8 +169,8 @@ class ServerlessScreenMixin:
                                 ft.Text(c["username"], size=13, color=C.text, weight=ft.FontWeight.W_600),
                                 ft.Text(short_fp, size=10, color=C.text_muted, selectable=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                             ], spacing=2, tight=True, expand=True),
-                            ft.Icon(ft.Icons.VERIFIED_USER_OUTLINED, size=16, color=C.success),
-                        ], spacing=10),
+                            *verify_actions(c),
+                        ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         bgcolor=C.surface,
                         border=ft.Border.all(1, C.border),
                         padding=ft.Padding(12, 10, 12, 10),
@@ -288,9 +313,33 @@ class ServerlessScreenMixin:
             border_radius=14,
         )
 
+        def strict_changed(e):
+            settings_store.set("p2p_strict", bool(strict_switch.value))
+
+        strict_switch = ft.Switch(
+            value=bool(settings_store.get("p2p_strict")),
+            active_color=C.accent,
+            on_change=strict_changed,
+        )
+        strict_card = ft.Container(
+            ft.Row([
+                ft.Icon(ft.Icons.SHIELD_OUTLINED, size=20, color=C.accent_light),
+                ft.Column([
+                    ft.Text(t("strict_mode"), size=12, color=C.text, weight=ft.FontWeight.W_600),
+                    ft.Text(t("strict_hint"), size=10, color=C.text_muted),
+                ], spacing=2, tight=True, expand=True),
+                strict_switch,
+            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            bgcolor=C.surface,
+            border=ft.Border.all(1, C.border),
+            padding=ft.Padding(14, 10, 10, 10),
+            border_radius=14,
+        )
+
         body = ft.Container(
             content=ft.Column([
                 identity_card,
+                strict_card,
                 ft.Container(
                     content=ft.Column([
                         ft.Row([connect_btn], alignment=ft.MainAxisAlignment.CENTER),

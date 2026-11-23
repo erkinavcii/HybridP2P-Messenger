@@ -258,6 +258,19 @@ def safety_number(user_a: str, pub_a, user_b: str, pub_b) -> str:
     return " ".join(p[1] for p in parts)
 
 
+# ─────────────────────────── sıkı mod ───────────────────────────
+# Sıkı mod açıkken doğrulanmamış kişiyle dosya aktarımı ve görüntülü arama engellenir.
+# Yazılı sohbet ve sesli arama serbesttir: güvenlik kodu tam da bunlarla karşılaştırılır.
+# Kural sayfadaki P2PCore.strictBlocks ile birebir aynıdır (testlerle karşılaştırılır).
+
+STRICT_KINDS = ("file", "video")
+
+
+def strict_blocks(kind: str, peer_verified: bool, strict_on: bool) -> bool:
+    """kind ("text" | "audio" | "file" | "video") sıkı mod yüzünden engelleniyor mu?"""
+    return bool(strict_on) and not peer_verified and kind in STRICT_KINDS
+
+
 # ─────────────────────────── veri kanalı protokolü ───────────────────────────
 # Her çerçeve tek bir JSON metnidir. Bilinmeyen türler yok sayılır (ileri uyumluluk).
 

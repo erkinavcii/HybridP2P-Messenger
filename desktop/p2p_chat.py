@@ -5,10 +5,15 @@ dosya gönderilip alınır (protokoller: desktop/p2p_core.py, desktop/p2p_files.
 Kanal DTLS ile uçtan uca şifrelidir ve karşı tarafın kimliği bağlantı kodundaki
 imzayla doğrulanmıştır.
 
-Geçmiş: yalnızca kimliği rehberle DOĞRULANMIŞ kişiyle yapılan sohbet, normal
-sohbet geçmişine (aynı kişinin sohbetine) kaydedilir; dosyalar için yalnızca
+Geçmiş: yalnızca kimliği rehberle EŞLEŞEN kişiyle yapılan sohbet, normal sohbet
+geçmişine (aynı kişinin sohbetine) kaydedilir; dosyalar için yalnızca
 "gönderildi/alındı" kaydı düşülür (dosyanın kendisi İndirilenler/HybridP2P'de).
-Yeni kişi rehbere eklenirse o andan itibaren kaydedilir.
+Yeni kişi rehbere eklenirse (ya da doğrulanırsa) o andan itibaren kaydedilir.
+
+Doğrulama (P2): başlıktaki rozet "✓ Doğrulandı" ya da "Doğrulanmadı · Doğrula";
+tıklanınca güvenlik kodu diyaloğu açılır (desktop/p2p_verify.py). Sıkı mod açıksa
+doğrulanmamış kişiye dosya gönderilemez ve gelen dosya teklifleri otomatik reddedilir
+(her ikisi de sohbete not düşülür); yazılı sohbet serbesttir.
 
 İş parçacıkları: veri kanalı olayları P2P loop'unda (p2p_core.get_loop) gelir;
 arayüz yalnızca run_on_ui ile güncellenir. Gelen dosya kaydına (IncomingRegistry)
@@ -27,7 +32,8 @@ import flet as ft
 
 from desktop import p2p_core
 from desktop import p2p_files as pf
-from desktop.theme import C
+from desktop import p2p_verify as pv
+from desktop.theme import C, t
 
 
 def _open_folder(path: Path):
@@ -45,8 +51,8 @@ def _open_folder(path: Path):
 class P2PChatMixin:
 
     def open_p2p_chat(self, pc, channel, ident: "p2p_core.PeerIdentity"):
-        me = self.state.get("username") or "ben"
-        peer = ident.username or "karşı taraf"
+        me = self.state.get("username") or "me"
+        peer = ident.username or t("p2pc_peer")
         session = {"save": ident.can_save_history, "open": True, "pending": {}}
         loop = p2p_core.get_loop()
         incoming = pf.IncomingRegistry()
@@ -55,14 +61,14 @@ class P2PChatMixin:
 
         messages = ft.ListView(expand=True, spacing=6, auto_scroll=True)
         status_text = ft.Text("", size=11, color=C.text_muted)
-        input_field = ft.TextField(hint_text="Mesaj yazın…", expand=True, multiline=False,
+        input_field = ft.TextField(hint_text=t("p2pc_hint"), expand=True, multiline=False,
                                    max_length=p2p_core.MAX_TEXT_CHARS, counter="",
                                    border_color=C.surface_alt, focused_border_color=C.accent,
                                    text_size=13, on_submit=lambda e: send_text())
-        send_btn = ft.IconButton(icon=ft.Icons.SEND, icon_color=C.accent, tooltip="Gönder",
+        send_btn = ft.IconButton(icon=ft.Icons.SEND, icon_color=C.accent, tooltip=t("p2pc_send"),
                                  on_click=lambda e: send_text())
         attach_btn = ft.IconButton(icon=ft.Icons.ATTACH_FILE, icon_color=C.accent,
-                                   tooltip=f"Dosya gönder (en fazla {pf.fmt_size(pf.MAX_FILE_BYTES)})")
+                                   tooltip=t("p2pc_attach", max=pf.fmt_size(pf.MAX_FILE_BYTES)))
 
         def ui(fn):
             self.run_on_ui(fn)
@@ -70,36 +76,62 @@ class P2PChatMixin:
         def send_frame(obj):
             loop.call_soon_threadsafe(channel.send, obj if isinstance(obj, str) else json.dumps(obj))
 
-        # ── kimlik rozeti ──
-        add_btn = ft.TextButton("Rehbere ekle", visible=False, style=ft.ButtonStyle(color=C.accent))
+        def is_verified():
+            return pv.peer_verified(self.state.get("store"), ident)
+
+        def sys_note(text, color=None):
+            """Sohbete ortalanmış sistem notu (UI döngüsünde çağrılır)."""
+            messages.controls.append(ft.Container(
+                ft.Text(text, size=11, color=color or C.warning, text_align=ft.TextAlign.CENTER),
+                bgcolor=C.warning_bg, border_radius=10, padding=ft.Padding(10, 6, 10, 6),
+                margin=ft.Margin(20, 2, 20, 2)))
+
+        # ── kimlik rozeti + doğrulama ──
+        add_btn = ft.TextButton(t("p2pc_add_contact"), visible=False, style=ft.ButtonStyle(color=C.accent))
+        chip_slot = ft.Container()
 
         def badge_controls():
+            add_btn.visible = False
             if session["save"]:
-                return [ft.Icon(ft.Icons.VERIFIED, color=C.success, size=16),
-                        ft.Text("Kimlik doğrulandı · geçmişe kaydediliyor", size=11, color=C.success)]
+                return [ft.Icon(ft.Icons.PERSON_OUTLINE, color=C.success, size=16),
+                        ft.Text(t("p2pc_badge_saved"), size=11, color=C.success, expand=True)]
             if ident.status == p2p_core.NEW:
                 add_btn.visible = True
                 return [ft.Icon(ft.Icons.HELP_OUTLINE, color=C.info, size=16),
                         ft.Column([
-                            ft.Text("Yeni kişi — parmak izini karşı tarafla karşılaştırın "
-                                    "(kaydedilmiyor)", size=11, color=C.info_text),
+                            ft.Text(t("p2pc_badge_new"), size=11, color=C.info_text),
                             ft.Text(ident.fingerprint, size=9, color=C.text_muted, selectable=True),
                         ], spacing=1, tight=True, expand=True),
                         add_btn]
             return [ft.Icon(ft.Icons.WARNING_AMBER, color=C.danger, size=16),
-                    ft.Text("Kimlik doğrulanmadı (eski kod) — kaydedilmiyor", size=11, color=C.danger)]
+                    ft.Text(t("p2pc_badge_legacy"), size=11, color=C.danger, expand=True)]
 
         badge = ft.Row(badge_controls(), spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        def refresh_identity():
+            """Rehber/doğrulama değişince rozetleri yeniler (UI döngüsünde)."""
+            store = self.state.get("store")
+            contact = store.get_contact(ident.username) if store and ident.username else None
+            if contact and ident.public_key_pem and contact.get("fingerprint") == ident.fingerprint:
+                if ident.status == p2p_core.NEW:
+                    ident.status = p2p_core.VERIFIED       # artık rehberdeki anahtarla eşleşiyor
+                session["save"] = ident.can_save_history
+            badge.controls = badge_controls()
+            chip_slot.content = None
+            if ident.public_key_pem and ident.username:
+                chip_slot.content = pv.verify_chip(is_verified(), on_click=open_verify)
+            self.page.update()
+
+        def open_verify(e=None):
+            pv.open_verify_dialog(self, ident.username, ident.public_key_pem, ident.fingerprint,
+                                  on_change=refresh_identity)
 
         def on_add_contact(e):
             store = self.state.get("store")
             if store and ident.public_key_pem:
                 store.save_contact(peer, ident.public_key_pem, ident.fingerprint)
-                session["save"] = True
-                add_btn.visible = False
-                badge.controls = badge_controls()
-                self.log_status(f"'{peer}' rehbere eklendi; sohbet artık kaydediliyor.")
-                self.page.update()
+                self.log_status(t("p2pc_added", u=peer))
+                refresh_identity()
         add_btn.on_click = on_add_contact
 
         # ── metin mesajları ──
@@ -185,15 +217,23 @@ class P2PChatMixin:
                 else:
                     loop.call_soon_threadsafe(incoming.cancel, fid)
                 send_frame({"t": "file_cancel", "fid": fid})
-                card_done(fid, "İptal edildi.", C.danger)
-            return ft.TextButton("İptal", on_click=_cancel, style=ft.ButtonStyle(color=C.danger))
+                card_done(fid, t("p2pc_cancelled"), C.danger)
+            return ft.TextButton(t("p2pc_cancel"), on_click=_cancel, style=ft.ButtonStyle(color=C.danger))
 
         # ── dosya gönderme ──
+        def strict_blocks_send() -> bool:
+            """Sıkı mod + doğrulanmamış kişi: dosya seçtirmeden önce engeller ve not düşer."""
+            if not pv.file_send_blocked(is_verified(), pv.strict_on()):
+                return False
+            sys_note("⛔ " + t("strict_file_out", u=peer), C.danger)
+            self.page.update()
+            return True
+
         async def pick_and_send(e):
-            if not session["open"]:
+            if not session["open"] or strict_blocks_send():
                 return
             files = await self.file_picker.pick_files(allow_multiple=False)
-            if not files:
+            if not files or strict_blocks_send():          # seçim sırasında ayar değişmiş olabilir
                 return
             path = Path(files[0].path)
 
@@ -201,13 +241,13 @@ class P2PChatMixin:
                 try:
                     offer = pf.make_offer(path)
                 except (OSError, pf.FileTransferError) as ex:
-                    msg = f"Dosya gönderilemez: {ex}"     # ex except bitince silinir
+                    msg = t("p2pc_cannot_send", err=ex)     # ex except bitince silinir
                     ui(lambda: (setattr(status_text, "value", msg), self.page.update()))
                     return
 
                 def _ui():
                     c = file_card(offer["fid"], offer["name"], offer["size"], True)
-                    c["state"].value = "Karşı tarafın onayı bekleniyor…"
+                    c["state"].value = t("p2pc_wait_accept")
                     c["actions"].controls = [cancel_btn(offer["fid"])]
                     self.page.update()
                 ui(_ui)
@@ -218,18 +258,18 @@ class P2PChatMixin:
 
         async def run_upload(fid):
             item = outgoing[fid]
-            card_done(fid, "Gönderiliyor…", actions=[cancel_btn(fid)])
+            card_done(fid, t("p2pc_sending"), actions=[cancel_btn(fid)])
             try:
                 ok = await pf.send_file(channel, item["path"], fid,
                                         on_progress=lambda f: card_progress(fid, f),
                                         is_cancelled=lambda: item["cancelled"])
             except Exception as ex:
-                card_done(fid, f"Gönderilemedi: {ex}", C.danger)
+                card_done(fid, t("p2pc_send_failed", err=ex), C.danger)
                 return
             if ok:
                 name, size = item["offer"]["name"], item["offer"]["size"]
-                card_done(fid, "✓ Gönderildi (karşı taraf doğruluyor)")
-                ui(lambda: save(me, f"📄 Dosya gönderildi: {name} ({pf.fmt_size(size)})", now_iso(), True))
+                card_done(fid, t("p2pc_sent"))
+                ui(lambda: save(me, t("p2pc_hist_sent", name=name, size=pf.fmt_size(size)), now_iso(), True))
 
         # ── gelen çerçeveler (P2P loop'unda çalışır) ──
         def on_message(raw):
@@ -243,8 +283,8 @@ class P2PChatMixin:
             f = p2p_core.parse_frame(raw)
             if not f:
                 return
-            t = f["t"]
-            if t == "msg":
+            kind = f["t"]
+            if kind == "msg":
                 channel.send(p2p_core.ack_frame(f["id"]))
 
                 def _ui():
@@ -253,46 +293,54 @@ class P2PChatMixin:
                     self._notify_incoming()
                     self.page.update()
                 ui(_ui)
-            elif t == "ack" and f["id"] in session["pending"]:
+            elif kind == "ack" and f["id"] in session["pending"]:
                 def _ui():
                     idx, text, ts = session["pending"].pop(f["id"])
                     messages.controls[idx] = self.create_message_bubble(
                         me, text, self._fmt_time(ts), True, is_read=True)
                     self.page.update()
                 ui(_ui)
-            elif t == "file_offer":
+            elif kind == "file_offer":
                 handle_offer(f)
-            elif t == "file_accept" and f["fid"] in outgoing:
+            elif kind == "file_accept" and f["fid"] in outgoing:
                 p2p_core.run(run_upload(f["fid"]))
-            elif t == "file_reject" and f["fid"] in outgoing:
+            elif kind == "file_reject" and f["fid"] in outgoing:
                 outgoing.pop(f["fid"], None)
-                card_done(f["fid"], "Karşı taraf reddetti.", C.danger)
-            elif t == "file_cancel":
+                card_done(f["fid"], t("p2pc_peer_rejected"), C.danger)
+            elif kind == "file_cancel":
                 if f["fid"] in outgoing:
                     outgoing[f["fid"]]["cancelled"] = True
                 incoming.cancel(f["fid"])
-                card_done(f["fid"], "Karşı taraf iptal etti.", C.danger)
-            elif t == "file_end":
+                card_done(f["fid"], t("p2pc_peer_cancelled"), C.danger)
+            elif kind == "file_end":
                 fid = f["fid"]
                 try:
                     path = incoming.end(fid)
                 except pf.FileTransferError as ex:
                     card_done(fid, f"⛔ {ex}", C.danger)
                     return
-                folder_btn = ft.TextButton("Klasörü aç", on_click=lambda e, p=path.parent: _open_folder(p),
+                folder_btn = ft.TextButton(t("p2pc_open_folder"), on_click=lambda e, p=path.parent: _open_folder(p),
                                            style=ft.ButtonStyle(color=C.accent))
-                card_done(fid, f"✓ Kaydedildi ve doğrulandı:\n{path}", C.success, [folder_btn])
-                ui(lambda: (save(peer, f"📄 Dosya alındı: {path.name} — {path}", now_iso(), False),
+                card_done(fid, t("p2pc_saved_file", path=path), C.success, [folder_btn])
+                ui(lambda: (save(peer, t("p2pc_hist_recv", name=path.name, path=path), now_iso(), False),
                             self._notify_incoming()))
 
         def handle_offer(f):
+            name = pf.safe_filename(f["name"])
+            # Sıkı mod: doğrulanmamış kişinin teklifi kayda alınmadan otomatik reddedilir
+            if pv.reject_offer_if_strict(f, channel.send, is_verified(), pv.strict_on()):
+                def _blocked():
+                    sys_note("⛔ " + t("strict_file_in", u=peer, n=name), C.danger)
+                    self.page.update()
+                ui(_blocked)
+                return
             try:
                 incoming.offer(f)
             except pf.FileTransferError as ex:
                 channel.send(json.dumps({"t": "file_reject", "fid": f["fid"]}))
                 print(f"[P2P] Dosya teklifi reddedildi: {ex}")
                 return
-            fid, name = f["fid"], pf.safe_filename(f["name"])
+            fid = f["fid"]
             too_big = not (0 < f["size"] <= pf.MAX_FILE_BYTES)
 
             def accept(e):
@@ -301,28 +349,27 @@ class P2PChatMixin:
                         incoming.accept(fid)
                     except pf.FileTransferError as ex:
                         channel.send(json.dumps({"t": "file_reject", "fid": fid}))
-                        card_done(fid, f"Alınamadı: {ex}", C.danger)
+                        card_done(fid, t("p2pc_recv_failed", err=ex), C.danger)
                         return
                     channel.send(json.dumps({"t": "file_accept", "fid": fid}))
-                    card_done(fid, "Alınıyor…", actions=[cancel_btn(fid)])
+                    card_done(fid, t("p2pc_receiving"), actions=[cancel_btn(fid)])
                 loop.call_soon_threadsafe(_on_loop)
 
             def reject(e):
                 loop.call_soon_threadsafe(incoming.reject, fid)
                 send_frame({"t": "file_reject", "fid": fid})
-                card_done(fid, "Reddettiniz.", C.text_muted)
+                card_done(fid, t("p2pc_you_rejected"), C.text_muted)
 
             def _ui():
                 c = file_card(fid, name, f["size"], False)
                 if too_big:
-                    c["state"].value = f"Çok büyük (sınır {pf.fmt_size(pf.MAX_FILE_BYTES)}) — reddedildi."
+                    c["state"].value = t("p2pc_too_big", max=pf.fmt_size(pf.MAX_FILE_BYTES))
                     self.page.update()
                     return
-                c["state"].value = (f"{peer} bu dosyayı göndermek istiyor. Kabul ederseniz "
-                                    f"{pf.default_download_dir()} klasörüne kaydedilir.")
+                c["state"].value = t("p2pc_offer", peer=peer, folder=pf.default_download_dir())
                 c["actions"].controls = [
-                    ft.TextButton("Kabul et", on_click=accept, style=ft.ButtonStyle(color=C.success)),
-                    ft.TextButton("Reddet", on_click=reject, style=ft.ButtonStyle(color=C.danger)),
+                    ft.TextButton(t("p2pc_accept"), on_click=accept, style=ft.ButtonStyle(color=C.success)),
+                    ft.TextButton(t("p2pc_reject"), on_click=reject, style=ft.ButtonStyle(color=C.danger)),
                 ]
                 self._notify_incoming()
                 self.page.update()
@@ -341,7 +388,7 @@ class P2PChatMixin:
                 if not session["open"]:
                     return
                 session["open"] = False
-                status_text.value = f"Bağlantı kapandı ({reason}). Yeniden bağlanmak için yeni kod üretin."
+                status_text.value = t("p2pc_closed", reason=reason)
                 status_text.color = C.danger
                 for ctl in (input_field, send_btn, attach_btn):
                     ctl.disabled = True
@@ -349,7 +396,7 @@ class P2PChatMixin:
             ui(_ui)
 
         channel.on("message", on_message)
-        channel.on("close", lambda: set_closed("kanal kapandı"))
+        channel.on("close", lambda: set_closed(t("p2pc_r_channel")))
 
         @pc.on("connectionstatechange")
         async def _on_state():
@@ -357,27 +404,32 @@ class P2PChatMixin:
                 set_closed(pc.connectionState)
 
         def close(e=None):
-            set_closed("siz kapattınız")
+            set_closed(t("p2pc_r_you"))
             dialog.open = False
             self.page.update()
             p2p_core.run(pc.close())
             if session["save"]:
                 self.load_inbox_chats()
 
+        if ident.public_key_pem and ident.username:
+            chip_slot.content = pv.verify_chip(is_verified(), on_click=open_verify)
+
         dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Row([
-                ft.Icon(ft.Icons.WIFI_TETHERING, color=C.accent),
-                ft.Text(f"Doğrudan bağlantı: {peer}", size=15, color=C.text,
-                        weight=ft.FontWeight.BOLD, expand=True),
-                ft.IconButton(icon=ft.Icons.CLOSE, icon_size=18, icon_color=C.text_muted,
-                              tooltip="Bağlantıyı kapat", on_click=close),
-            ], spacing=8),
+            title=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.WIFI_TETHERING, color=C.accent),
+                    ft.Text(t("p2pc_title", peer=peer), size=15, color=C.text,
+                            weight=ft.FontWeight.BOLD, expand=True),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=18, icon_color=C.text_muted,
+                                  tooltip=t("p2pc_close_tip"), on_click=close),
+                ], spacing=8),
+                ft.Row([chip_slot], spacing=6),
+            ], spacing=4, tight=True),
             content=ft.Container(
                 content=ft.Column([
                     badge,
-                    ft.Text("Sunucu yok: mesajlar ve dosyalar yalnızca iki taraf da açıkken iletilir.",
-                            size=10, color=C.text_faint),
+                    ft.Text(t("p2pc_no_server"), size=10, color=C.text_faint),
                     ft.Divider(color=C.surface_alt, height=6),
                     messages,
                     status_text,

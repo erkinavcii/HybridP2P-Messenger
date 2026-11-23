@@ -6,6 +6,10 @@ toggle_call_cam, _call_timer_loop, start_local_video_rendering,
 start_remote_video_rendering, cleanup_call. Görüntülü aramalarda kalite izleme:
 _start_quality_monitor (desktop/call_quality).
 
+P2: arama kurulurken (çalıyor/bağlanıyor) zincir yükleyici gösterilir; sunucusuz
+(P2P) aramada başlıkta doğrulama rozeti ve sesli okunacak güvenlik kodu durur
+(state["p2p_ident"], desktop/p2p_verify.call_safety_panel).
+
 WsClientMixin._ws_listen bu mixin'in show_call_screen/cleanup_call metotlarını
 çağırır ve state["ws_loop"] (WsClientMixin tarafından kurulur) burada
 asyncio.run_coroutine_threadsafe ile yeniden kullanılır — kasıtlı çift yönlü
@@ -28,6 +32,8 @@ from aiortc import (
 )
 
 from desktop import call_quality
+from desktop import p2p_verify as pv
+from desktop.brand_loader import ChainLoader
 from desktop.voip_tracks import MicrophoneTrack, AudioPlayer, CameraTrack
 
 
@@ -71,8 +77,37 @@ class CallScreenMixin:
             self.call_avatar.visible = self.state["call_type"] == "audio"
             self.call_timer_text.visible = True
 
+        self._set_call_setup_loading(self.state["call_state"] == "calling")
+        self._render_call_p2p_panel()
         self.page.controls.clear()
         self.page.add(self.call_view)
+        self.page.update()
+
+    def _set_call_setup_loading(self, on: bool):
+        """Arama kurulurken zincir yükleyiciyi gösterir/kaldırır (UI döngüsünden).
+        Kaldırılan yükleyici sayfadan çıkınca kendiliğinden durur."""
+        slot = getattr(self, "call_setup_slot", None)
+        if slot is None:
+            return
+        if on:
+            if slot.content is None:
+                slot.content = ChainLoader(size=56)
+            slot.visible = True
+        else:
+            slot.content = None
+            slot.visible = False
+
+    def _render_call_p2p_panel(self):
+        """P2P aramada doğrulama rozeti + güvenlik kodu (kimlik yoksa gizli)."""
+        panel = getattr(self, "call_p2p_panel", None)
+        if panel is None:
+            return
+        ident = self.state.get("p2p_ident")
+        panel.content = pv.call_safety_panel(self, ident, on_change=self._refresh_call_p2p_panel) if ident else None
+        panel.visible = panel.content is not None
+
+    def _refresh_call_p2p_panel(self):
+        self._render_call_p2p_panel()
         self.page.update()
 
     def start_voip_call(self, video: bool):
@@ -142,6 +177,7 @@ class CallScreenMixin:
                             self.state["call_state"] = "connected"
                             async def _start_call_ui():
                                 self.call_status_text.value = "Connected"
+                                self._set_call_setup_loading(False)
                                 self.page.update()
                             self.page.run_task(_start_call_ui)
                             self.page.run_task(self._call_timer_loop)
@@ -178,6 +214,7 @@ class CallScreenMixin:
         self.state["call_state"] = "connected"
         self.call_status_text.value = "Connecting..."
         self.call_controls_container.content = self.caller_controls_row
+        self._set_call_setup_loading(True)
         self.page.update()
 
         async def _accept():
@@ -234,6 +271,7 @@ class CallScreenMixin:
                             self.state["call_state"] = "connected"
                             async def _start_call_ui():
                                 self.call_status_text.value = "Connected"
+                                self._set_call_setup_loading(False)
                                 self.page.update()
                             self.page.run_task(_start_call_ui)
                             self.page.run_task(self._call_timer_loop)
@@ -437,6 +475,7 @@ class CallScreenMixin:
         self.state["call_role"] = None
         self.state["call_partner"] = None
         self.state["call_type"] = None
+        self.state["p2p_ident"] = None
 
         async def _cleanup_ui():
             self.local_video_preview.src = self.transparent_placeholder
@@ -445,6 +484,9 @@ class CallScreenMixin:
             self.remote_video_view.visible = False
             self.call_timer_text.visible = False
             self.call_quality_text.visible = False
+            self._set_call_setup_loading(False)
+            self.call_p2p_panel.content = None
+            self.call_p2p_panel.visible = False
 
             if self.state.get("serverless"):
                 self.show_serverless_screen()          # sunucusuz moddaki arama bitti

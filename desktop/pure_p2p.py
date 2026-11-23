@@ -4,17 +4,30 @@ Akış: A "davet kodu" üretir → B'ye herhangi bir kanaldan (kopyala-yapışt�
 iletir → B kodu doğrular ve "yanıt kodu" üretir → A yanıtı yapıştırır → iki
 cihaz doğrudan bağlanır. Arada sunucu yoktur; iki taraf da aynı anda açık olmalı.
 
+Adım akışı (P2, static/serverless.html ile aynı):
+  Davet eden: ① kodu gönder → ② yanıtı bekle → ③ yanıtı yapıştır → ④ bağlanıyor
+  Katılan:    ① arkadaşın kodu → ② yanıtını gönder → ③ bekle
+Tamamlanan adımlar daralır (başlığa tıklanınca yeniden açılır), geçerli adım
+vurgulanır; bekleme durumlarında marka zinciri yükleyicisi (ChainLoader) döner.
+Görünürlük kuralı saf `step_state` fonksiyonundadır (testlerde sınanır).
+
+Sıkı mod (desktop/p2p_verify.py): doğrulanmamış kişiyle görüntülü bağlantı
+kurulmaz — davet edenin yanıtı uygulanmaz, katılan yanıt üretmez.
+
 Kodlar imzalıdır ve karşı tarafın kimliği rehberle karşılaştırılır (ayrıntılar
 ve güvenlik modeli: desktop/p2p_core.py).
 """
 
 import asyncio
 import base64
+import time
 
 import flet as ft
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 
 from desktop import p2p_core, settings_store
+from desktop import p2p_verify as pv
+from desktop.brand_loader import ChainLoader
 from desktop.theme import C, t
 from desktop.voip_tracks import AudioPlayer, CameraTrack, MicrophoneTrack
 
@@ -25,6 +38,29 @@ MODE_LABELS = {
     "audio": "Voice Call",
     "video": "Video Call",
 }
+
+INVITER_STEPS = ("p2p_si_1", "p2p_si_2", "p2p_si_3", "p2p_si_4")
+JOINER_STEPS = ("p2p_sj_1", "p2p_sj_2", "p2p_sj_3")
+SLOW_CONNECT_SEC = 20          # bu süre içinde bağlanmazsa yardım ipuçları gösterilir
+
+
+def step_state(role: str, cur: int, n: int, opened=()) -> tuple[str, bool, bool]:
+    """n. adımın görünümü → (durum, gövde görünür mü, bölüm görünür mü).
+
+    durum: "done" (tamamlandı, daralır) | "cur" (geçerli, vurgulu) | "todo".
+    Davet eden 2. adımdayken (yanıt bekleniyor) 3. adımın yapıştırma kutusu da açıktır:
+    yanıt başka bir uygulamadan gelir. Tamamlanan adım `opened` içindeyse yeniden açılır.
+    """
+    live = n == cur or (role == "inviter" and cur == 2 and n == 3)
+    state = "done" if n < cur else "cur" if n == cur else "todo"
+    body_visible = live or (n < cur and n in opened)
+    section_visible = n <= cur or live
+    return state, body_visible, section_visible
+
+
+def code_expiry(code: str) -> float:
+    """Kodun geçerlilik sonu: zarfın imzalı zaman damgası + 24 saat (epoch saniye)."""
+    return p2p_core.parse_code(code).ts + p2p_core.MAX_CODE_AGE_SEC
 
 
 def _ice_config():
@@ -81,13 +117,26 @@ class PureP2PMixin:
         """Karşı tarafın kimlik durumunu anlatan kısa metin + renk."""
         s = ident.status
         if s == p2p_core.VERIFIED:
-            return t("p2p_id_verified", user=ident.username), C.success
+            text = t("p2p_id_verified", user=ident.username)
+            if pv.peer_verified(self.state.get("store"), ident):
+                text += " · " + t("v_verified")
+            return text, C.success
         if s == p2p_core.NEW:
             return t("p2p_id_new", user=ident.username, fp=ident.fingerprint), C.info_text
         if s == p2p_core.LEGACY:
             return t("p2p_id_legacy"), C.danger
         who = f"'{ident.username}' " if ident.username else ""
         return t("p2p_id_blocked", who=who, detail=ident.detail), C.danger
+
+    @staticmethod
+    def _p2p_hide_wizard(dialog):
+        """Sihirbazı kapatır ve yükleyicilerini durdurur (diyalog overlay'de kalır)."""
+        if dialog is None:
+            return
+        dialog.open = False
+        stop = getattr(dialog, "data", None)
+        if callable(stop):
+            stop()
 
     def _p2p_start_media(self, pc, mode):
         local_audio = MicrophoneTrack()
@@ -117,7 +166,7 @@ class PureP2PMixin:
                 self.state["call_state"] = "connected"
 
                 async def _start_ui():
-                    dialog.open = False
+                    self._p2p_hide_wizard(dialog)
                     self.show_call_screen()
                     self.call_status_text.value = t("call_connected")
                     self.page.update()
@@ -187,7 +236,7 @@ class PureP2PMixin:
     def _p2p_open_chat_when_ready(self, pc, channel, ident_getter, dialog):
         def _open():
             async def _ui():
-                dialog.open = False
+                self._p2p_hide_wizard(dialog)
                 self.page.update()
                 self.open_p2p_chat(pc, channel, ident_getter())
 
@@ -205,6 +254,30 @@ class PureP2PMixin:
             return
         me = self.state["username"]
         priv, pub = self.state["private_key"], self.state["public_key"]
+
+        # Adım akışı durumu (yalnızca UI döngüsünden değiştirilir)
+        flow = {
+            "inviter": 1, "joiner": 1,
+            "opened": {"inviter": set(), "joiner": set()},
+            "gathering": {"inviter": False, "joiner": False},
+            "expires": 0.0, "slow": False, "slow_gen": 0,
+        }
+        loaders = []
+        steps = []
+
+        def make_loader(message, size=56):
+            ld = ChainLoader(message=message, size=size, fps=24)
+            ld.visible = False
+            loaders.append(ld)
+            return ld
+
+        def stop_loaders():
+            for ld in loaders:
+                ld.visible = False
+                ld.stop()
+
+        def peer_ok(ident):
+            return pv.peer_verified(self.state.get("store"), ident)
 
         def qr_box():
             img = ft.Image(src=_BLANK_GIF, width=200, height=200, fit="contain", visible=False)
@@ -242,7 +315,8 @@ class PureP2PMixin:
                 text_size=10,
             )
 
-        def paste_btn(field):
+        def paste_btn(field, after=None):
+            """Panodan yapıştırır; kod geldiyse doğrulama/bağlanma kendiliğinden başlar (after)."""
             async def _paste(e):
                 try:
                     text = await ft.Clipboard().get()
@@ -252,12 +326,23 @@ class PureP2PMixin:
                 if text:
                     field.value = text.strip()
                     self.page.update()
+                    if after is not None:
+                        after(e)
 
             return ft.TextButton(
                 t("paste_clipboard"),
                 icon=ft.Icons.CONTENT_PASTE,
                 on_click=_paste,
                 style=ft.ButtonStyle(color=C.accent_light),
+            )
+
+        def primary_btn(icon, label, on_click=None, disabled=False, height=44):
+            return ft.Button(
+                content=ft.Row([ft.Icon(icon, size=18), ft.Text(label)], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+                on_click=on_click,
+                height=height,
+                disabled=disabled,
+                style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent, shape=ft.RoundedRectangleBorder(radius=10)),
             )
 
         # ════════════════ Daraltılabilir Ağ Yardımcısı (STUN/TURN) ════════════════
@@ -322,10 +407,13 @@ class PureP2PMixin:
         )
         ice_chevron = ft.Icon(ft.Icons.EXPAND_MORE, size=18, color=C.text_muted)
 
+        def set_ice_panel(on):
+            ice_panel_open["on"] = on
+            ice_panel.visible = on
+            ice_chevron.icon = ft.Icons.EXPAND_LESS if on else ft.Icons.EXPAND_MORE
+
         def toggle_ice_panel(e):
-            ice_panel_open["on"] = not ice_panel_open["on"]
-            ice_panel.visible = ice_panel_open["on"]
-            ice_chevron.icon = ft.Icons.EXPAND_LESS if ice_panel_open["on"] else ft.Icons.EXPAND_MORE
+            set_ice_panel(not ice_panel_open["on"])
             self.page.update()
 
         ice_toggle_row = ft.Container(
@@ -346,6 +434,112 @@ class PureP2PMixin:
             on_click=toggle_ice_panel,
         )
 
+        # ════════════════ Adım bileşenleri ════════════════
+        def progress_row():
+            return ft.Row([], spacing=4, vertical_alignment=ft.CrossAxisAlignment.START)
+
+        def render_progress(row, role, keys):
+            cur = flow[role]
+            items = []
+            for i, key in enumerate(keys, 1):
+                state = "done" if i < cur else "cur" if i == cur else "todo"
+                color = {"done": C.success, "cur": C.accent, "todo": C.text_faint}[state]
+                circle = ft.Container(
+                    ft.Text("✓" if state == "done" else str(i), size=11, weight=ft.FontWeight.BOLD,
+                            color=C.on_accent if state != "todo" else C.text_muted),
+                    width=22, height=22, border_radius=11, alignment=ft.Alignment(0, 0),
+                    bgcolor=color if state != "todo" else None,
+                    border=ft.Border.all(1.5, color),
+                )
+                label = ft.Text(t(key), size=10, text_align=ft.TextAlign.CENTER, max_lines=2,
+                                color=C.text if state == "cur" else C.text_muted,
+                                weight=ft.FontWeight.W_600 if state == "cur" else None)
+                items.append(ft.Column([circle, label], spacing=3, tight=True, expand=True,
+                                       horizontal_alignment=ft.CrossAxisAlignment.CENTER))
+            row.controls = items
+
+        def make_step(role, n, key, controls, loader=None):
+            num = ft.Text(str(n), size=11, weight=ft.FontWeight.BOLD, color=C.on_accent)
+            num_box = ft.Container(num, width=22, height=22, border_radius=11,
+                                   alignment=ft.Alignment(0, 0), bgcolor=C.accent)
+            title = ft.Text(t(key), size=13, weight=ft.FontWeight.W_600, color=C.text, expand=True)
+            more = ft.Text(t("p2p_show_again"), size=11, color=C.accent_light, visible=False)
+            body = ft.Column(controls, spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+            head = ft.Container(
+                ft.Row([num_box, title, more], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=ft.Padding(2, 2, 2, 2), border_radius=8,
+            )
+            box = ft.Container(
+                ft.Column([head, body], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
+                padding=ft.Padding(10, 8, 10, 10), border_radius=12,
+            )
+
+            def toggle(e):
+                if flow[role] <= n:
+                    return                      # yalnızca tamamlanan adımlar yeniden açılır
+                flow["opened"][role].symmetric_difference_update({n})
+                render_flow()
+                self.page.update()
+
+            head.on_click = toggle
+            steps.append({"role": role, "n": n, "num": num, "num_box": num_box, "title": title,
+                          "more": more, "body": body, "head": head, "box": box, "loader": loader})
+            return box
+
+        def render_flow():
+            active = {"inviter": tabs.selected_index == 0, "joiner": tabs.selected_index == 1}
+            render_progress(caller_progress, "inviter", INVITER_STEPS)
+            render_progress(callee_progress, "joiner", JOINER_STEPS)
+            for st in steps:
+                role, n = st["role"], st["n"]
+                opened = flow["opened"][role]
+                state, body_vis, sec_vis = step_state(role, flow[role], n, opened)
+                st["box"].visible = sec_vis
+                st["body"].visible = body_vis
+                st["num"].value = "✓" if state == "done" else str(n)
+                st["num_box"].bgcolor = {"done": C.success, "cur": C.accent}.get(state, C.surface_alt)
+                st["num"].color = C.on_accent if state != "todo" else C.text_muted
+                st["title"].color = C.text if body_vis and state != "done" else C.text_muted
+                st["more"].visible = state == "done"
+                st["more"].value = t("p2p_hide_again") if n in opened else t("p2p_show_again")
+                st["head"].ink = state == "done"
+                st["box"].bgcolor = C.surface_deep if state == "cur" else None
+                st["box"].border = (ft.Border.all(1.5, C.accent) if state == "cur"
+                                    else ft.Border.all(1, C.border))
+                if st["loader"] is not None:
+                    st["loader"].visible = body_vis and active[role]
+            caller_gather.visible = flow["gathering"]["inviter"] and active["inviter"]
+            callee_gather.visible = flow["gathering"]["joiner"] and active["joiner"]
+            expiry_text.value = (
+                t("p2p_valid_until", t=time.strftime("%d.%m.%Y %H:%M", time.localtime(flow["expires"])))
+                if flow["expires"] else ""
+            )
+            slow_hint.visible = flow["inviter"] == 4 and flow["slow"]
+            caller_reset_row.visible = caller_ready_card.visible
+            callee_reset_row.visible = callee_ready_card.visible
+
+        def set_step(role, n):
+            flow[role] = n
+            flow["opened"][role].clear()
+            if role == "inviter" and n != 4:
+                flow["slow"] = False
+                flow["slow_gen"] += 1
+            render_flow()
+
+        def start_slow_timer():
+            flow["slow"] = False
+            flow["slow_gen"] += 1
+            gen = flow["slow_gen"]
+
+            async def _wait():
+                await asyncio.sleep(SLOW_CONNECT_SEC)
+                if gen == flow["slow_gen"] and flow["inviter"] == 4 and dialog.open:
+                    flow["slow"] = True
+                    render_flow()
+                    self.page.update()
+
+            self.page.run_task(_wait)
+
         # ════════════════ 1. sekme: Davet Başlatan (Caller) ════════════════
         mode_labels_loc = {
             "chat": t("p2p_mode_chat"),
@@ -365,7 +559,7 @@ class PureP2PMixin:
         caller_qr, caller_show_qr = qr_box()
         caller_status = ft.Text("", size=11, color=C.accent_light, selectable=True)
         caller_ident = ft.Text("", size=11, selectable=True)
-        caller_prog = ft.ProgressBar(color=C.accent, visible=False)
+        caller_gather = make_loader(t("p2p_gathering_offer"), size=48)
 
         def raw_toggle_btn(field):
             """Ham kodu göster/gizle düğmesi (Flet 0.85 TextButton'da metin = content)."""
@@ -398,7 +592,17 @@ class PureP2PMixin:
                 style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent, shape=ft.RoundedRectangleBorder(radius=8)),
             )
 
-        def ready_card(title, sub, copy, raw, field, qr):
+        def sent_btn(on_click):
+            return ft.OutlinedButton(
+                content=ft.Row([ft.Icon(ft.Icons.ARROW_FORWARD, size=16), ft.Text(t("p2p_i_sent_it"))],
+                               alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+                height=40,
+                on_click=on_click,
+                style=ft.ButtonStyle(color=C.accent_light, side=ft.BorderSide(1, C.accent),
+                                     shape=ft.RoundedRectangleBorder(radius=8)),
+            )
+
+        def ready_card(title, sub, copy, raw, field, qr, extra):
             # Kopyala düğmesi tam genişlikte, "ham kod" altında ortada: dar kartta taşmaz
             return ft.Container(
                 content=ft.Column([
@@ -411,9 +615,10 @@ class PureP2PMixin:
                     ft.Row([raw], alignment=ft.MainAxisAlignment.CENTER),
                     field,
                     qr,
+                    extra,
                 ], spacing=6, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
                 visible=False,
-                bgcolor=C.surface_deep,
+                bgcolor=C.surface,
                 border=ft.Border.all(1, C.border),
                 border_radius=12,
                 padding=12,
@@ -422,42 +627,45 @@ class PureP2PMixin:
         caller_raw_btn = raw_toggle_btn(caller_offer_tf)
         caller_copy_btn = copy_btn(t("p2p_copy_invite"), caller_offer_tf, caller_status)
         caller_ready_card = ready_card(
-            t("p2p_invite_ready"), t("p2p_invite_ready_sub"), caller_copy_btn, caller_raw_btn, caller_offer_tf, caller_qr
+            t("p2p_invite_ready"), t("p2p_invite_ready_sub"), caller_copy_btn, caller_raw_btn, caller_offer_tf,
+            caller_qr, sent_btn(lambda e: (set_step("inviter", 2), self.page.update())),
         )
 
-        caller_answer_tf = code_field(t("p2p_step2_answer"), False)
-        connect_btn = ft.Button(
-            content=ft.Row([ft.Icon(ft.Icons.LOCK_OPEN_ROUNDED, size=18), ft.Text(t("p2p_step3_connect"))], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-            height=44,
-            disabled=True,
-            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent, shape=ft.RoundedRectangleBorder(radius=10)),
-        )
-        caller_step2_card = ft.Container(
-            content=ft.Column([
-                caller_answer_tf,
-                ft.Row([paste_btn(caller_answer_tf)], alignment=ft.MainAxisAlignment.END),
-                connect_btn,
-            ], spacing=4, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
-            visible=False,
-        )
+        caller_answer_tf = code_field(None, False)
+        connect_btn = primary_btn(ft.Icons.LOCK_OPEN_ROUNDED, t("p2p_btn_connect"), disabled=True)
+
+        def answer_typed(e):
+            if (caller_answer_tf.value or "").strip() and flow["inviter"] < 3 and session["offer_sdp"]:
+                set_step("inviter", 3)
+                self.page.update()
+
+        caller_answer_tf.on_change = answer_typed
 
         # Sihirbazın sahip olduğu yarım oturum: pc + hangi sekmenin kurduğu
-        session = {"ident": None, "offer_sdp": "", "channel": None, "pc": None, "role": None}
+        session = {"ident": None, "offer_sdp": "", "channel": None, "pc": None, "role": None, "mode": None}
 
         def reset_caller_ui():
             """Davet tarafının önceki (artık kapatılacak) oturumuna ait UI'ı sıfırlar."""
-            session.update({"offer_sdp": "", "channel": None, "ident": None})
+            session.update({"offer_sdp": "", "channel": None, "ident": None, "mode": None})
             caller_ready_card.visible = False
-            caller_step2_card.visible = False
             caller_copy_btn.disabled = True
             connect_btn.disabled = True
             caller_offer_tf.value = ""
             caller_answer_tf.value = ""
+            flow["expires"] = 0.0
+            flow["gathering"]["inviter"] = False
+            flow["inviter"] = 1
+            flow["opened"]["inviter"].clear()
+            flow["slow"] = False
+            flow["slow_gen"] += 1
 
         def reset_callee_ui():
             callee_ready_card.visible = False
             callee_copy_btn.disabled = True
             callee_answer_tf.value = ""
+            flow["gathering"]["joiner"] = False
+            flow["joiner"] = 1
+            flow["opened"]["joiner"].clear()
 
         async def release_if_current(pc):
             """Hata yolunda yalnızca HÂLÂ etkin olan bu oturumu kapatır (ekran değişmez)."""
@@ -470,10 +678,14 @@ class PureP2PMixin:
             async def _ui():
                 caller_status.value = t("error_msg", err=msg)
                 caller_status.color = C.danger
-                caller_prog.visible = False
+                flow["gathering"]["inviter"] = False
                 gen_offer_btn.disabled = False
                 mode_dd.disabled = False
                 connect_btn.disabled = not can_retry_connect
+                if can_retry_connect:
+                    set_step("inviter", 3)
+                else:
+                    render_flow()
                 self.page.update()
 
             self.page.run_task(_ui)
@@ -486,9 +698,9 @@ class PureP2PMixin:
             reset_callee_ui()
             caller_ident.value = ""
             callee_status.value = callee_ident.value = ""
-            caller_status.value = t("p2p_gathering")
-            caller_status.color = C.accent_light
-            caller_prog.visible = True
+            caller_status.value = ""
+            flow["gathering"]["inviter"] = True
+            render_flow()
             self.page.update()
             mode = mode_dd.value
 
@@ -496,7 +708,7 @@ class PureP2PMixin:
                 pc = None
                 try:
                     pc = await self._p2p_new_pc("caller", mode)
-                    session.update({"pc": pc, "role": "caller"})
+                    session.update({"pc": pc, "role": "caller", "mode": mode})
                     if mode == "chat":
                         session["channel"] = pc.createDataChannel(p2p_core.CHANNEL_LABEL)
                         self._p2p_open_chat_when_ready(pc, session["channel"], lambda: session["ident"], dialog)
@@ -516,11 +728,12 @@ class PureP2PMixin:
                         connect_btn.disabled = False
                         gen_offer_btn.disabled = False      # yeniden üretmek önceki oturumu kapatır
                         mode_dd.disabled = False
-                        caller_prog.visible = False
+                        flow["gathering"]["inviter"] = False
+                        flow["expires"] = code_expiry(code)
                         caller_ready_card.visible = True
-                        caller_step2_card.visible = True
                         caller_status.value = ""
                         caller_show_qr(code)
+                        render_flow()
                         self.page.update()
 
                     self.page.run_task(_done)
@@ -531,15 +744,12 @@ class PureP2PMixin:
 
             p2p_core.run(_setup())
 
-        gen_offer_btn = ft.Button(
-            content=ft.Row([ft.Icon(ft.Icons.WIFI_TETHERING, size=18), ft.Text(t("p2p_step1_create"))], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-            on_click=gen_offer_click,
-            height=44,
-            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent, shape=ft.RoundedRectangleBorder(radius=10)),
-        )
+        gen_offer_btn = primary_btn(ft.Icons.WIFI_TETHERING, t("p2p_btn_create_invite"), on_click=gen_offer_click)
 
         def connect_click(e):
             raw_code = (caller_answer_tf.value or "").strip()
+            if not raw_code:
+                return              # boş alan: hata gösterme, yapıştırılmasını bekle
             try:
                 env = p2p_core.parse_code(raw_code)
             except p2p_core.P2PCodeError as ex:
@@ -560,15 +770,19 @@ class PureP2PMixin:
                 callee_offer_tf.value = raw_code
                 caller_answer_tf.value = ""
                 tabs.selected_index = 1
+                render_flow()
                 self.page.update()
                 gen_answer_click(e)
                 return
+            if session["offer_sdp"] and flow["inviter"] < 3:
+                set_step("inviter", 3)
+            mode = session["mode"] or mode_dd.value
             ident = p2p_core.identify_peer(
                 env, self._p2p_contact_pem, "answer", own_offer_sdp=session["offer_sdp"]
             )
-            if ident.status == p2p_core.LEGACY and mode_dd.value == "chat":
+            if ident.status == p2p_core.LEGACY and mode == "chat":
                 ident = p2p_core.PeerIdentity(p2p_core.INVALID, detail="legacy code does not support chat")
-            elif env.mode != mode_dd.value:
+            elif env.mode != mode:
                 ident = p2p_core.PeerIdentity(
                     p2p_core.INVALID, username=ident.username, detail="answer belongs to another mode"
                 )
@@ -581,8 +795,9 @@ class PureP2PMixin:
                 if ident.status == p2p_core.KEY_CHANGED:
                     # Olası MITM: bu davet iptal edilir (aynı oturumla devam edilemez)
                     caller_status.value = t("p2p_blocked_key_changed")
-                    reset_caller_ui()
                     pc = session["pc"] if session["role"] == "caller" else None
+                    reset_caller_ui()
+                    render_flow()
                     p2p_core.run(release_if_current(pc))
                 else:
                     caller_status.value = t("p2p_blocked_retry")
@@ -592,11 +807,22 @@ class PureP2PMixin:
             if pc is None or self.state.get("active_pc") is not pc:
                 caller_fail(ValueError("no active invite; create a new invite"))
                 return
+            if pv.video_refused(mode, peer_ok(ident), pv.strict_on()):
+                # Sıkı mod: doğrulanmamış kişiyle görüntülü bağlantı kurulmaz (yanıt uygulanmaz)
+                caller_status.value = "⛔ " + t("p2p_strict_video", u=ident.username or "?")
+                caller_status.color = C.danger
+                reset_caller_ui()
+                render_flow()
+                p2p_core.run(release_if_current(pc))
+                self.page.update()
+                return
             session["ident"] = ident
+            self.state["p2p_ident"] = ident
             self.state["call_partner"] = ident.username or "P2P"
-            caller_status.value = t("p2p_connecting")
-            caller_status.color = C.accent_light
+            caller_status.value = ""
             connect_btn.disabled = True
+            set_step("inviter", 4)
+            start_slow_timer()
             self.page.update()
 
             async def _connect():
@@ -610,33 +836,69 @@ class PureP2PMixin:
 
         connect_btn.on_click = connect_click
 
+        def open_stun(e):
+            set_ice_panel(True)
+            self.page.update()
+
+        slow_hint = ft.Container(
+            ft.Column([
+                ft.Text(t("p2p_slow_t"), size=12, weight=ft.FontWeight.BOLD, color=C.warning),
+                ft.Text("• " + t("p2p_slow_1"), size=11, color=C.text_secondary),
+                ft.Text("• " + t("p2p_slow_2"), size=11, color=C.text_secondary),
+                ft.Text("• " + t("p2p_slow_3"), size=11, color=C.text_secondary),
+                ft.Row([ft.TextButton(t("p2p_change_stun"), icon=ft.Icons.SETTINGS_ETHERNET, on_click=open_stun,
+                                      style=ft.ButtonStyle(color=C.accent_light))]),
+            ], spacing=4, tight=True),
+            visible=False, bgcolor=C.warning_bg, border_radius=10, padding=10,
+            border=ft.Border.all(1, C.warning),
+        )
+        expiry_text = ft.Text("", size=10, color=C.text_muted, text_align=ft.TextAlign.CENTER)
+
+        def wait_block(loader, title, *lines):
+            """Yükleyici + başlık + açıklama satırları (bekleme adımları)."""
+            return ft.Column([
+                loader,
+                ft.Text(title, size=13, weight=ft.FontWeight.W_600, color=C.text, text_align=ft.TextAlign.CENTER),
+                *[ln if isinstance(ln, ft.Control) else
+                  ft.Text(ln, size=11, color=C.text_secondary, text_align=ft.TextAlign.CENTER) for ln in lines],
+            ], spacing=6, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+        reply_loader = make_loader("", size=72)
+        connecting_loader = make_loader("", size=72)
+        keep_open = ft.Text(t("p2p_keep_open"), size=11, color=C.warning, weight=ft.FontWeight.W_600,
+                            text_align=ft.TextAlign.CENTER)
+
         # ════════════════ 2. sekme: Davete Katılan (Callee) ════════════════
-        callee_offer_tf = code_field(t("p2p_join_step1"), False)
+        callee_offer_tf = code_field(None, False)
         callee_answer_tf = code_field(t("p2p_answer_ready"), True)
         callee_answer_tf.visible = False
         callee_qr, callee_show_qr = qr_box()
         callee_status = ft.Text("", size=11, color=C.accent_light, selectable=True)
         callee_ident = ft.Text("", size=11, selectable=True)
-        callee_prog = ft.ProgressBar(color=C.accent, visible=False)
+        callee_gather = make_loader(t("p2p_gathering_answer"), size=48)
 
         callee_raw_btn = raw_toggle_btn(callee_answer_tf)
         callee_copy_btn = copy_btn(t("p2p_copy_answer"), callee_answer_tf, callee_status)
         callee_ready_card = ready_card(
-            t("p2p_answer_ready"), t("p2p_answer_ready_sub"), callee_copy_btn, callee_raw_btn, callee_answer_tf, callee_qr
+            t("p2p_answer_ready"), t("p2p_answer_ready_sub"), callee_copy_btn, callee_raw_btn, callee_answer_tf,
+            callee_qr, sent_btn(lambda e: (set_step("joiner", 3), self.page.update())),
         )
 
         def callee_fail(msg):
             async def _ui():
                 callee_status.value = t("error_msg", err=msg)
                 callee_status.color = C.danger
-                callee_prog.visible = False
+                flow["gathering"]["joiner"] = False
                 gen_answer_btn.disabled = False
+                set_step("joiner", 1)
                 self.page.update()
 
             self.page.run_task(_ui)
 
         def gen_answer_click(e):
             raw_code = (callee_offer_tf.value or "").strip()
+            if not raw_code:
+                return              # boş alan: hata gösterme, yapıştırılmasını bekle
             try:
                 env = p2p_core.parse_code(raw_code)
             except p2p_core.P2PCodeError as ex:
@@ -646,10 +908,11 @@ class PureP2PMixin:
                 return
             if env.type == "answer":
                 if session["offer_sdp"]:
-                    # Yanıt kodu yanlış sekmeye yapıştırılmış: davet sekmesinin 2. adımına taşınır
+                    # Yanıt kodu yanlış sekmeye yapıştırılmış: davet sekmesinin 3. adımına taşınır
                     caller_answer_tf.value = raw_code
                     callee_offer_tf.value = ""
                     tabs.selected_index = 0
+                    render_flow()
                     self.page.update()
                     connect_click(e)
                     return
@@ -662,27 +925,34 @@ class PureP2PMixin:
             ident = p2p_core.identify_peer(env, self._p2p_contact_pem, "offer")
             text, color = self._p2p_identity_view(ident)
             callee_ident.value, callee_ident.color = text, color
+            callee_status.value = ""
             if ident.blocked:
                 callee_status.value = t("p2p_blocked")
                 callee_status.color = C.danger
                 self.page.update()
                 return
             mode = env.mode
+            if pv.video_refused(mode, peer_ok(ident), pv.strict_on()):
+                # Sıkı mod: doğrulanmamış kişinin görüntülü davetine yanıt üretilmez
+                callee_ident.value = text + "\n⛔ " + t("p2p_strict_video", u=ident.username or "?")
+                callee_ident.color = C.danger
+                self.page.update()
+                return
             # Yeni yanıt önceki yarım oturumu (davet ya da yanıt) kapatır: eski UI da sıfırlanır
             reset_callee_ui()
             reset_caller_ui()
             caller_status.value = caller_ident.value = ""
-            callee_status.value = t("p2p_gathering")
-            callee_status.color = C.accent_light
-            callee_prog.visible = True
+            flow["gathering"]["joiner"] = True
             gen_answer_btn.disabled = True
+            self.state["p2p_ident"] = ident
+            render_flow()
             self.page.update()
 
             async def _setup():
                 pc = None
                 try:
                     pc = await self._p2p_new_pc("callee", mode, ident.username or "P2P")
-                    session.update({"pc": pc, "role": "callee"})
+                    session.update({"pc": pc, "role": "callee", "mode": mode})
                     if mode == "chat":
                         @pc.on("datachannel")
                         def on_dc(channel):
@@ -704,10 +974,11 @@ class PureP2PMixin:
                         callee_answer_tf.value = code
                         callee_copy_btn.disabled = False
                         gen_answer_btn.disabled = False     # yeniden üretmek önceki oturumu kapatır
-                        callee_prog.visible = False
+                        flow["gathering"]["joiner"] = False
                         callee_ready_card.visible = True
                         callee_status.value = ""
                         callee_show_qr(code)
+                        set_step("joiner", 2)
                         self.page.update()
 
                     self.page.run_task(_done)
@@ -718,17 +989,33 @@ class PureP2PMixin:
 
             p2p_core.run(_setup())
 
-        gen_answer_btn = ft.Button(
-            content=ft.Row([ft.Icon(ft.Icons.CHECK, size=18), ft.Text(t("p2p_join_step2"))], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
-            on_click=gen_answer_click,
-            height=44,
-            style=ft.ButtonStyle(bgcolor=C.accent, color=C.on_accent, shape=ft.RoundedRectangleBorder(radius=10)),
-        )
+        gen_answer_btn = primary_btn(ft.Icons.CHECK, t("p2p_btn_answer"), on_click=gen_answer_click)
+        wait_conn_loader = make_loader("", size=72)
+
+        def reset_flow(e):
+            """Sıfırla / Yeni Kod: yarım oturum kapatılır, iki sekme de 1. adıma döner."""
+            pc = session["pc"]
+            reset_caller_ui()
+            reset_callee_ui()
+            caller_status.value = caller_ident.value = ""
+            callee_status.value = callee_ident.value = ""
+            gen_offer_btn.disabled = gen_answer_btn.disabled = mode_dd.disabled = False
+            render_flow()
+            self.page.update()
+            p2p_core.run(release_if_current(pc))
+
+        def reset_row():
+            return ft.Row([ft.TextButton(t("p2p_reset"), icon=ft.Icons.RESTART_ALT, on_click=reset_flow,
+                                         style=ft.ButtonStyle(color=C.text_muted))],
+                          alignment=ft.MainAxisAlignment.CENTER, visible=False)
+
+        caller_reset_row = reset_row()
+        callee_reset_row = reset_row()
 
         # ════════════════ Yerleşim ════════════════
         def tab_body(controls):
             # expand: sekme içeriği TabBarView'in yüksekliğiyle sınırlanır, yoksa Column
-            # sınırsız yükseklik alır ve kaydırılamaz (QR'dan sonraki 2. adım kesilirdi).
+            # sınırsız yükseklik alır ve kaydırılamaz (QR'dan sonraki adımlar kesilirdi).
             # Üstteki boşluk: açılır listenin yüzen etiketi kaydırma alanının kenarında kırpılmasın.
             return ft.Container(
                 ft.Column(
@@ -742,28 +1029,67 @@ class PureP2PMixin:
                 expand=True,
             )
 
+        def step_hint(text):
+            # Uzun açıklama alan etiketi yerine üstte küçük metin: boş alanda iri etiket taşmasın
+            return ft.Text(text, size=11, color=C.text_secondary)
+
+        caller_progress = progress_row()
+        callee_progress = progress_row()
         caller_tab = tab_body([
-            ft.Row([mode_dd]),
-            gen_offer_btn,
-            caller_prog,
-            caller_ready_card,
-            caller_step2_card,
+            caller_progress,
+            make_step("inviter", 1, "p2p_si_1", [
+                ft.Row([mode_dd]),
+                gen_offer_btn,
+                caller_gather,
+                caller_ready_card,
+            ]),
+            make_step("inviter", 2, "p2p_si_2", [
+                wait_block(reply_loader, t("loader_waiting_peer"), t("p2p_wait_reply_p"), keep_open, expiry_text),
+            ], loader=reply_loader),
+            make_step("inviter", 3, "p2p_si_3", [
+                step_hint(t("p2p_paste_reply_label")),
+                caller_answer_tf,
+                ft.Row([paste_btn(caller_answer_tf, after=connect_click)], alignment=ft.MainAxisAlignment.END),
+                connect_btn,
+            ]),
+            make_step("inviter", 4, "p2p_si_4", [
+                wait_block(connecting_loader, t("p2p_connecting"), t("p2p_connecting_p")),
+                slow_hint,
+            ], loader=connecting_loader),
             caller_ident,
             caller_status,
+            caller_reset_row,
         ])
         callee_tab = tab_body([
-            callee_offer_tf,
-            ft.Row([paste_btn(callee_offer_tf)], alignment=ft.MainAxisAlignment.END),
-            gen_answer_btn,
+            callee_progress,
+            make_step("joiner", 1, "p2p_sj_1", [
+                step_hint(t("p2p_paste_invite_label")),
+                callee_offer_tf,
+                ft.Row([paste_btn(callee_offer_tf, after=gen_answer_click)], alignment=ft.MainAxisAlignment.END),
+                gen_answer_btn,
+                callee_gather,
+            ]),
             callee_ident,
-            callee_prog,
-            callee_ready_card,
+            make_step("joiner", 2, "p2p_sj_2", [callee_ready_card]),
+            make_step("joiner", 3, "p2p_sj_3", [
+                wait_block(wait_conn_loader, t("p2p_wait_conn_t"),
+                           ft.Text(t("p2p_dont_close"), size=11, color=C.warning, weight=ft.FontWeight.W_600,
+                                   text_align=ft.TextAlign.CENTER),
+                           t("p2p_wait_conn_p")),
+            ], loader=wait_conn_loader),
             callee_status,
+            callee_reset_row,
         ])
+
+        def tab_changed(e):
+            render_flow()
+            self.page.update()
+
         tabs = ft.Tabs(
             selected_index=0,
             length=2,
             expand=True,
+            on_change=tab_changed,
             content=ft.Column([
                 ft.TabBar(tabs=[ft.Tab(label=t("p2p_tab_start")), ft.Tab(label=t("p2p_tab_join"))]),
                 ft.TabBarView(controls=[caller_tab, callee_tab], expand=True),
@@ -771,7 +1097,7 @@ class PureP2PMixin:
         )
 
         def close_p2p(e):
-            dialog.open = False
+            self._p2p_hide_wizard(dialog)
             self.page.update()
             if self.state.get("call_state") != "connected":
                 self.cleanup_call()
@@ -795,7 +1121,10 @@ class PureP2PMixin:
                 padding=0,
             ),
             bgcolor=C.surface,
+            data=stop_loaders,                 # _p2p_hide_wizard yükleyicileri bununla durdurur
+            on_dismiss=lambda e: stop_loaders(),
         )
+        render_flow()
         self.page.overlay.append(dialog)
         dialog.open = True
         self.page.update()

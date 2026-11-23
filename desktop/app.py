@@ -931,6 +931,10 @@ class MessengerApp(
             visible=False,
             text_align=ft.TextAlign.CENTER,
         )
+        # Arama kurulurken zincir yükleyici; P2P aramada güvenlik kodu + doğrulama rozeti
+        # (içerikleri call_screen._set_call_setup_loading / _render_call_p2p_panel doldurur)
+        self.call_setup_slot = ft.Container(visible=False, padding=ft.Padding(0, 6, 0, 0))
+        self.call_p2p_panel = ft.Container(visible=False, padding=ft.Padding(16, 8, 16, 0))
 
         self.transparent_placeholder = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
         self.local_video_preview = ft.Image(
@@ -1034,6 +1038,8 @@ class MessengerApp(
                                     spacing=10,
                                 ),
                                 self.call_quality_text,
+                                self.call_setup_slot,
+                                self.call_p2p_panel,
                                 ft.Container(height=18),
                             ],
                             horizontal_alignment=ft.CrossAxisAlignment.CENTER,

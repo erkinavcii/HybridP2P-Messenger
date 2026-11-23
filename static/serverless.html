@@ -171,6 +171,8 @@
   .step-body > label:first-child { margin-top: 0; }
   .step.done:not(.open) .step-body, .step.todo .step-body { display: none; }
   .wait { display: flex; gap: 12px; align-items: center; padding: 4px 0; }
+  .wait .chain-loader { width: 84px; height: 49px; color: var(--accent-2); }
+  @media (max-width: 520px) { .wait { flex-direction: column; text-align: center; gap: 8px; } .wait .chain-loader { width: 76px; height: 44px; } }
   .wait strong { display: block; font-size: 14px; }
   .wait p { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
   .wait p.keep { color: var(--text); font-weight: 600; }
@@ -182,7 +184,8 @@
   .chain-loader.sm { width: 30px; height: 18px; }
   button .chain-loader { color: inherit; }
   .chain-loader svg { display: block; width: 100%; height: 100%; overflow: visible; }
-  .cl-track { fill: none; stroke: currentColor; stroke-width: 6; opacity: .2; }
+  .cl-track { fill: none; stroke: currentColor; stroke-width: 6; opacity: .3; }
+  .wait .cl-track { opacity: .38; }
   .cl-fill { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round;
              stroke-dasharray: 138.3; stroke-dashoffset: 138.3; transform-box: fill-box; transform-origin: center;
              animation: cl-fill 2.8s ease-in-out infinite, cl-turn 9s linear infinite; }
@@ -232,7 +235,7 @@
 <body>
 <main>
   <div class="topbar" id="topbar">
-    <h1><img src="data:image/webp;base64,UklGRogEAABXRUJQVlA4WAoAAAAQAAAAPwAAPwAAQUxQSMEAAAABcBtJkiLNgikPdrAPaNTFGfQosSUH8t3s9jP1yx8RobBt28ZqOj6weoLcsEZML9lliq+g2S7pGTFWHnEisy2+zHYm4h7ipT0HoCF+KzEogHlb/MMMc9QBXybUyId3y0m/Qg0CNaq+OLGmUUJBQVE2jLV2c3/nXDfWyug2vDUSf4rKi8aT7yCCSEQnhTKjSI8IzAQcc/Yjv7tzr39/CPTh90Z+b+X3Zn5v53sD31v43sT3Nro30r2V7s0/4e30fwMBAFZQOCCgAwAAsBIAnQEqQABAAD5tMJFGJCMhoTAYCQCADYlsALkYWsdnvHFC9F/K8dD5vMh3MO8yT/ZvYB+w/7AcIP/Tf6l//+wA9ADynf3W+EX9uv2Z9m+7967c12WRpO8wDzTs9b1JpICBCyL/NaXXLwou4WkSxVGyLJ8fJe2vY/fNA+wLlPApzjWyKJUorfyGApc3kUJaHu3KLp9efLvTmYh0xQQAy8PKDPDXXcNNTGqKay0ZdVkvpuy72oa/4DFnG8pjKqahYSY9E0RH/0rwhvadTYEv9Ru/1G7vhf/wuQgX1C6xHv1lj/R0kYlu2O3J2l8U7j3bF0Jub1lHlhwJwb6kh1dW9tD3mhbGcipkREffU7vHD/+OPBywjr5Xi1WP4MlMN2xMyd5fMDLJCk9VPVitm+uL430uzdO9qLEcCEJgj9p2kgvhVkFkr7S0xddXbA51+hJo2VDEPoMdOdMqgp+vGvNkZa6Wk4XuDl8Q58xSztzfQIrnfiFTwqHhaZ1iiuwKbuP9cQ2zx5iBtVI9rR8uBkhMugm68zovTUUzot0mxBRyjXuurWJ2PyKODvYDP7uZGKkCEOTzz2SJvqFD30zgmXcwgYy4XkJXUSUHM3WeUZJMkTrioEhOsjjfaOcox1T1XuqZwgE1qf60+ha7eP69rN6Zx5m+lWFRBRxG+vRVjlj1p9EAMaPglV5J0QMKQZS13PtNEyYyYpvdC3Z/u0pHIi07T9L+kXC4HtTcFFibmtdN1nvoXKsozNkrHv4Zr1ptsvskuY97ZXfZ6oCk+NKZ1XpgC2UbYRQqn+tmsIbFZLi81H/iuTQxru7j8lOn64xjnsksq2SWusdz5rkBciF84PiLgAir8gZPeGoPBSRzaYeZMmJnE3fSWMQ3/HNxXOhMVNVOTVPmgzrz/w8HQmq4rBD1r9KiBv/mOY2//9sK4QV1rf5kSKqtJT1wEYIC2DyKQ6toUx2a61w3WbTSBJm2z6syd4cdhXyIxfV1vF82N3Be0GFgymWoyxkgbmwCGdI8/g7S3wf+allPCiA1PJf6w63BorKQQgJPpb9Svfp0gnMIkP3TB+/M13l/gb+WXo/ENphTsQH26x2hjW0LuxEbwrJicEQ5Pwfi+H9C3qipaBlWCqRzdbuMkEk7643fBeZOjzJ1R5HBIMcDl4IDcK6BST5JS16n6HN/kzncd4WL8oKV8rxXbYW3ZX+KRHT8OWLV8OrW/Hm8yTyVWT4AHX0C0AAAAA==" width="26" height="26" alt="" style="border-radius:7px"> Direct P2P</h1>
+    <h1><img src="data:image/webp;base64,UklGRogEAABXRUJQVlA4WAoAAAAQAAAAPwAAPwAAQUxQSMEAAAABcBtJkiLNgikPdrAPaNTFGfQosSUH8t3s9jP1yx8RobBt28ZqOj6weoLcsEZML9lliq+g2S7pGTFWHnEisy2+zHYm4h7ipT0HoCF+KzEogHlb/MMMc9QBXybUyId3y0m/Qg0CNaq+OLGmUUJBQVE2jLV2c3/nXDfWyug2vDUSf4rKi8aT7yCCSEQnhTKjSI8IzAQcc/Yjv7tzr39/CPTh90Z+b+X3Zn5v53sD31v43sT3Nro30r2V7s0/4e30fwMBAFZQOCCgAwAAsBIAnQEqQABAAD5tMJFGJCMhoTAYCQCADYlsALkYWsdnvHFC9F/K8dD5vMh3MO8yT/ZvYB+w/7AcIP/Tf6l//+wA9ADynf3W+EX9uv2Z9m+7967c12WRpO8wDzTs9b1JpICBCyL/NaXXLwou4WkSxVGyLJ8fJe2vY/fNA+wLlPApzjWyKJUorfyGApc3kUJaHu3KLp9efLvTmYh0xQQAy8PKDPDXXcNNTGqKay0ZdVkvpuy72oa/4DFnG8pjKqahYSY9E0RH/0rwhvadTYEv9Ru/1G7vhf/wuQgX1C6xHv1lj/R0kYlu2O3J2l8U7j3bF0Jub1lHlhwJwb6kh1dW9tD3mhbGcipkREffU7vHD/+OPBywjr5Xi1WP4MlMN2xMyd5fMDLJCk9VPVitm+uL430uzdO9qLEcCEJgj9p2kgvhVkFkr7S0xddXbA51+hJo2VDEPoMdOdMqgp+vGvNkZa6Wk4XuDl8Q58xSztzfQIrnfiFTwqHhaZ1iiuwKbuP9cQ2zx5iBtVI9rR8uBkhMugm68zovTUUzot0mxBRyjXuurWJ2PyKODvYDP7uZGKkCEOTzz2SJvqFD30zgmXcwgYy4XkJXUSUHM3WeUZJMkTrioEhOsjjfaOcox1T1XuqZwgE1qf60+ha7eP69rN6Zx5m+lWFRBRxG+vRVjlj1p9EAMaPglV5J0QMKQZS13PtNEyYyYpvdC3Z/u0pHIi07T9L+kXC4HtTcFFibmtdN1nvoXKsozNkrHv4Zr1ptsvskuY97ZXfZ6oCk+NKZ1XpgC2UbYRQqn+tmsIbFZLi81H/iuTQxru7j8lOn64xjnsksq2SWusdz5rkBciF84PiLgAir8gZPeGoPBSRzaYeZMmJnE3fSWMQ3/HNxXOhMVNVOTVPmgzrz/w8HQmq4rBD1r9KiBv/mOY2//9sK4QV1rf5kSKqtJT1wEYIC2DyKQ6toUx2a61w3WbTSBJm2z6syd4cdhXyIxfV1vF82N3Be0GFgymWoyxkgbmwCGdI8/g7S3wf+allPCiA1PJf6w63BorKQQgJPpb9Svfp0gnMIkP3TB+/M13l/gb+WXo/ENphTsQH26x2hjW0LuxEbwrJicEQ5Pwfi+H9C3qipaBlWCqRzdbuMkEk7643fBeZOjzJ1R5HBIMcDl4IDcK6BST5JS16n6HN/kzncd4WL8oKV8rxXbYW3ZX+KRHT8OWLV8OrW/Hm8yTyVWT4AHX0C0AAAAA==" width="26" height="26" alt="" style="border-radius:7px"> <span data-i18n="app_title">Direct P2P</span></h1>
     <div class="topbar-right">
       <a id="btn-server-mode" href="./" class="pill hidden" data-i18n="server_mode">Server Mode</a>
       <button id="btn-lang" class="pill" type="button">EN</button>
@@ -3265,6 +3268,8 @@ var qrcode = function() {
       nav_identity: "Identity",
       username_label: "Your username (2-32 chars: a-z, 0-9, _)",
       remember_device: "Remember on this device (saves identity, contacts and settings)",
+      app_title: "Direct P2P",
+      doc_title: "HybridP2P — Serverless",
       start_new_id: "Start Direct P2P",
       load_key: "Load .pem",
       setup_hint: "If not remembered, closing the page leaves no trace. Load your desktop/web .pem key to keep the same identity.",
@@ -3391,6 +3396,8 @@ var qrcode = function() {
       nav_identity: "Kimlik",
       username_label: "Kullanıcı adınız (2-32 karakter: a-z, 0-9, _)",
       remember_device: "Bu cihazda hatırla (kimlik, rehber ve ayarları saklar)",
+      app_title: "Doğrudan P2P",
+      doc_title: "HybridP2P — Sunucusuz",
       start_new_id: "Doğrudan P2P Başlat",
       load_key: ".pem Yükle",
       setup_hint: "Hatırlanmazsa sayfa kapanınca iz kalmaz. Aynı kimlik için masaüstü/web .pem anahtarınızı yükleyin.",
@@ -3529,6 +3536,7 @@ var qrcode = function() {
       if (I18N[curLang][k]) el.textContent = I18N[curLang][k];
     });
     $("btn-lang").textContent = curLang.toUpperCase();
+    document.title = I18N[curLang].doc_title || document.title;
     refreshIceLabels();
     // Dinamik metinler (adımlar, ipuçları, rozetler, rehber) da dile göre yeniden çizilir
     if (uiReady) renderDynamic();

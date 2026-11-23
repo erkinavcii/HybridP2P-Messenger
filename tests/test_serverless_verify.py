@@ -135,4 +135,4 @@ def test_web_client_uses_chain_loader():
         assert "data-loader" in block and "spinner" not in block, el_id
     assert "fillChainLoader" in app and 'chainLoader("sm")' in app
     assert '<div class="spinner"></div> Signing In' not in app
-    assert 'hybridp2p-shell-v8' in SW.read_text(encoding="utf-8")
+    assert 'hybridp2p-shell-v9' in SW.read_text(encoding="utf-8")
